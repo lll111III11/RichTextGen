@@ -1,0 +1,6 @@
+bin/
+obj/
+*.user
+*.log
+*.pdb
+.codely-cli/
