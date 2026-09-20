@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>RichTextGen</AssemblyName>
+    <RootNamespace>RichTextGen</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Version>5.2.0.0</Version>
+    <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+
+    <!-- ===== exe 属性（鼠标右键→属性→详细信息 里显示）===== -->
+    <Product>Rich text &amp; multifunctional tool</Product>
+    <AssemblyTitle>多功能性的一种工具</AssemblyTitle>
+    <Description>多功能性的一种工具</Description>
+    <FileDescription>多功能性的一种工具</FileDescription>
+    <ProductVersion>5.2.0.0</ProductVersion>
+    <FileVersion>5.2.0.0</FileVersion>
+    <AssemblyVersion>5.2.0.0</AssemblyVersion>
+    <Copyright>2026-2027 All rights reserved - Reverse engineering strictly prohibited 3576220975@qq.com</Copyright>
+    <Company>3576220975@qq.com</Company>
+    <Trademark>Rich text &amp; multifunctional tool</Trademark>
+    <NeutralLanguage>zh-Hans</NeutralLanguage>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\*.cs" />
+    <EmbeddedResource Include="assets\appbg.png" LogicalName="appbg.png" />
+  </ItemGroup>
+
+</Project>
