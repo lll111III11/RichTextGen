@@ -2,7 +2,7 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.2.0.0",
+  "version": "5.3.0.0",
   "minSupported": "5.0.0.0",
   "channel": "stable",
   "mandatory": false,
@@ -10,5 +10,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen.exe"
   },
-  "notes": "颜色系统（三模式，默认白色）、Unity/TMP 全标签、发送到游戏、在线取色、Win11 风格 UI、高 DPI、自动更新、轴对称渐变、TXT 拖入"
+  "notes": "程序内自动更新、联网监测、轴对称渐变(A→B→A)、TXT 拖入、颜色系统默认白色并默认括住文本"
 }
