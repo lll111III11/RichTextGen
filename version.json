@@ -10,5 +10,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/彩色文本生成器.exe"
   },
-  "notes": "HTML 界面（WebView2）+ 选区套富文本 + TXT 多段处理 + 全自动发送 + 免Key翻译(标签保护) + 自动更新"
+  "notes": "HTML UI (WebView2), selection tagging, TXT multi-segment, auto send, keyless translation, auto update"
 }
