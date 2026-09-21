@@ -2,13 +2,13 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.3.0.0",
+  "version": "5.4.0.0",
   "minSupported": "5.0.0.0",
   "channel": "stable",
   "mandatory": false,
   "downloads": {
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen.exe"
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/彩色文本生成器.exe"
   },
-  "notes": "程序内自动更新、联网监测、轴对称渐变(A→B→A)、TXT 拖入、颜色系统默认白色并默认括住文本"
+  "notes": "HTML 界面（WebView2）+ 选区套富文本 + TXT 多段处理 + 全自动发送 + 免Key翻译(标签保护) + 自动更新"
 }
