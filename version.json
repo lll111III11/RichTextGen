@@ -2,13 +2,13 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.4.0.0",
+  "version": "5.4.1.0",
   "minSupported": "5.0.0.0",
   "channel": "stable",
   "mandatory": false,
   "downloads": {
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/彩色文本生成器.exe"
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen.exe"
   },
-  "notes": "HTML UI (WebView2), selection tagging, TXT multi-segment, auto send, keyless translation, auto update"
+  "notes": "修复安装程序释放 WebView2 组件时文件名被截断（Core.dll / WinForms.dll）导致安装后无法启动；安装向导版本号与程序版本保持一致。本次发布用于验证自动更新链路。"
 }
