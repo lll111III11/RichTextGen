@@ -4,3 +4,9 @@ obj/
 *.log
 *.pdb
 installer/payload*/
+installer/embedded.h
+installer/RichTextGen-Setup.exe
+installer/*.obj
+installer/*.exe
+
+*.obj

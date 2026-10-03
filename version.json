@@ -11,5 +11,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.6.0.0 修复与改进：\n· 修复生成结果不显示（宿主回传的 JSON 非法，界面静默不刷新）\n· 修复复制 / 导出 / 发送内容被 URL 编码污染（中文变乱码）\n· 修复桥接对反斜杠、控制字符的转义错误，含特殊字符的文本不再被破坏\n· 修复无边框窗口标题栏无法拖动（改为宿主代拖，双击最大化）\n· 恢复全局热键：Ctrl+Alt+T 显示/隐藏、O 导入、G 生成、C 复制、S 发送\n· 修复更新提示（版本号 / 更新说明 / 类型角标）读取错误\n· 安装器改用全新 HTML 风格界面：渐变流动 + 黑色斜杠扫描，可选 Win11 毛玻璃\n· 源码收敛为单一 HTML 工程（WebView2），移除旧版 WinForms 代码"
+  "notes": "v5.6.0.0 修复与改进：\n· 安装器重写为原生 C++（零依赖：不需 .NET Framework、不需 WebView2 运行时、静态 CRT 无 vcruntime*.dll，仅依赖 Windows 系统自带 DLL）\n· 修复主程序 AnyCPU 与 WebView2Loader.dll（x86）架构不匹配，64 位系统安装后启动即崩溃；主程序固定 x86\n· 安装器界面：渐变沿左上→右下流动 + 黑色斜杠扫描，可选 Win11 22H2 毛玻璃（亚克力）\n· TXT 全面处理系统：逐行可编辑 + 逐行富文本实时渲染预览 + 集中编辑区回写覆盖 + 批量复制/删除/导出\n· 修复生成结果不显示（宿主回传 JSON 非法）、复制/导出/发送内容被 URL 编码污染、桥接转义错误、标题栏无法拖动\n· 恢复全局热键：Ctrl+Alt+T 显示/隐藏、O 导入、G 生成、C 复制、S 发送\n· 版本号统一由 csproj 程序集版本派生\n· 源码收敛为单一 HTML（WebView2）工程，移除旧版 WinForms 代码"
 }

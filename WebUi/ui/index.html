@@ -85,6 +85,22 @@
   #updatedMask.on{display:flex}
   #updatedBox{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);padding:20px 22px;
               max-width:520px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  /* ---- TXT 全面处理系统 ---- */
+  #tpList{max-height:52vh;overflow:auto;border:1px solid var(--inputLine);border-radius:var(--r8);padding:4px;background:var(--input)}
+  .tp-row{display:grid;grid-template-columns:26px 40px 1fr 1fr;gap:8px;align-items:start;padding:7px 4px;border-bottom:1px solid var(--line)}
+  .tp-row:last-child{border-bottom:0}
+  .tp-row:hover{background:var(--hover)}
+  .tp-row.sel{background:var(--hover);outline:1px solid var(--accent)}
+  .tp-cb{margin-top:10px}
+  .tp-no{color:var(--sub);font-size:12px;padding-top:9px;min-width:34px}
+  .tp-input{width:100%;min-height:40px;resize:vertical;font-family:Consolas,monospace;font-size:12px;
+            user-select:text;background:var(--input);color:var(--text);border:1px solid var(--inputLine);
+            border-radius:var(--r4);padding:7px 9px;box-sizing:border-box}
+  .tp-input:focus{border-color:var(--accent)}
+  .tp-preview{width:100%;min-height:40px;background:#000;color:#f0f0f0;border-radius:var(--r4);padding:8px 9px;
+              font-size:16px;word-break:break-all;user-select:text;overflow:auto;box-sizing:border-box}
+  #tpEditPreview{background:#000;color:#f0f0f0;border-radius:var(--r4);padding:10px 12px;font-size:16px;
+                 word-break:break-all;user-select:text;min-height:46px;margin-top:10px}
 </style>
 </head>
 <body>
@@ -487,13 +503,13 @@ host('ready');
   t.addEventListener('input', upd);
 })();
 
-/* ---------- 2) TXT 多段处理视图 ---------- */
+/* ---------- 2) TXT 全面处理系统 ---------- */
 (function(){
   /* 导航按钮 */
   const nav = document.querySelector('nav');
   const btn = document.createElement('button');
   btn.dataset.p = 'txtproc';
-  btn.innerHTML = '<span class="g">≣</span>TXT 多段处理';
+  btn.innerHTML = '<span class="g">≣</span>TXT 全面处理';
   btn.onclick = () => go('txtproc');
   nav.insertBefore(btn, nav.querySelector('button[data-p="set"]'));
 
@@ -501,78 +517,203 @@ host('ready');
   const page = document.createElement('section');
   page.className = 'page'; page.id = 'p-txtproc';
   page.innerHTML =
-    '<div class="card"><h3>TXT 多段处理（按行勾选 → 送进处理区 → 改完回写）</h3>' +
+    '<div class="card"><h3>TXT 全面处理系统（逐行编辑 + 逐行实时渲染）</h3>' +
       '<div class="row">' +
-        '<button class="b" onclick="tpLoad()">从工作台载入文本</button>' +
+        '<button class="b" onclick="tpLoad()">从工作台载入</button>' +
         '<button class="b" onclick="host(\'importTxt\')">导入 TXT 文件</button>' +
         '<button class="b" onclick="tpAll(true)">全选</button>' +
         '<button class="b" onclick="tpAll(false)">全不选</button>' +
+        '<button class="b" onclick="tpCopySel()">复制选中行</button>' +
+        '<button class="b" onclick="tpDelSel()">删除选中行</button>' +
+        '<button class="b" onclick="tpExport()">导出 TXT</button>' +
+        '<button class="b" onclick="tpToWork()">回填工作台</button>' +
         '<span class="hint" id="tpInfo">尚未载入</span>' +
       '</div>' +
-      '<div class="row"><span class="hint">勾选要处理的行 → 点「送入选区」→ 在下面处理区修改 → 点「应用回写」替换原行</span></div>' +
-      '<div id="tpList" style="max-height:280px;overflow:auto;border:1px solid var(--inputLine);' +
-        'border-radius:var(--r4);padding:8px;background:var(--input)"></div>' +
+      '<div class="row"><span class="hint">左栏 = 该行富文本代码（可直接改）；右栏 = 实时渲染效果。点击任意一行载入下方「集中编辑区」精修，改完「回写覆盖」替换原行。</span></div>' +
+      '<div id="tpList"></div>' +
     '</div>' +
-    '<div class="card"><h3>处理区</h3>' +
-      '<textarea id="tpEdit" placeholder="选中行会被送到这里，改完点「应用回写」"></textarea>' +
+    '<div class="card"><h3>集中编辑区（点击上方某行载入，改完回写覆盖）</h3>' +
+      '<textarea id="tpEdit" placeholder="点击上方任意一行，内容载入这里；修改后点「回写覆盖」"></textarea>' +
       '<div class="row" style="margin-top:10px">' +
-        '<button class="b p" onclick="tpApply()">应用回写</button>' +
-        '<button class="b" onclick="tpCancel()">取消修改</button>' +
-        '<button class="b" onclick="tpExport()">导出处理后的 TXT</button>' +
-        '<button class="b" onclick="tpToWork()">回填到工作台</button>' +
+        '<button class="b p" onclick="tpApply()">回写覆盖该行</button>' +
+        '<button class="b" onclick="tpCopyManual()">手动复制</button>' +
+        '<button class="b" onclick="tpClearEdit()">清空编辑区</button>' +
+        '<span class="hint" id="tpSelInfo">未选中行</span>' +
       '</div>' +
+      '<div id="tpEditPreview">（载入行后此处实时渲染）</div>' +
     '</div>';
   document.getElementById('pages').appendChild(page);
 
   window.tpLines = [];
-  window.tpPicked = [];
+  window.tpEditIndex = -1;   // 当前集中编辑区对应的行号（-1 = 无）
 
-  window.tpLoad = function(){
-    tpLines = document.getElementById('txt').value.replace(/\r\n/g,'\n').split('\n');
-    tpRender();
-  };
-  window.tpAll = function(v){
-    document.querySelectorAll('#tpList input[type=checkbox]').forEach(cb => cb.checked = v);
-    tpSync();
-  };
+  /* ---- 富文本 → HTML 渲染（简化版，覆盖常用标签，颜色为主） ---- */
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function cssSize(v){
+    v = (v || '').trim();
+    if (v === '') return '0';
+    if (/[%]|[px]|[em]|[rem]$/.test(v)) return v;
+    if (/^\d+(\.\d+)?$/.test(v)) return v + 'px';
+    return v;
+  }
+  function alphaOpacity(v){
+    v = (v || '').replace('#','').trim();
+    const n = parseInt(v, 16);
+    return isNaN(n) ? '1' : (Math.round(n / 255 * 1000) / 1000);
+  }
+  function openTag(name, val){
+    switch (name) {
+      case 'b': return '<b>';
+      case 'i': return '<i>';
+      case 'u': return '<u>';
+      case 's': return '<s>';
+      case 'sub': return '<sub>';
+      case 'sup': return '<sup>';
+      case 'nobr': return '<span style="white-space:nowrap">';
+      case 'uppercase': return '<span style="text-transform:uppercase">';
+      case 'lowercase': return '<span style="text-transform:lowercase">';
+      case 'color': return '<span style="color:' + (val || '#ffffff') + '">';
+      case 'size': return '<span style="font-size:' + cssSize(val) + '">';
+      case 'mark': return '<span style="background-color:' + (val || '#000000') + '">';
+      case 'alpha': return '<span style="opacity:' + alphaOpacity(val) + '">';
+      default: return esc('<' + name + (val ? ('=' + val) : '') + '>');
+    }
+  }
+  function closeTag(name){
+    switch (name) {
+      case 'b': return '</b>'; case 'i': return '</i>'; case 'u': return '</u>';
+      case 's': return '</s>'; case 'sub': return '</sub>'; case 'sup': return '</sup>';
+      default: return '</span>';
+    }
+  }
+  function isWrap(name){
+    return ['b','i','u','s','sub','sup','nobr','uppercase','lowercase','color','size','mark','alpha'].indexOf(name) >= 0;
+  }
+  function renderLine(line){
+    if (!line) return '';
+    const stack = [];
+    let out = '', i = 0;
+    while (i < line.length) {
+      const lt = line.indexOf('<', i);
+      if (lt < 0) { out += esc(line.slice(i)); break; }
+      if (lt > i) out += esc(line.slice(i, lt));
+      const gt = line.indexOf('>', lt);
+      if (gt < 0) { out += esc(line.slice(lt)); break; }
+      const token = line.slice(lt + 1, gt);
+      i = gt + 1;
+      const closing = token.charAt(0) === '/';
+      let body = closing ? token.slice(1) : token;
+      let name = body, val = '';
+      const eq = body.indexOf('=');
+      if (eq >= 0) { name = body.slice(0, eq); val = body.slice(eq + 1).trim(); }
+      name = name.trim().toLowerCase();
+      if (val.length >= 2 && val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') val = val.slice(1, -1);
+      if (closing) { if (stack.length) out += closeTag(stack.pop()); continue; }
+      out += openTag(name, val);
+      if (isWrap(name)) stack.push(name);
+    }
+    while (stack.length) out += closeTag(stack.pop());
+    return out;
+  }
+
+  /* ---- 逐行渲染 ---- */
   window.tpRender = function(){
     const box = document.getElementById('tpList');
     box.innerHTML = '';
-    tpLines.forEach((line, i) => {
+    tpLines.forEach((line, idx) => {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:2px 0';
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.i = i;
+      row.className = 'tp-row';
+      row.dataset.i = idx;
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'tp-cb'; cb.dataset.i = idx;
       cb.onchange = tpSync;
-      const no = document.createElement('span'); no.className='hint'; no.style.minWidth='34px';
-      no.textContent = '#' + (i + 1);
-      const tx = document.createElement('span');
-      tx.textContent = line.length > 90 ? line.slice(0, 90) + '…' : (line || '（空行）');
-      tx.style.cssText = 'user-select:text;font-family:Consolas,monospace;font-size:12.5px';
-      row.append(cb, no, tx);
+      const no = document.createElement('span'); no.className = 'tp-no'; no.textContent = '#' + (idx + 1);
+      const inp = document.createElement('textarea'); inp.className = 'tp-input'; inp.value = line;
+      inp.addEventListener('input', () => {
+        tpLines[idx] = inp.value;
+        row.querySelector('.tp-preview').innerHTML = renderLine(inp.value) || '&nbsp;';
+      });
+      inp.addEventListener('focus', () => { loadToEdit(idx); });
+      const pv = document.createElement('div'); pv.className = 'tp-preview';
+      pv.innerHTML = renderLine(line) || '&nbsp;';
+      row.append(cb, no, inp, pv);
       box.appendChild(row);
     });
     document.getElementById('tpInfo').textContent = '共 ' + tpLines.length + ' 行';
   };
-  window.tpSync = function(){
-    tpPicked = [];
-    document.querySelectorAll('#tpList input[type=checkbox]').forEach(cb => {
-      if (cb.checked) tpPicked.push(parseInt(cb.dataset.i, 10));
-    });
-    const n = tpPicked.length;
-    document.getElementById('tpInfo').textContent = '共 ' + tpLines.length + ' 行 · 已选 ' + n + ' 行';
-    if (n > 0) document.getElementById('tpEdit').value = tpPicked.map(i => tpLines[i]).join('\n');
-  };
+
+  /* ---- 集中编辑区 ---- */
+  function loadToEdit(idx){
+    tpEditIndex = idx;
+    const edit = document.getElementById('tpEdit');
+    edit.value = tpLines[idx];
+    document.getElementById('tpSelInfo').textContent = '正在编辑第 ' + (idx + 1) + ' 行';
+    document.getElementById('tpEditPreview').innerHTML = renderLine(tpLines[idx]) || '&nbsp;';
+    document.querySelectorAll('.tp-row').forEach(r => r.classList.toggle('sel', parseInt(r.dataset.i, 10) === idx));
+  }
   window.tpApply = function(){
-    if (tpPicked.length === 0) { ui.status('先勾选要处理的行'); return; }
-    const edited = document.getElementById('tpEdit').value.replace(/\r\n/g,'\n').split('\n');
-    if (edited.length !== tpPicked.length) {
-      if (!confirm('处理区的行数（' + edited.length + '）与勾选行数（' + tpPicked.length + '）不一致，按行序替换？')) return;
+    if (tpEditIndex < 0) { ui.status('先点击上方某一行载入到编辑区'); return; }
+    const v = document.getElementById('tpEdit').value;
+    tpLines[tpEditIndex] = v;
+    const rows = document.querySelectorAll('.tp-row');
+    const row = rows[tpEditIndex];
+    if (row) {
+      row.querySelector('.tp-input').value = v;
+      row.querySelector('.tp-preview').innerHTML = renderLine(v) || '&nbsp;';
     }
-    tpPicked.forEach((idx, k) => { if (k < edited.length) tpLines[idx] = edited[k]; });
-    tpRender();
-    ui.status('已回写 ' + Math.min(edited.length, tpPicked.length) + ' 行');
+    document.getElementById('tpEditPreview').innerHTML = renderLine(v) || '&nbsp;';
+    ui.status('已回写覆盖第 ' + (tpEditIndex + 1) + ' 行');
   };
-  window.tpCancel = function(){ document.getElementById('tpEdit').value = ''; ui.status('已取消修改'); };
+  window.tpCopyManual = function(){
+    const v = document.getElementById('tpEdit').value;
+    if (!v) { ui.status('编辑区为空'); return; }
+    host('copy|' + encodeURIComponent(v));
+    ui.status('已复制编辑区内容');
+  };
+  window.tpClearEdit = function(){
+    document.getElementById('tpEdit').value = '';
+    document.getElementById('tpEditPreview').innerHTML = '&nbsp;';
+    tpEditIndex = -1;
+    document.getElementById('tpSelInfo').textContent = '未选中行';
+    document.querySelectorAll('.tp-row').forEach(r => r.classList.remove('sel'));
+  };
+  document.getElementById('tpEdit').addEventListener('input', () => {
+    document.getElementById('tpEditPreview').innerHTML = renderLine(document.getElementById('tpEdit').value) || '&nbsp;';
+  });
+
+  /* ---- 批量操作 ---- */
+  window.tpLoad = function(){
+    tpLines = document.getElementById('txt').value.replace(/\r\n/g, '\n').split('\n');
+    tpEditIndex = -1;
+    document.getElementById('tpSelInfo').textContent = '未选中行';
+    tpRender();
+  };
+  window.tpAll = function(v){
+    document.querySelectorAll('#tpList .tp-cb').forEach(cb => cb.checked = v);
+    tpSync();
+  };
+  window.tpSync = function(){
+    let n = 0;
+    document.querySelectorAll('#tpList .tp-cb').forEach(cb => { if (cb.checked) n++; });
+    document.getElementById('tpInfo').textContent = '共 ' + tpLines.length + ' 行 · 已选 ' + n + ' 行';
+  };
+  window.tpCopySel = function(){
+    const sel = [];
+    document.querySelectorAll('#tpList .tp-cb').forEach(cb => { if (cb.checked) sel.push(parseInt(cb.dataset.i, 10)); });
+    if (sel.length === 0) { ui.status('先勾选要复制的行'); return; }
+    host('copy|' + encodeURIComponent(sel.map(i => tpLines[i]).join('\n')));
+    ui.status('已复制 ' + sel.length + ' 行');
+  };
+  window.tpDelSel = function(){
+    const sel = [];
+    document.querySelectorAll('#tpList .tp-cb').forEach(cb => { if (cb.checked) sel.push(parseInt(cb.dataset.i, 10)); });
+    if (sel.length === 0) { ui.status('先勾选要删除的行'); return; }
+    if (!confirm('确定删除选中的 ' + sel.length + ' 行？')) return;
+    tpLines = tpLines.filter((_, i) => sel.indexOf(i) < 0);
+    tpEditIndex = -1;
+    document.getElementById('tpSelInfo').textContent = '未选中行';
+    tpRender();
+    ui.status('已删除 ' + sel.length + ' 行');
+  };
   window.tpExport = function(){
     if (tpLines.length === 0) { ui.status('没有内容可导出'); return; }
     host('exportTxt|' + encodeURIComponent(tpLines.join('\r\n')));

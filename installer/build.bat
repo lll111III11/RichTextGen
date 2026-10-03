@@ -1,16 +1,21 @@
 @echo off
-rem ================================================================
-rem  One command build: HTML/WebView2 app  ->  installer
-rem  NOTE: keep this file ASCII-only. cmd.exe reads .bat in the OEM
-rem        codepage, so UTF-8 Chinese literals would be mis-decoded.
-rem ================================================================
+rem ============================================================
+rem  One command build: HTML/WebView2 app  ->  native installer
+rem
+rem  The installer itself is native C++ (zero dependency: no
+rem  .NET, no WebView2 runtime, static CRT). build_native.bat
+rem  compiles Setup.cpp with MSVC + embedded payload.
+rem
+rem  NOTE: keep this file ASCII-only. cmd.exe reads .bat in the
+rem        OEM codepage, so UTF-8 Chinese literals would break.
+rem ============================================================
 setlocal
 set ROOT=%~dp0
 set APP=%ROOT%..\WebUi\RichTextGen.Web.csproj
 set OUT=%ROOT%..\WebUi\bin\Release\net48
 set PAY=%ROOT%payload_web
 
-echo [1/3] build app (Release) ...
+echo [1/3] build app (Release, x86) ...
 dotnet build "%APP%" -c Release -v m
 if errorlevel 1 goto fail
 
@@ -27,10 +32,9 @@ if errorlevel 1 goto fail
 copy /y "%OUT%\WebView2Loader.dll" "%PAY%\" >nul
 if errorlevel 1 goto fail
 
-echo [3/3] build installer ...
-dotnet build "%ROOT%RichTextGen.Setup.csproj" -c Release -v m
+echo [3/3] build native installer (C++, zero dependency) ...
+call "%ROOT%build_native.bat"
 if errorlevel 1 goto fail
-copy /y "%ROOT%bin\Release\net48\RichTextGen-Setup.exe" "%ROOT%RichTextGen-Setup.exe" >nul
 
 echo.
 echo DONE -^> %ROOT%RichTextGen-Setup.exe

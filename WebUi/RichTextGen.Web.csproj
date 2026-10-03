@@ -11,6 +11,12 @@
     <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
+    <!-- 固定 x86：进程架构必须与 WebView2Loader.dll（x86）一致，
+         否则 AnyCPU 在 64 位系统跑 x64、加载 x86 loader 会 BadImageFormat 崩溃。
+         x86 exe 在所有 Windows（32/64 位）都能运行。 -->
+    <PlatformTarget>x86</PlatformTarget>
+    <Prefer32Bit>true</Prefer32Bit>
+
     <!-- exe 属性 -->
     <Version>5.6.0.0</Version>
     <AssemblyVersion>5.6.0.0</AssemblyVersion>
