@@ -21,6 +21,7 @@
 #include <objbase.h>
 #include <shlwapi.h>
 #include <gdiplus.h>
+#include <tlhelp32.h>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -46,7 +47,8 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.6.0.0";
+    const wchar_t* const kVersion   = L"5.7.0.0";
+    const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
     enum
@@ -62,6 +64,7 @@ namespace
         IDC_PROGRESS = 109,
         IDC_STATUS = 110,
         IDC_EDIT_LICENSE = 111,
+        IDC_LBL_PATH = 112,
         IDC_ANIM = 1
     };
 
@@ -80,6 +83,9 @@ namespace
     double g_sweep = 0.0;    // 黑色斜杠相位 0..1
     bool g_glass = false;    // 毛玻璃是否生效
     bool g_installing = false;
+    // DPI 缩放：窗口、控件与字号按屏幕 DPI 等比放大，避免高 DPI 下界面过小（96 DPI = 1.0）
+    double g_scale = 1.0;
+    int S(int v) { return (int)(v * g_scale + 0.5); }
 
     // 标题栏按钮矩形（客户区坐标）
     const RECT kBtnMin = { 630, 0, 672, 40 };
@@ -188,6 +194,20 @@ namespace
         }
     }
 
+    // 是否为本产品自己的文件（用于升级时清理旧版本，绝不误删用户文件）
+    bool IsProductFile(const wchar_t* name)
+    {
+        for (unsigned long i = 0; i < kPayloadCount; i++)
+            if (_wcsicmp(name, kPayload[i].name) == 0) return true;
+        if (_wcsicmp(name, L"Uninstall.exe") == 0) return true;
+        // 兼容更早的命名（RichTextGen.exe），避免升级后留下同名旧程序
+        if (_wcsicmp(name, L"RichTextGen.exe") == 0) return true;
+        if (_wcsicmp(name, L"RichTextGen.exe.config") == 0) return true;
+        return false;
+    }
+
+    // 只删除本产品白名单内的旧文件。注意：不能无差别清空安装目录，
+    // 否则用户若把安装位置选到桌面/文档等目录会丢失自己的文件。
     void DeleteOldFiles(const std::wstring& dir)
     {
         std::wstring self = SelfPath();
@@ -198,7 +218,7 @@ namespace
         do
         {
             if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-            if (_wcsicmp(fd.cFileName, L"Uninstall.exe") == 0) continue;
+            if (!IsProductFile(fd.cFileName)) continue;
             std::wstring full = dir + L"\\" + fd.cFileName;
             if (_wcsicmp(full.c_str(), self.c_str()) == 0) continue;
             DeleteFileW(full.c_str());
@@ -259,22 +279,25 @@ namespace
         RegCloseKey(k);
     }
 
-    // 安装主体。progress 可空（静默模式）。
+    // 安装主体。progress 可空（静默模式）。任何一步失败都返回 false，避免「半成品却提示完成」。
     bool Install(const std::wstring& target, bool desktop, bool startMenu,
                  void (*progress)(void*, int, const wchar_t*), void* ctx)
     {
-        CreateDirectoryW(target.c_str(), NULL);
+        if (!CreateDirectoryW(target.c_str(), NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+            return false;
         DeleteOldFiles(target);
 
-        // 释放内嵌载荷
+        // 释放内嵌载荷：逐字节写入，写入不完整即视为失败
         for (unsigned long i = 0; i < kPayloadCount; i++)
         {
             std::wstring out = target + L"\\" + kPayload[i].name;
             HANDLE h = CreateFileW(out.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (h == INVALID_HANDLE_VALUE) continue;
+            if (h == INVALID_HANDLE_VALUE) return false;
             DWORD written = 0;
-            WriteFile(h, kPayload[i].data, kPayload[i].size, &written, NULL);
+            BOOL ok = WriteFile(h, kPayload[i].data, kPayload[i].size, &written, NULL);
             CloseHandle(h);
+            if (!ok || written != (DWORD)kPayload[i].size) return false;
+
             int pct = (int)(20 + (i + 1) * 70 / kPayloadCount);
             if (pct > 90) pct = 90;
             if (progress) progress(ctx, pct, kPayload[i].name);
@@ -283,7 +306,8 @@ namespace
         // 复制自身为卸载程序
         std::wstring self = SelfPath();
         std::wstring un = target + L"\\Uninstall.exe";
-        if (_wcsicmp(self.c_str(), un.c_str()) != 0) CopyFileW(self.c_str(), un.c_str(), FALSE);
+        if (_wcsicmp(self.c_str(), un.c_str()) != 0 && !CopyFileW(self.c_str(), un.c_str(), FALSE))
+            return false;
 
         std::wstring exe = PickMainExe(target);
 
@@ -324,6 +348,34 @@ namespace
         FindClose(h);
     }
 
+    /// 结束正在运行的主程序，避免卸载时 exe/dll 被占用导致删不干净
+    void KillRunningApp()
+    {
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE) return;
+        PROCESSENTRY32W pe;
+        ZeroMemory(&pe, sizeof(pe));
+        pe.dwSize = sizeof(pe);
+        bool killed = false;
+        if (Process32FirstW(snap, &pe))
+        {
+            do
+            {
+                if (_wcsicmp(pe.szExeFile, kAppExe) != 0) continue;
+                HANDLE p = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pe.th32ProcessID);
+                if (p)
+                {
+                    TerminateProcess(p, 0);
+                    WaitForSingleObject(p, 3000);
+                    CloseHandle(p);
+                    killed = true;
+                }
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+        if (killed) Sleep(600);   // 给系统一点时间释放文件句柄
+    }
+
     void Uninstall()
     {
         std::wstring dir;
@@ -339,6 +391,8 @@ namespace
         if (dir.empty() || GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES)
             dir = SelfDir();
 
+        KillRunningApp();
+
         wchar_t desk[MAX_PATH] = { 0 }, menu[MAX_PATH] = { 0 };
         SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, desk);
         SHGetFolderPathW(NULL, CSIDL_PROGRAMS, NULL, 0, menu);
@@ -352,7 +406,16 @@ namespace
         DeleteFileW(self.c_str());
         RemoveDirectoryW(dir.c_str());
 
-        // 若仍存在（自身被锁），交给 cmd 延迟删除
+        // 清理程序运行时落在用户目录的数据（WebView2 缓存、更新标记、错误日志）
+        wchar_t appdata[MAX_PATH] = { 0 };
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata)))
+        {
+            std::wstring uda = std::wstring(appdata) + L"\\RichTextGen";
+            DeleteTreeExcept(uda, L"");
+            RemoveDirectoryW(uda.c_str());
+        }
+
+        // 若安装目录仍存在（自身被锁），交给 cmd 延迟删除
         if (GetFileAttributesW(dir.c_str()) != INVALID_FILE_ATTRIBUTES)
         {
             std::wstring q = L"\"";
@@ -458,22 +521,24 @@ namespace
     void Paint(HWND hwnd, HDC hdc)
     {
         RECT rc; GetClientRect(hwnd, &rc);
-        int w = rc.right, h = rc.bottom;
-        if (w <= 0 || h <= 0) return;
+        int pw = rc.right, ph = rc.bottom;
+        if (pw <= 0 || ph <= 0) return;
 
         HDC mem = CreateCompatibleDC(hdc);
-        HBITMAP bmp = CreateCompatibleBitmap(hdc, w, h);
+        HBITMAP bmp = CreateCompatibleBitmap(hdc, pw, ph);
         HGDIOBJ old = SelectObject(mem, bmp);
 
         Graphics g(mem);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
+        // 按屏幕 DPI 缩放：绘制代码仍用 96 DPI 的逻辑坐标，由 GDI+ 放大到物理像素
+        g.ScaleTransform((REAL)g_scale, (REAL)g_scale);
 
         int alpha = g_glass ? 128 : 255;
-        PaintGradient(g, w, h, alpha);
-        if (!g_glass) PaintSweep(g, w, h);
-        PaintChrome(g, w, h, g_glass);
+        PaintGradient(g, kWinW, kWinH, alpha);
+        if (!g_glass) PaintSweep(g, kWinW, kWinH);
+        PaintChrome(g, kWinW, kWinH, g_glass);
 
-        BitBlt(hdc, 0, 0, w, h, mem, 0, 0, SRCCOPY);
+        BitBlt(hdc, 0, 0, pw, ph, mem, 0, 0, SRCCOPY);
         SelectObject(mem, old);
         DeleteObject(bmp);
         DeleteDC(mem);
@@ -483,6 +548,46 @@ namespace
     {
         return CreateFontW(-px, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei UI");
+    }
+
+    // ---- DPI 字体（与坐标一同在 LayoutControls 中按缩放重建）----
+    HFONT g_fBody = NULL, g_fBold = NULL;
+    void DisposeFonts()
+    {
+        if (g_fBody) { DeleteObject(g_fBody); g_fBody = NULL; }
+        if (g_fBold) { DeleteObject(g_fBold); g_fBold = NULL; }
+    }
+
+    /// 按当前 DPI 重排全部控件（WM_CREATE 与 WM_DPICHANGED 共用同一套坐标，避免两处不一致）
+    void LayoutControls(HWND hwnd)
+    {
+        DisposeFonts();
+        g_fBody = MakeFont(S(13), FW_NORMAL);
+        g_fBold = MakeFont(S(15), FW_BOLD);
+
+        struct Item { int id; int x, y, w, h; bool bold; };
+        const Item items[] = {
+            { IDC_EDIT_LICENSE, 44, 102, 632,  92, false },
+            { IDC_LBL_PATH,     44, 210,  60,  20, false },
+            { IDC_EDIT_PATH,   116, 207, 466,  25, false },
+            { IDC_BTN_BROWSE,  594, 206,  82,  26, false },
+            { IDC_CHK_DESKTOP,  44, 246, 170,  22, false },
+            { IDC_CHK_START,   254, 246, 190,  22, false },
+            { IDC_CHK_RUN,     494, 246, 170,  22, false },
+            { IDC_CHK_GLASS,    44, 274, 380,  22, false },
+            { IDC_PROGRESS,     44, 314, 632,  14, false },
+            { IDC_STATUS,       44, 336, 632,  20, false },
+            { IDC_BTN_INSTALL, 452, 414, 126,  36, true  },
+            { IDC_BTN_CANCEL,  586, 414,  96,  36, false }
+        };
+        for (int i = 0; i < (int)(sizeof(items) / sizeof(items[0])); i++)
+        {
+            HWND c = GetDlgItem(hwnd, items[i].id);
+            if (!c) continue;
+            SetWindowPos(c, NULL, S(items[i].x), S(items[i].y), S(items[i].w), S(items[i].h),
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            SendMessageW(c, WM_SETFONT, (WPARAM)(items[i].bold ? g_fBold : g_fBody), TRUE);
+        }
     }
 
     HWND g_hwnd = NULL;
@@ -564,72 +669,76 @@ namespace
             g_hwnd = hwnd;
             RoundCorners(hwnd);
 
-            HFONT fBody = MakeFont(13, FW_NORMAL);
-            HFONT fBold = MakeFont(15, FW_BOLD);
-
-            // 许可（只读多行）
+            // 控件先以 0 尺寸创建，位置与字号统一交给 LayoutControls（按 DPI 缩放）
             HWND lic = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
                 WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL | ES_AUTOVSCROLL,
-                44, 102, 632, 92, hwnd, (HMENU)IDC_EDIT_LICENSE, g_hInst, NULL);
+                0, 0, 0, 0, hwnd, (HMENU)IDC_EDIT_LICENSE, g_hInst, NULL);
             SetWindowTextW(lic, L"1. 本程序按“原样”提供，用于生成 Unity/TextMeshPro 富文本并发送到游戏。\r\n"
                 L"2. 请勿用于违反游戏服务条款的用途；因使用本程序产生的后果由使用者自负。\r\n"
                 L"3. 程序会联网检查更新（GitHub），并在你点击“更新”时下载新版本。\r\n"
                 L"4. 本程序不收集你的任何个人信息。\r\n\r\n继续安装即表示你同意以上条款。");
-            SendMessageW(lic, WM_SETFONT, (WPARAM)fBody, TRUE);
 
-            // 路径
             CreateWindowExW(0, L"STATIC", L"安装位置", WS_CHILD | WS_VISIBLE,
-                44, 210, 60, 20, hwnd, NULL, g_hInst, NULL);
-            HWND edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", GetDefaultDir().c_str(),
+                0, 0, 0, 0, hwnd, (HMENU)IDC_LBL_PATH, g_hInst, NULL);
+
+            CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", GetDefaultDir().c_str(),
                 WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-                116, 207, 466, 25, hwnd, (HMENU)IDC_EDIT_PATH, g_hInst, NULL);
-            SendMessageW(edit, WM_SETFONT, (WPARAM)fBody, TRUE);
+                0, 0, 0, 0, hwnd, (HMENU)IDC_EDIT_PATH, g_hInst, NULL);
 
-            HWND browse = CreateWindowExW(0, L"BUTTON", L"浏览…", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-                594, 206, 82, 26, hwnd, (HMENU)IDC_BTN_BROWSE, g_hInst, NULL);
-            SendMessageW(browse, WM_SETFONT, (WPARAM)fBody, TRUE);
+            CreateWindowExW(0, L"BUTTON", L"浏览…", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_BTN_BROWSE, g_hInst, NULL);
 
-            HWND chkDesk = CreateWindowExW(0, L"BUTTON", L"创建桌面快捷方式", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                44, 246, 170, 22, hwnd, (HMENU)IDC_CHK_DESKTOP, g_hInst, NULL);
-            SendMessageW(chkDesk, WM_SETFONT, (WPARAM)fBody, TRUE);
+            HWND chkDesk = CreateWindowExW(0, L"BUTTON", L"创建桌面快捷方式",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_DESKTOP, g_hInst, NULL);
             Button_SetCheck(chkDesk, BST_CHECKED);
 
-            HWND chkStart = CreateWindowExW(0, L"BUTTON", L"在开始菜单创建快捷方式", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                254, 246, 190, 22, hwnd, (HMENU)IDC_CHK_START, g_hInst, NULL);
-            SendMessageW(chkStart, WM_SETFONT, (WPARAM)fBody, TRUE);
+            HWND chkStart = CreateWindowExW(0, L"BUTTON", L"在开始菜单创建快捷方式",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_START, g_hInst, NULL);
             Button_SetCheck(chkStart, BST_CHECKED);
 
-            HWND chkRun = CreateWindowExW(0, L"BUTTON", L"安装完成后启动程序", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                494, 246, 170, 22, hwnd, (HMENU)IDC_CHK_RUN, g_hInst, NULL);
-            SendMessageW(chkRun, WM_SETFONT, (WPARAM)fBody, TRUE);
+            HWND chkRun = CreateWindowExW(0, L"BUTTON", L"安装完成后启动程序",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_RUN, g_hInst, NULL);
             Button_SetCheck(chkRun, BST_CHECKED);
 
             HWND chkGlass = CreateWindowExW(0, L"BUTTON", L"毛玻璃背景（Win11 22H2，关闭则显示渐变流动）",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-                44, 274, 380, 22, hwnd, (HMENU)IDC_CHK_GLASS, g_hInst, NULL);
-            SendMessageW(chkGlass, WM_SETFONT, (WPARAM)fBody, TRUE);
+                0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_GLASS, g_hInst, NULL);
             if (!BackdropSupported()) EnableWindow(chkGlass, FALSE);
 
-            // 进度条 + 状态
             HWND prog = CreateWindowExW(0, PROGRESS_CLASSW, L"", WS_CHILD | WS_VISIBLE,
-                44, 314, 632, 14, hwnd, (HMENU)IDC_PROGRESS, g_hInst, NULL);
+                0, 0, 0, 0, hwnd, (HMENU)IDC_PROGRESS, g_hInst, NULL);
             SendMessageW(prog, PBM_SETRANGE32, 0, 100);
 
-            HWND st = CreateWindowExW(0, L"STATIC",
+            CreateWindowExW(0, L"STATIC",
                 (BackdropSupported() ? L"准备就绪，点击“立即安装”开始。" : L"当前系统不支持系统级毛玻璃（需 Win11 22H2+），已使用渐变流动背景。"),
                 WS_CHILD | WS_VISIBLE | SS_LEFT,
-                44, 336, 632, 20, hwnd, (HMENU)IDC_STATUS, g_hInst, NULL);
-            SendMessageW(st, WM_SETFONT, (WPARAM)fBody, TRUE);
+                0, 0, 0, 0, hwnd, (HMENU)IDC_STATUS, g_hInst, NULL);
 
-            HWND inst = CreateWindowExW(0, L"BUTTON", L"立即安装", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-                452, 414, 126, 36, hwnd, (HMENU)IDC_BTN_INSTALL, g_hInst, NULL);
-            SendMessageW(inst, WM_SETFONT, (WPARAM)fBold, TRUE);
+            CreateWindowExW(0, L"BUTTON", L"立即安装", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_BTN_INSTALL, g_hInst, NULL);
 
-            HWND cancel = CreateWindowExW(0, L"BUTTON", L"取消", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-                586, 414, 96, 36, hwnd, (HMENU)IDC_BTN_CANCEL, g_hInst, NULL);
-            SendMessageW(cancel, WM_SETFONT, (WPARAM)fBody, TRUE);
+            CreateWindowExW(0, L"BUTTON", L"取消", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_BTN_CANCEL, g_hInst, NULL);
+
+            LayoutControls(hwnd);
 
             SetTimer(hwnd, IDC_ANIM, 33, NULL);
+            return 0;
+        }
+
+        case WM_DPICHANGED:
+        {
+            // 拖到不同 DPI 的显示器：按新 DPI 重算缩放并重排
+            g_scale = (double)HIWORD(wp) / 96.0;
+            RECT* want = (RECT*)lp;
+            SetWindowPos(hwnd, NULL, want->left, want->top,
+                         want->right - want->left, want->bottom - want->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            LayoutControls(hwnd);
+            InvalidateRect(hwnd, NULL, TRUE);
             return 0;
         }
 
@@ -684,16 +793,18 @@ namespace
 
         case WM_PRINT:
         case WM_PRINTCLIENT:
-            // 支持 PrintWindow / 缩略图：把界面画到调用方提供的 DC
+            // 支持 PrintWindow / 缩略图：把界面画到调用方提供的 DC。
+            // 必须返回非 0，否则 PrintWindow 会把结果当作失败（返回 FALSE）。
             Paint(hwnd, (HDC)wp);
-            return 0;
+            return 1;
 
         case WM_ERASEBKGND:
             return 1;
 
         case WM_LBUTTONDOWN:
         {
-            int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
+            // 物理像素 → 逻辑坐标（标题栏命中判定用的是 96 DPI 逻辑坐标）
+            int x = (int)(GET_X_LPARAM(lp) / g_scale), y = (int)(GET_Y_LPARAM(lp) / g_scale);
             if (y < 40 && !(x >= kBtnMin.left && x < kBtnClose.right))
             {
                 ReleaseCapture();
@@ -705,7 +816,7 @@ namespace
 
         case WM_LBUTTONUP:
         {
-            int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
+            int x = (int)(GET_X_LPARAM(lp) / g_scale), y = (int)(GET_Y_LPARAM(lp) / g_scale);
             if (y < 40)
             {
                 if (x >= kBtnMin.left && x < kBtnMin.right) { ShowWindow(hwnd, SW_MINIMIZE); return 0; }
@@ -733,13 +844,52 @@ namespace
     {
         typedef BOOL(WINAPI* Fn)(HANDLE);
         Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext");
-        if (fn) fn((HANDLE)(INT_PTR)-4);   // PER_MONITOR_AWARE_V2
+        if (fn && fn((HANDLE)(INT_PTR)-4)) return;      // PER_MONITOR_AWARE_V2（Win10 1703+）
+        // 旧系统回退：至少启用系统级 DPI 感知，避免被系统整体拉伸导致模糊
+        typedef BOOL(WINAPI* Fn10)(void);
+        Fn10 old = (Fn10)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDPIAware");
+        if (old) old();
+    }
+
+    /// 取主显示器 DPI（优先 GetDpiForSystem，回退 GetDeviceCaps）
+    int PrimaryDpi()
+    {
+        typedef UINT(WINAPI* Fn)(void);
+        Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForSystem");
+        if (fn)
+        {
+            UINT d = fn();
+            if (d >= 96) return (int)d;
+        }
+        HDC hdc = GetDC(NULL);
+        int dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSX) : 96;
+        if (hdc) ReleaseDC(NULL, hdc);
+        return dpi >= 96 ? dpi : 96;
+    }
+
+    /// 取窗口所在显示器的实际 DPI（GetDpiForSystem 在多屏/系统 DPI 不一致时不可靠）
+    UINT WindowDpi(HWND hwnd)
+    {
+        typedef UINT(WINAPI* Fn)(HWND);
+        Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
+        if (fn)
+        {
+            UINT d = fn(hwnd);
+            if (d >= 96) return d;
+        }
+        HDC hdc = GetDC(hwnd);
+        int dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSX) : 96;
+        if (hdc) ReleaseDC(hwnd, hdc);
+        return dpi >= 96 ? (UINT)dpi : 96;
     }
 
     int RunGui()
     {
         INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_PROGRESS_CLASS | ICC_STANDARD_CLASSES };
         InitCommonControlsEx(&icc);
+
+        // 先按系统 DPI 估一个初始缩放，避免创建时尺寸突兀
+        g_scale = PrimaryDpi() / 96.0;
 
         WNDCLASSEXW wc = { 0 };
         wc.cbSize = sizeof(wc);
@@ -753,13 +903,26 @@ namespace
 
         std::wstring title = std::wstring(kAppName) + L" 安装向导  v" + kVersion;
         g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, title.c_str(),
-            WS_POPUP | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, kWinW, kWinH,
+            WS_POPUP | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, S(kWinW), S(kWinH),
             NULL, NULL, g_hInst, NULL);
         if (!g_hwnd) return 1;
 
-        // 居中
+        // 以窗口实际 DPI 为准：系统 DPI 与显示器 DPI 不一致时（常见于 125%/150% 缩放），
+        // GetDpiForSystem 可能返回 96，必须用 GetDpiForWindow 纠正并重排一次
+        UINT wdpi = WindowDpi(g_hwnd);
+        if (wdpi >= 96)
+        {
+            double real = wdpi / 96.0;
+            if (real != g_scale)
+            {
+                g_scale = real;
+                LayoutControls(g_hwnd);
+            }
+        }
+
+        int winW = S(kWinW), winH = S(kWinH);
         int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
-        SetWindowPos(g_hwnd, NULL, (sw - kWinW) / 2, (sh - kWinH) / 2, kWinW, kWinH, SWP_NOZORDER);
+        SetWindowPos(g_hwnd, NULL, (sw - winW) / 2, (sh - winH) / 2, winW, winH, SWP_NOZORDER);
         ShowWindow(g_hwnd, SW_SHOW);
         UpdateWindow(g_hwnd);
 

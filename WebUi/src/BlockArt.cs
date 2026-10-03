@@ -45,28 +45,29 @@ namespace RichTextGen
                 rows = br;
             }
 
-            Bitmap small = new Bitmap(cols, rows);
-            using (Graphics g = Graphics.FromImage(small))
-            {
-                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                g.DrawImage(img, new Rectangle(0, 0, cols, rows));
-            }
-
             StringBuilder sb = new StringBuilder(cols * rows * perBlock + rows);
-            for (int y = 0; y < rows; y++)
+            using (Bitmap small = new Bitmap(cols, rows))
             {
-                for (int x = 0; x < cols; x++)
+                using (Graphics g = Graphics.FromImage(small))
                 {
-                    Color c = small.GetPixel(x, y);
-                    sb.Append("<color=#")
-                      .Append(c.R.ToString("X2")).Append(c.G.ToString("X2")).Append(c.B.ToString("X2"))
-                      .Append(">").Append(o.Glyph);
-                    if (o.CloseTag) sb.Append("</color>");
+                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                    g.DrawImage(img, new Rectangle(0, 0, cols, rows));
                 }
-                if (y < rows - 1) sb.Append('\n');
+
+                for (int y = 0; y < rows; y++)
+                {
+                    for (int x = 0; x < cols; x++)
+                    {
+                        Color c = small.GetPixel(x, y);
+                        sb.Append("<color=#")
+                          .Append(c.R.ToString("X2")).Append(c.G.ToString("X2")).Append(c.B.ToString("X2"))
+                          .Append(">").Append(o.Glyph);
+                        if (o.CloseTag) sb.Append("</color>");
+                    }
+                    if (y < rows - 1) sb.Append('\n');
+                }
             }
-            small.Dispose();
 
             int final = sb.Length;
             info = "输出 " + cols + " 列 × " + rows + " 行 = " + final + " 字符（预算 " + o.Budget + "）"

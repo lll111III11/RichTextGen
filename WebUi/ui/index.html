@@ -70,7 +70,7 @@
   #net.ok{color:#0a7d38} #net.bad{color:#c42b1c}
   .badge{border:1px solid var(--line);border-radius:99px;padding:1px 8px;font-size:11.5px}
   #updateBar{display:none;background:linear-gradient(90deg,#0067c0,#4cc2ff);color:#fff;
-             border-radius:var(--r8);padding:10px 14px;margin-bottom:12px;display:none;
+             border-radius:var(--r8);padding:10px 14px;margin-bottom:12px;
              align-items:center;gap:12px}
   #updateBar.on{display:flex}
   #drop{position:fixed;inset:0;background:rgba(0,103,192,.12);border:3px dashed var(--accent);
@@ -152,9 +152,9 @@
         <div class="row">
           <label class="f">颜色模式</label>
           <select id="mode" onchange="gen()">
-            <option value="hex">#十六进制（#FFFFFF）</option>
-            <option value="rgb">RGB 十进制（255,255,255）</option>
-            <option value="name">英文色名（white）</option>
+            <option value="hex">十六进制（#FF8800）</option>
+            <option value="rgb">RGB 输入（输出仍为十六进制）</option>
+            <option value="name">英文色名（orange）</option>
           </select>
           <label class="f">颜色值</label>
           <input type="text" id="color" value="#FFFFFF" style="width:140px" oninput="gen()">
@@ -313,7 +313,8 @@
 <script>
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
-const VERSION = "5.6.0.0";
+// 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
+const VERSION = "5.7.0.0";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -378,6 +379,38 @@ window.ui = {
 };
 
 /* ---------- 生成 ---------- */
+/* ---------- 颜色解析（与 C# ColorUtil.TryParse 对齐；用于色块与读数） ---------- */
+function parseColor(s){
+  s = (s == null ? '' : String(s)).trim();
+  if (!s) return null;
+  let m = s.match(/^#?([0-9a-f]{3})$/i);
+  if (m) return '#' + m[1].toUpperCase().split('').map(c => c + c).join('');
+  m = s.match(/^#?([0-9a-f]{6})([0-9a-f]{2})?$/i);
+  if (m) return '#' + m[1].toUpperCase();
+  m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (!m) m = s.match(/^(\d+)\s*[,\s;，]\s*(\d+)\s*[,\s;，]\s*(\d+)$/);
+  if (m) {
+    const r = +m[1], g = +m[2], b = +m[3];
+    if (r > 255 || g > 255 || b > 255) return null;
+    return '#' + [r, g, b].map(v => v.toString(16).toUpperCase().padStart(2, '0')).join('');
+  }
+  if (/^[a-z]+$/i.test(s)) return s.toLowerCase();     // CSS 色名，交给浏览器渲染
+  return null;
+}
+function updateColorInfo(){
+  const p = parseColor($('color').value);
+  const mode = $('mode').value;
+  const sw = $('sw'), info = $('colorInfo');
+  if (!p) {
+    sw.style.background = 'transparent';
+    info.textContent = '颜色无法解析（支持 #RRGGBB / 255,136,0 / orange）';
+    return;
+  }
+  sw.style.background = p;
+  info.textContent = (mode === 'name' && p.charAt(0) === '#')
+    ? '将生成最近的英文色名（当前 ' + p + '）'
+    : '将生成 <color=' + p + '>';
+}
 function gen(){
   const opts = {
     text: txt.value,
@@ -392,12 +425,9 @@ function gen(){
   host('generate|' + JSON.stringify(opts));   // 宿主只按第一个 '|' 切分，正文里的 '|' 无需删除
   updateColorInfo();
 }
-function updateColorInfo(){
-  const c = $('color').value.trim();
-  $('sw').style.background = c;
-  $('colorInfo').textContent = "将生成 <color=" + c + ">";
-}
 txt.addEventListener('input', gen);
+$('mode').addEventListener('change', updateColorInfo);
+$('color').addEventListener('input', updateColorInfo);
 
 /* 常用色 */
 const quick = ['#FFFFFF','#FF0000','#FF8800','#FFFF00','#00FF00','#00FFFF','#0066FF','#FF00FF','#000000','#808080'];
@@ -420,10 +450,13 @@ function doTranslate(){
 
 /* ---------- 拖放导入 / 色块图 ---------- */
 const drop = $('drop');
+let dragDepth = 0;
 window.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('on'); });
-window.addEventListener('dragleave', e=>{ drop.classList.remove('on'); });
+window.addEventListener('dragenter', e=>{ dragDepth++; drop.classList.add('on'); });
+window.addEventListener('dragleave', e=>{ if(--dragDepth <= 0){ dragDepth = 0; drop.classList.remove('on'); } });
 window.addEventListener('drop', e=>{
-  e.preventDefault(); drop.classList.remove('on');
+  dragDepth = 0; drop.classList.remove('on');
+  e.preventDefault();
   const f = e.dataTransfer.files[0]; if(!f) return;
   const p = f.path || f.name;                       // WebView2 在拖放时会带上真实路径
   const img = /\.(png|jpg|jpeg|bmp|gif|webp)$/i.test(f.name);
@@ -547,48 +580,60 @@ host('ready');
   window.tpLines = [];
   window.tpEditIndex = -1;   // 当前集中编辑区对应的行号（-1 = 无）
 
-  /* ---- 富文本 → HTML 渲染（简化版，覆盖常用标签，颜色为主） ---- */
+  /* ---- 富文本 → HTML 渲染：覆盖 TagRegistry 中全部「包裹型」标签 ---- */
   function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function attr(v){ return esc(v == null ? '' : String(v)).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function cssSize(v){
-    v = (v || '').trim();
+    v = (v == null ? '' : String(v)).trim();
     if (v === '') return '0';
-    if (/[%]|[px]|[em]|[rem]$/.test(v)) return v;
-    if (/^\d+(\.\d+)?$/.test(v)) return v + 'px';
+    if (/^-?\d+(\.\d+)?(px|em|rem|%)$/i.test(v)) return v;
+    if (/^-?\d+(\.\d+)?$/.test(v)) return v + 'px';
     return v;
   }
   function alphaOpacity(v){
-    v = (v || '').replace('#','').trim();
-    const n = parseInt(v, 16);
+    const n = parseInt((v == null ? '' : String(v)).replace('#','').trim(), 16);
     return isNaN(n) ? '1' : (Math.round(n / 255 * 1000) / 1000);
   }
-  function openTag(name, val){
-    switch (name) {
-      case 'b': return '<b>';
-      case 'i': return '<i>';
-      case 'u': return '<u>';
-      case 's': return '<s>';
-      case 'sub': return '<sub>';
-      case 'sup': return '<sup>';
-      case 'nobr': return '<span style="white-space:nowrap">';
-      case 'uppercase': return '<span style="text-transform:uppercase">';
-      case 'lowercase': return '<span style="text-transform:lowercase">';
-      case 'color': return '<span style="color:' + (val || '#ffffff') + '">';
-      case 'size': return '<span style="font-size:' + cssSize(val) + '">';
-      case 'mark': return '<span style="background-color:' + (val || '#000000') + '">';
-      case 'alpha': return '<span style="opacity:' + alphaOpacity(val) + '">';
-      default: return esc('<' + name + (val ? ('=' + val) : '') + '>');
-    }
+  function cssColor(v){
+    v = (v == null ? '' : String(v)).trim();
+    return /^[#a-zA-Z0-9(),.%\s-]+$/.test(v) && v !== '' ? v : '#ffffff';
   }
-  function closeTag(name){
-    switch (name) {
-      case 'b': return '</b>'; case 'i': return '</i>'; case 'u': return '</u>';
-      case 's': return '</s>'; case 'sub': return '</sub>'; case 'sup': return '</sup>';
-      default: return '</span>';
-    }
-  }
-  function isWrap(name){
-    return ['b','i','u','s','sub','sup','nobr','uppercase','lowercase','color','size','mark','alpha'].indexOf(name) >= 0;
-  }
+  function span(style){ return '<span style="' + style + '">'; }
+  // name → { open(val), close }：每个包裹型标签都恰好对应一个 HTML 元素，保证栈可平衡
+  const RENDER = {
+    'b':           { open: () => '<b>', close: '</b>' },
+    'i':           { open: () => '<i>', close: '</i>' },
+    'u':           { open: () => '<u>', close: '</u>' },
+    's':           { open: () => '<s>', close: '</s>' },
+    'sub':         { open: () => '<sub>', close: '</sub>' },
+    'sup':         { open: () => '<sup>', close: '</sup>' },
+    'nobr':        { open: () => span('white-space:nowrap'), close: '</span>' },
+    'noparse':     { open: () => '<code>', close: '</code>' },
+    'uppercase':   { open: () => span('text-transform:uppercase'), close: '</span>' },
+    'lowercase':   { open: () => span('text-transform:lowercase'), close: '</span>' },
+    'smallcaps':   { open: () => span('font-variant:small-caps'), close: '</span>' },
+    'allcaps':     { open: () => span('text-transform:uppercase'), close: '</span>' },
+    'color':       { open: v => span('color:' + cssColor(v)), close: '</span>' },
+    'alpha':       { open: v => span('opacity:' + alphaOpacity(v)), close: '</span>' },
+    'mark':        { open: v => span('background-color:' + cssColor(v)), close: '</span>' },
+    'size':        { open: v => span('font-size:' + cssSize(v)), close: '</span>' },
+    'font':        { open: v => span("font-family:'" + attr(v) + "'"), close: '</span>' },
+    'font-weight': { open: v => span('font-weight:' + attr(v)), close: '</span>' },
+    'cspace':      { open: v => span('letter-spacing:' + cssSize(v)), close: '</span>' },
+    'mspace':      { open: v => span('font-family:monospace;letter-spacing:' + cssSize(v)), close: '</span>' },
+    'voffset':     { open: v => span('position:relative;top:-' + cssSize(v)), close: '</span>' },
+    'rotate':      { open: v => span('display:inline-block;transform:rotate(' + attr(v) + 'deg)'), close: '</span>' },
+    'line-height': { open: v => span('line-height:' + cssSize(v)), close: '</span>' },
+    'indent':      { open: v => span('padding-left:' + cssSize(v)), close: '</span>' },
+    'line-indent': { open: v => span('text-indent:' + cssSize(v)), close: '</span>' },
+    'width':       { open: v => span('display:inline-block;width:' + cssSize(v)), close: '</span>' },
+    'margin':      { open: v => span('display:inline-block;margin:' + cssSize(v)), close: '</span>' },
+    'link':        { open: v => '<a href="' + attr(v) + '" onclick="return false" style="color:#4da3ff">', close: '</a>' },
+    // 浏览器无法还原的资源类/旧版标签：用中性 span 占位，保持栈平衡
+    'style':       { open: () => span('border-bottom:1px dotted currentColor'), close: '</span>' },
+    'gradient':    { open: () => span(''), close: '</span>' },
+    'material':    { open: () => span(''), close: '</span>' }
+  };
   function renderLine(line){
     if (!line) return '';
     const stack = [];
@@ -608,11 +653,20 @@ host('ready');
       if (eq >= 0) { name = body.slice(0, eq); val = body.slice(eq + 1).trim(); }
       name = name.trim().toLowerCase();
       if (val.length >= 2 && val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') val = val.slice(1, -1);
-      if (closing) { if (stack.length) out += closeTag(stack.pop()); continue; }
-      out += openTag(name, val);
-      if (isWrap(name)) stack.push(name);
+      if (closing) {
+        // 按名字从栈顶向下查找；命中则把它之上的全部自动闭合，避免闭标签错配
+        let at = -1;
+        for (let k = stack.length - 1; k >= 0; k--) { if (stack[k] === name) { at = k; break; } }
+        if (at < 0) continue;                                  // 没有对应开标签 → 忽略
+        for (let k = stack.length - 1; k >= at; k--) out += RENDER[stack[k]].close;
+        stack.length = at;
+        continue;
+      }
+      const rule = RENDER[name];
+      if (rule) { out += rule.open(val); stack.push(name); }
+      else { out += esc('<' + token + '>'); }                   // 前缀/后缀或未知标签 → 原样显示，不入栈
     }
-    while (stack.length) out += closeTag(stack.pop());
+    while (stack.length) out += RENDER[stack.pop()].close;
     return out;
   }
 
@@ -633,6 +687,11 @@ host('ready');
         row.querySelector('.tp-preview').innerHTML = renderLine(inp.value) || '&nbsp;';
       });
       inp.addEventListener('focus', () => { loadToEdit(idx); });
+      // 点击整行任意位置（除复选框）都载入到集中编辑区，与界面提示一致
+      row.addEventListener('click', ev => {
+        if (ev.target.classList.contains('tp-cb')) return;
+        loadToEdit(idx);
+      });
       const pv = document.createElement('div'); pv.className = 'tp-preview';
       pv.innerHTML = renderLine(line) || '&nbsp;';
       row.append(cb, no, inp, pv);

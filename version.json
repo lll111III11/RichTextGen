@@ -2,7 +2,7 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.6.0.0",
+  "version": "5.7.0.0",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
@@ -11,5 +11,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.6.0.0 修复与改进：\n· 安装器重写为原生 C++（零依赖：不需 .NET Framework、不需 WebView2 运行时、静态 CRT 无 vcruntime*.dll，仅依赖 Windows 系统自带 DLL）\n· 修复主程序 AnyCPU 与 WebView2Loader.dll（x86）架构不匹配，64 位系统安装后启动即崩溃；主程序固定 x86\n· 安装器界面：渐变沿左上→右下流动 + 黑色斜杠扫描，可选 Win11 22H2 毛玻璃（亚克力）\n· TXT 全面处理系统：逐行可编辑 + 逐行富文本实时渲染预览 + 集中编辑区回写覆盖 + 批量复制/删除/导出\n· 修复生成结果不显示（宿主回传 JSON 非法）、复制/导出/发送内容被 URL 编码污染、桥接转义错误、标题栏无法拖动\n· 恢复全局热键：Ctrl+Alt+T 显示/隐藏、O 导入、G 生成、C 复制、S 发送\n· 版本号统一由 csproj 程序集版本派生\n· 源码收敛为单一 HTML（WebView2）工程，移除旧版 WinForms 代码"
+  "notes": "v5.7.0.0 修复与改进：\n· 修复 TXT 处理区富文本预览的闭合标签错配：<link>/<noparse>/<cspace>/<voffset> 等标签会让颜色、字号等样式提前失效，现按标签名配对并覆盖全部包裹型标签\n· 修复颜色输入框：输入 255,136,0 这类写法时色块不显示、读数与实际生成不一致；现与生成逻辑同源解析\n· 修复卸载残留：卸载前先结束正在运行的程序，并清理 %APPDATA%\\RichTextGen（WebView2 缓存、更新标记、错误日志）\n· 修复安装器可能误删安装目录内的用户文件（改为只清理本产品白名单文件）\n· 修复安装可能「半成品却提示完成」：逐文件校验写入完整性，失败即报错\n· 安装器界面支持高 DPI：窗口、控件与字号按屏幕 DPI 等比缩放，并处理跨屏 DPI 变化\n· 补齐程序与安装包图标；退出程序时释放全局热键，避免下次启动提示「热键被占用」\n· 拖放文件到窗口中不再闪烁；点击 TXT 行内任意位置即可载入集中编辑区\n· 界面回调失败等关键异常会记录到 %APPDATA%\\RichTextGen\\error.log，便于排查"
 }

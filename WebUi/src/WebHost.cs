@@ -58,6 +58,8 @@ namespace RichTextGen
         {
             Text = "彩色文本生成器 v" + Version;
             Font = new Font("Microsoft YaHei UI", 9f);
+            // 用 exe 内嵌图标（csproj 的 ApplicationIcon），否则 WinForms 会显示系统默认图标
+            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             FormBorderStyle = FormBorderStyle.None;      // 无边框：标题栏由 HTML 画
             ClientSize = new Size(1180, 800);
             MinimumSize = new Size(880, 600);
@@ -171,6 +173,14 @@ namespace RichTextGen
             try { if (hotkeys != null) hotkeys.RegisterAll(); } catch { }
         }
 
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            // 释放全局热键与计时器，避免残留热键占用（否则重启程序会「注册失败（被占用）」）
+            try { if (hotkeys != null) hotkeys.UnregisterAll(); } catch { }
+            try { if (updateTimer != null) { updateTimer.Stop(); updateTimer.Dispose(); } } catch { }
+            base.OnFormClosed(e);
+        }
+
         private void OnWebReady(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
             if (!e.IsSuccess || web.CoreWebView2 == null)
@@ -230,9 +240,26 @@ namespace RichTextGen
                 if (web.CoreWebView2 == null) return;
                 web.CoreWebView2.ExecuteScriptAsync("ui." + fn + "(" + jsonArg + ")");
             }
-            catch { }
+            catch (Exception ex) { LogOnce("界面回调失败（ui." + fn + "）：" + ex.Message); }
         }
         private void CallStr(string fn, string s) { Call(fn, Quote(s)); }
+
+        private static bool _loggedOnce;
+        /// <summary>关键异常落盘到 %APPDATA%\RichTextGen\error.log（只记第一次，避免刷屏）</summary>
+        internal static void LogOnce(string message)
+        {
+            if (_loggedOnce) return;
+            _loggedOnce = true;
+            try
+            {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen");
+                Directory.CreateDirectory(dir);
+                File.AppendAllText(Path.Combine(dir, "error.log"),
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + message + Environment.NewLine,
+                    new UTF8Encoding(true));
+            }
+            catch { }
+        }
 
         /// <summary>转义成 JSON 字符串字面量（含控制字符，避免 JSON.parse 失败导致界面静默不更新）</summary>
         private static string Quote(string s)
@@ -292,12 +319,21 @@ namespace RichTextGen
                 case "dropFile": DropFile(Un(arg)); break;
                 case "checkUpdate": CheckUpdate(); break;
                 case "doUpdate": DoUpdate(); break;
-                case "openUrl": try { System.Diagnostics.Process.Start(arg); } catch { } break;
+                case "openUrl": OpenUrl(arg); break;
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
                 case "sendGame": SendToGame(Un(arg)); break;
                 case "copy": try { Clipboard.SetText(Un(arg)); CallStr("status", "已复制到剪贴板"); } catch { } break;
             }
+        }
+
+        /// <summary>用浏览器打开链接；失败时给出提示而不是静默无反应</summary>
+        private void OpenUrl(string url)
+        {
+            url = (url ?? "").Trim().Trim('"');
+            if (url.Length == 0) { CallStr("status", "链接为空"); return; }
+            try { System.Diagnostics.Process.Start(url); CallStr("status", "已在浏览器打开"); }
+            catch (Exception ex) { CallStr("status", "打开链接失败：" + ex.Message); }
         }
 
         /// <summary>JS 侧对含中文/换行的载荷统一做了 encodeURIComponent，这里还原</summary>
@@ -501,7 +537,9 @@ namespace RichTextGen
         private static string RenderPreview(string code)
         {
             StringBuilder sb = new StringBuilder();
-            Stack<TagDef> stack = new Stack<TagDef>();
+            // 用 List 而非 Stack：闭合时要按标签名匹配，而不是无脑弹栈顶（否则手工粘贴的
+            // 非规范嵌套会让 HTML 提前闭合、样式错乱）
+            List<TagDef> stack = new List<TagDef>();
             string[] lines = code.Split('\n');
             for (int li = 0; li < lines.Length; li++)
             {
@@ -524,13 +562,24 @@ namespace RichTextGen
                     name = name.Trim().ToLowerInvariant();
                     TagDef def = TagRegistry.ById(name);
                     if (def == null) { sb.Append(Esc("<" + token + ">")); continue; }
-                    if (closing) { if (stack.Count > 0) { stack.Pop(); sb.Append(PreviewHtml.Close(def)); } continue; }
+                    if (closing)
+                    {
+                        int at = -1;
+                        for (int k = stack.Count - 1; k >= 0; k--)
+                        {
+                            if (string.Equals(stack[k].TagName, name, StringComparison.OrdinalIgnoreCase)) { at = k; break; }
+                        }
+                        if (at < 0) continue;                       // 没有对应开标签 → 忽略
+                        for (int k = stack.Count - 1; k >= at; k--) sb.Append(PreviewHtml.Close(stack[k]));
+                        stack.RemoveRange(at, stack.Count - at);
+                        continue;
+                    }
                     sb.Append(PreviewHtml.Open(def, val));
-                    if (def.Kind == TagKind.Wrap) stack.Push(def);
+                    if (def.Kind == TagKind.Wrap) stack.Add(def);
                 }
                 sb.Append("<br>");
             }
-            while (stack.Count > 0) sb.Append(PreviewHtml.Close(stack.Pop()));
+            for (int k = stack.Count - 1; k >= 0; k--) sb.Append(PreviewHtml.Close(stack[k]));
             return sb.ToString();
         }
         private static string Esc(string s)
