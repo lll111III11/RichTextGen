@@ -7,8 +7,8 @@ using System.Windows.Forms;
 namespace RichTextGen
 {
     /// <summary>
-    /// 全局热键注册。方案（5.7.0.2 起）：
-    ///   Ctrl+F2        隐藏窗口（收至后台，用托盘图标唤回）
+    /// 全局热键注册。方案（5.7.0.3 起）：
+    ///   Ctrl+F2        隐藏 ↔ 显示 切换（收后台后托盘图标也可唤回）
     ///   Ctrl+Alt+O     导入 TXT（完成后自动隐藏）
     ///   Ctrl+Alt+G     重新生成（完成后自动隐藏）
     ///   Ctrl+Alt+F4    发送到游戏（发送前弹确认）
@@ -35,7 +35,7 @@ namespace RichTextGen
         private static readonly HotkeyDef[] Defs =
         {
             new HotkeyDef { Action = "hide",     Keys = Keys.Control | Keys.F2,
-                            Desc = "Ctrl+F2 隐藏窗口（收至后台，托盘图标可唤回）" },
+                            Desc = "Ctrl+F2 隐藏 / 显示窗口（托盘图标可唤回）" },
             new HotkeyDef { Action = "import",   Keys = Keys.Control | Keys.Alt | Keys.O,
                             Desc = "Ctrl+Alt+O 导入 TXT（完成后自动隐藏）" },
             new HotkeyDef { Action = "generate", Keys = Keys.Control | Keys.Alt | Keys.G,

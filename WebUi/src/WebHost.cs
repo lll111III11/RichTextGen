@@ -107,7 +107,11 @@ namespace RichTextGen
         {
             switch (action)
             {
-                case "hide": HideWindow(); break;
+                // Ctrl+F2：隐藏 ↔ 显示 双向切换（收后台用托盘唤回 / 再按一次直接恢复）
+                case "hide":
+                    if (Visible) HideWindow();
+                    else RestoreWindow();
+                    break;
                 case "import": ImportTxt(); HideWindow(); break;        // 导入完自动收后台
                 case "generate": RunJs("gen()"); HideWindow(); break;   // 重新生成完自动收后台
                 case "send": SendToGame(lastCode); break;               // 发送前会弹确认框
@@ -357,6 +361,9 @@ namespace RichTextGen
                 case "colorLib": FetchColorLibrary(); break;
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
+                case "chat": Chat(Un(arg)); break;
+                case "easterEgg": PlayNetSound(); break;
+                case "uninstall": UninstallApp(); break;
                 case "sendGame": SendToGame(Un(arg)); break;
                 case "copy": try { Clipboard.SetText(Un(arg)); CallStr("status", "已复制到剪贴板"); } catch { } break;
             }
@@ -798,6 +805,115 @@ namespace RichTextGen
             catch { return ""; }
         }
 
+        // ============================================================ AI 助手（DeepSeek，OpenAI 兼容协议）
+        /// <summary>聊天：把历史对话发给 DeepSeek /chat/completions，返回助手回复</summary>
+        private void Chat(string json)
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    string endpoint = Field(json, "endpoint").Trim();
+                    string key = Field(json, "key").Trim();
+                    string history = Field(json, "history");           // JS 序列化的 [{role,content},...]
+                    if (history.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("对话内容为空") + "}"); return; }
+                    if (key.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("尚未填写 API Key（可在「AI 助手」页填写）") + "}"); return; }
+                    if (endpoint.Length == 0) endpoint = "https://api.deepseek.com";
+                    if (!endpoint.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+                        endpoint = endpoint.TrimEnd('/') + "/chat/completions";
+                    string body = "{\"model\":\"deepseek-chat\",\"messages\":" + history + ",\"max_tokens\":2048}";
+                    string resp = HttpPost(endpoint, key, body, 60000);
+                    if (resp.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("网络不可达或 API 无响应，请检查网络与密钥") + "}"); return; }
+                    string reply = Regex.Match(resp, "\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
+                    if (reply.Length == 0)
+                    {
+                        string err = Regex.Match(resp, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
+                        if (err.Length == 0) err = resp.Length > 200 ? resp.Substring(0, 200) + "…" : resp;
+                        Call("chatReply", "{\"ok\":false,\"text\":" + Quote("API 返回异常：" + err) + "}");
+                        return;
+                    }
+                    Call("chatReply", "{\"ok\":true,\"text\":" + Quote(Unescape(reply)) + "}");
+                    CallStr("status", "AI 回复完成");
+                }
+                catch (Exception ex) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("请求出错：" + ex.Message) + "}"); }
+            });
+        }
+
+        // ============================================================ 小彩蛋：点联网 5 次 → 网络音效
+        /// <summary>随机从网上取一个音效（下载到临时目录 → SoundPlayer 播放 → 删除）</summary>
+        private void PlayNetSound()
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                string[] urls =
+                {
+                    "https://raw.githubusercontent.com/lll111III11/RichTextGen/main/sounds/ding.wav",
+                    "https://raw.githubusercontent.com/lll111III11/RichTextGen/main/sounds/chirp.wav",
+                    "https://raw.githubusercontent.com/lll111III11/RichTextGen/main/sounds/notify.wav"
+                };
+                string path = "";
+                try
+                {
+                    string url = urls[new Random().Next(urls.Length)];
+                    path = Path.Combine(Path.GetTempPath(), "rtg_net_" + DateTime.Now.ToString("HHmmssfff") + ".wav");
+                    using (WebClient wc = new WebClient())
+                    {
+                        wc.Headers.Add("User-Agent", "RichTextGen/" + Version);
+                        wc.DownloadFile(url, path);
+                    }
+                    using (System.Media.SoundPlayer sp = new System.Media.SoundPlayer(path)) sp.PlaySync();
+                    CallStr("status", "🎵 网络音效（彩蛋达成）");
+                }
+                catch { CallStr("status", "音效获取失败（网络不通？）"); }
+                finally { try { if (path.Length > 0 && File.Exists(path)) File.Delete(path); } catch { } }
+            });
+        }
+
+        // ============================================================ 卸载
+        /// <summary>设置页「卸载」：确认后调用安装程序自带的 /uninstall（结束进程 → 删文件 → 清注册表 → 删 %APPDATA%）</summary>
+        private void UninstallApp()
+        {
+            DialogResult r = MessageBox.Show(this,
+                "确定卸载「彩色文本生成器」？\r\n\r\n将查找安装位置及相关位置，删除本产品的所有文件，并启动卸载程序。",
+                "卸载确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (r != DialogResult.Yes) { CallStr("status", "已取消卸载"); return; }
+            try
+            {
+                string dir = Path.GetDirectoryName(Application.ExecutablePath);
+                string setup = Path.Combine(dir, "RichTextGen-Setup.exe");
+                string un = Path.Combine(dir, "Uninstall.exe");
+                string exe = File.Exists(setup) ? setup : (File.Exists(un) ? un : "");
+                if (exe.Length > 0)
+                {
+                    try { System.Diagnostics.Process.Start(exe, "/uninstall"); } catch { }
+                }
+                Close();   // 卸载器会 KillRunningApp 兜底，这里先自己优雅退出
+            }
+            catch { CallStr("status", "卸载启动失败"); }
+        }
+
+        /// <summary>POST JSON（用于 DeepSeek 等 OpenAI 兼容接口）</summary>
+        private static string HttpPost(string url, string bearer, string jsonBody, int ms)
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "POST"; req.Timeout = ms; req.ReadWriteTimeout = ms;
+                req.UserAgent = "RichTextGen/" + Version;
+                req.ContentType = "application/json";
+                if (bearer.Length > 0) req.Headers.Add("Authorization", "Bearer " + bearer);
+                byte[] data = Encoding.UTF8.GetBytes(jsonBody);
+                req.ContentLength = data.Length;
+                using (Stream s = req.GetRequestStream()) s.Write(data, 0, data.Length);
+                using (WebResponse resp = req.GetResponse())
+                using (Stream s = resp.GetResponseStream())
+                using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
+                    return sr.ReadToEnd();
+            }
+            catch { return ""; }
+        }
+
         // ============================================================ 图片色块图
         private void BlockArtFromFile(string path)
         {
@@ -834,8 +950,13 @@ namespace RichTextGen
                     List<string> tags = new List<string>();
                     string masked = Regex.Replace(text, "<[^>]*>", delegate (Match m) { tags.Add(m.Value); return "\u0001" + (tags.Count - 1) + "\u0001"; });
                     bool useGet = (endpoint.Length == 0) || endpoint.Contains("?");
-                    string req = endpoint.Length > 0 ? endpoint
-                        : ("https://api.mymemory.translated.net/get?q=" + Uri.EscapeDataString(masked) + "&langpair=" + from + "|" + to);
+                    string req;
+                    if (endpoint.Contains("$Q"))                       // 预装 Google 免费网页版：$F/$T/$Q 占位符由宿主替换
+                        req = endpoint.Replace("$F", Uri.EscapeDataString(from)).Replace("$T", Uri.EscapeDataString(to)).Replace("$Q", Uri.EscapeDataString(masked));
+                    else if (endpoint.Length > 0)
+                        req = endpoint;
+                    else                                             // 预装 MyMemory 免费版
+                        req = "https://api.mymemory.translated.net/get?q=" + Uri.EscapeDataString(masked) + "&langpair=" + from + "|" + to;
                     string body = "{\"text\":" + Quote(masked) + ",\"source\":" + Quote(from) + ",\"target\":" + Quote(to) + "}";
                     HttpWebRequest r = (HttpWebRequest)WebRequest.Create(req);
                     r.Method = useGet ? "GET" : "POST"; r.Timeout = 20000;
@@ -853,7 +974,11 @@ namespace RichTextGen
                     using (Stream s = w.GetResponseStream())
                     using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
                         resp = sr.ReadToEnd();
-                    string translated = Regex.Match(resp, "\"(?:translatedText|translation|result|text)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
+                    string translated;
+                    if (endpoint.Contains("$Q") || resp.TrimStart().StartsWith("[["))   // Google 结构：[[["译文","原文",...],...]]
+                        translated = Unescape(Regex.Match(resp, "\\[\\[\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value);
+                    else
+                        translated = Regex.Match(resp, "\"(?:translatedText|translation|result|text)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
                     if (translated.Length == 0) translated = resp;
                     for (int k = 0; k < tags.Count; k++) translated = translated.Replace("\u0001" + k + "\u0001", tags[k]);
                     Call("translated", "{\"text\":" + Quote(translated) + "}");
