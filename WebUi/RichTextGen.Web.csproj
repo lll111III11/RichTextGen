@@ -20,9 +20,9 @@
     <Prefer32Bit>true</Prefer32Bit>
 
     <!-- exe 属性 -->
-    <Version>5.7.0.6</Version>
-    <AssemblyVersion>5.7.0.6</AssemblyVersion>
-    <FileVersion>5.7.0.6</FileVersion>
+    <Version>5.7.0.7</Version>
+    <AssemblyVersion>5.7.0.7</AssemblyVersion>
+    <FileVersion>5.7.0.7</FileVersion>
     <Product>Rich text &amp; multifunctional tool</Product>
     <AssemblyTitle>多功能性的一种工具</AssemblyTitle>
     <Description>多功能性的一种工具</Description>

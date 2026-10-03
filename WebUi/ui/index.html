@@ -134,7 +134,11 @@
   @keyframes pageIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
   #pages .card{transition:box-shadow .2s ease,transform .2s ease}
   #pages .card:hover{box-shadow:0 3px 10px rgba(0,0,0,.10)}
-  /* ---- 聊天（DeepSeek 助手） ---- */
+  .zoomPulse{animation:zoomPulse .3s ease}
+  @keyframes zoomPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
+  #cursorHide{position:fixed;inset:0;cursor:none;z-index:40;display:none}
+  #cursorHide.on{display:block}
+  /* ---- AI 对话（自定义模型） ---- */
   #chatBox{height:300px;overflow:auto;border:1px solid var(--inputLine);border-radius:var(--r8);
            padding:10px;background:var(--input);display:flex;flex-direction:column;gap:8px}
   .c-msg{max-width:86%;padding:8px 11px;border-radius:10px;white-space:pre-wrap;word-break:break-word;
@@ -142,14 +146,6 @@
   .c-user{align-self:flex-end;background:var(--accent);color:var(--accentText)}
   .c-bot{align-self:flex-start;background:var(--card);border:1px solid var(--line)}
   .c-err{border:1px solid #c42b1c;color:#c42b1c}
-  .c-tag{margin:0 2px;padding:1px 5px;border-radius:4px;background:var(--hover);font-family:Consolas,monospace;font-size:11.5px;color:var(--text)}
-  .zoomPulse{animation:zoomPulse .3s ease}
-  @keyframes zoomPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
-  #cursorHide{position:fixed;inset:0;cursor:none;z-index:40;display:none}
-  #cursorHide.on{display:block}
-  #agLog{max-height:180px;overflow:auto;border:1px solid var(--inputLine);border-radius:var(--r8);padding:8px;
-        background:var(--input);display:flex;flex-direction:column;gap:6px}
-  #agCmd{min-height:64px}
 </style>
 </head>
 <body>
@@ -172,7 +168,7 @@
     <button data-p="send"><span class="g">➤</span>发送中心</button>
     <button data-p="img"><span class="g">▦</span>图片系统</button>
     <button data-p="trans"><span class="g">⇄</span>在线翻译</button>
-    <button data-p="chat"><span class="g">✦</span>AI 助手</button>
+    <button data-p="chat"><span class="g">✦</span>AI 对话</button>
     <button data-p="set"><span class="g">⚙</span>设置</button>
   </nav>
 
@@ -354,37 +350,22 @@
       </div>
     </section>
 
-    <!-- AI 助手（DeepSeek） -->
+    <!-- AI 对话（自定义模型） -->
     <section class="page" id="p-chat">
-      <div class="card"><h3>✦ AI 助手 · 文本难题对话（DeepSeek · deepseek-flash）</h3>
-        <p class="hint">遇到文本 / 富文本 / 颜色 / 代码等难题，直接提问即可。API 地址与密钥已预装，可自行修改；模型为 deepseek-flash（推理模型）。</p>
+      <div class="card"><h3>✦ AI 对话 · 自定义模型</h3>
+        <p class="hint">填入你自己的 OpenAI 兼容 API（Endpoint + API Key + 模型名）即可简易对话。支持 DeepSeek / OpenAI / 通义千问等一切兼容接口。</p>
         <div class="row"><label class="f">Endpoint</label>
-          <input type="text" id="cEndpoint" value="https://api.deepseek.com" style="width:260px">
+          <input type="text" id="cEndpoint" placeholder="如 https://api.deepseek.com 或 https://api.openai.com/v1" style="width:300px">
           <label class="f">API Key</label>
-          <input type="password" id="cKey" placeholder="内置密钥（仅本机解密）· 可填写覆盖" style="width:280px">
-          <button class="b" onclick="restoreKey()">恢复内置</button></div>
+          <input type="password" id="cKey" placeholder="填入你自己的密钥" style="width:250px">
+          <label class="f">模型</label>
+          <input type="text" id="cModel" placeholder="如 deepseek-chat / gpt-4o-mini / qwen-plus" style="width:200px"></div>
         <div id="chatBox"></div>
         <div class="row" style="margin-top:10px">
           <textarea id="chatInput" placeholder="输入你的问题，例如：帮我解释这段 &lt;color&gt; 标签的含义…" style="flex:1;min-height:64px;user-select:text"></textarea>
           <button class="b p" onclick="chatSend()">发送</button>
           <button class="b" onclick="chatClear()">清空</button></div>
         <div class="row"><span class="hint">提示：历史对话会自动带上；输入框内按 Enter 发送、Shift+Enter 换行。</span></div>
-      </div>
-      <div class="card"><h3>🤖 Agent · 智能处理（每次操作前都会询问你）</h3>
-        <p class="hint">用一句话描述你想对「工作区文本」做的事。AI 会拆成步骤逐步执行；凡是修改文本、改样式、复制或发送的操作，执行前都会弹出确认框，你可以随时点「停止」。</p>
-        <div class="row"><label class="f">预设</label>
-          <select id="agPreset" onchange="agPresetApply()">
-            <option value="">—— 选择预设 ——</option>
-            <option value="translate-en">翻译成英文（保留标签）</option>
-            <option value="clean">清理多余空格 / 空行 / 统一格式</option>
-            <option value="extract-colors">提取所有颜色清单</option>
-            <option value="line-number">每一行加行号</option>
-          </select>
-          <button class="b p" onclick="agRun()">执行</button>
-          <button class="b" onclick="host('agentStop')">停止</button>
-          <span class="hint" id="agState"></span></div>
-        <textarea id="agCmd" placeholder="例如：把文本翻译成英文；把所有红色改成橙色；去掉多余空行并统一格式…"></textarea>
-        <div id="agLog"></div>
       </div>
     </section>
 
@@ -411,7 +392,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.7.0.6";
+const VERSION = "5.7.0.7";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -441,7 +422,6 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.p)
 /* ---------- C# 回调 ---------- */
 window.ui = {
   version: v => { if(!v) return; $('ver').textContent = "v" + v; $('ver2').textContent = v; },
-  dsKey: k => { builtinKey = k || ""; },
   hotkeys: s => { const e = $('hotkeyInfo'); if(e) e.textContent = s || ""; },
   updated: o => {
     const badge = (o.type === "security") ? "安全更新" : (o.type === "fix" ? "问题修复" : "功能更新");
@@ -479,13 +459,6 @@ window.ui = {
     else cMsg('bot', o.text, o.ok ? '' : ' c-err');
     if(o.ok && o.text && o.text !== '（无回复）') chatHist.push({ role:'assistant', content:o.text });
     status(o.ok ? '回复完成' : '请求失败');
-  },
-  agentReply: o => {
-    const d = document.createElement('div');
-    d.className = 'c-msg c-bot';
-    d.textContent = (o.ok ? '✓ ' : '⚠ ') + (o.msg || '');
-    $('agLog').appendChild(d);
-    if(o.done){ status(o.ok ? 'Agent 完成' : 'Agent 结束'); $('agState').textContent = ''; }
   }
 };
 
@@ -568,9 +541,7 @@ function doTranslate(){
   }));
 }
 
-/* ---------- AI 助手（DeepSeek，OpenAI 兼容协议） ---------- */
-let builtinKey = '';                            // 宿主启动时下发的内置密钥（仅内存；本机指纹匹配才非空）
-function restoreKey(){ if(builtinKey){ $('cKey').value = builtinKey; status('已恢复内置密钥'); } else status('本机未匹配内置密钥，请手动填写 API Key'); }
+/* ---------- AI 对话（自定义模型，OpenAI 兼容协议） ---------- */
 let chatHist = [];                              // [{role:'user'|'assistant', content}]
 const chatBox = $('chatBox'), chatInput = $('chatInput');
 function cMsg(role, text, cls){
@@ -591,26 +562,8 @@ function chatSend(){
   chatThinkEl = cMsg('bot', '（正在思考…）');
   const hist = chatHist.slice(-20);                 // 只带最近 20 条，控制上下文长度
   host('chat|' + encodeURIComponent(JSON.stringify({
-    endpoint:$('cEndpoint').value, key:($('cKey').value || builtinKey),
+    endpoint:$('cEndpoint').value, key:$('cKey').value, model:$('cModel').value,
     history: JSON.stringify(hist)                  // 数组转成 JSON 字符串，C# Field 才能取出
-  })));
-}
-
-/* ---------- Agent：AI 分步处理文本（写操作一律先询问） ---------- */
-const AG_PRESETS = {
-  'translate-en':   '把工作区文本翻译成英文，保持原有富文本标签不被破坏',
-  'clean':          '清理工作区文本：去掉多余空格和多余空行，统一标点为中文，保持富文本标签不被破坏',
-  'extract-colors': '提取工作区文本里出现的所有颜色，输出清单即可',
-  'line-number':    '给工作区文本的每一行前面加上行号（1. 2. 3. …），保持富文本标签不被破坏'
-};
-function agPresetApply(){ const v = $('agPreset').value; if(v && AG_PRESETS[v]) $('agCmd').value = AG_PRESETS[v]; }
-function agRun(){
-  const cmd = $('agCmd').value.trim();
-  if(!cmd){ status('先输入处理指令'); return; }
-  status('Agent 执行中…');
-  $('agLog').innerHTML = '';
-  host('agent|' + encodeURIComponent(JSON.stringify({
-    cmd:cmd, key:($('cKey').value || builtinKey), text:txt.value, out:out.value
   })));
 }
 chatInput.addEventListener('keydown', e => {

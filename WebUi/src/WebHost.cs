@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -44,28 +44,6 @@ namespace RichTextGen
         private NotifyIcon tray;                         // 托盘图标（Ctrl+F2 隐藏后的唤回入口）
         private bool trayTipShown;
         private string lastCode = "";                    // 最近一次生成结果（供热键发送使用）
-        private volatile bool agentStop;                 // Agent 停止标记
-
-        // 内置 DeepSeek 密钥：仓库只存异或密文（避免 GitHub 密钥扫描报警），运行时用本机指纹解密。
-        // 指纹 = SHA256(%APPDATA% + "|RichTextGenKey|v5") 前 32 个 hex 字符。其他机器解不出 → 界面提示手动填写。
-        private const string DsKeyBlob = "QlpMU1NUVwMAVl9WWFMAUQQCUVRUCQxWCQdXUlcEBl1QAlA=";
-        private static string DsKey()
-        {
-            try
-            {
-                string src = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "|RichTextGenKey|v5";
-                byte[] h = System.Security.Cryptography.SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(src));
-                StringBuilder hex = new StringBuilder(64);
-                for (int i = 0; i < h.Length; i++) hex.Append(h[i].ToString("x2"));
-                byte[] fp = Encoding.ASCII.GetBytes(hex.ToString().Substring(0, 32));
-                byte[] data = Convert.FromBase64String(DsKeyBlob);
-                byte[] key = new byte[data.Length];
-                for (int i = 0; i < data.Length; i++) key[i] = (byte)(data[i] ^ fp[i % fp.Length]);
-                string s = Encoding.UTF8.GetString(key);
-                return s.StartsWith("sk-") ? s : "";     // 本机指纹不匹配 → 视为无内置密钥
-            }
-            catch { return ""; }
-        }
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -356,7 +334,6 @@ namespace RichTextGen
                     CallStr("status", "界面就绪 · v" + Version);
                     CallStr("net", OnlineColors.IsOnline() ? "联网正常" : "网络断开");
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
-                    CallStr("dsKey", DsKey());
                     CheckUpdate(false);
                     break;
                 case "hotkeys":
@@ -385,8 +362,6 @@ namespace RichTextGen
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
                 case "chat": Chat(Un(arg)); break;
-                case "agent": AgentRun(Un(arg)); break;
-                case "agentStop": agentStop = true; break;
                 case "easterEgg": PlayNetSound(); break;
                 case "uninstall": UninstallApp(); break;
                 case "sendGame": SendToGame(Un(arg)); break;
@@ -830,8 +805,8 @@ namespace RichTextGen
             catch { return ""; }
         }
 
-        // ============================================================ AI 助手（DeepSeek，OpenAI 兼容协议）
-        /// <summary>聊天：把历史对话发给 DeepSeek /chat/completions，返回助手回复</summary>
+        // ============================================================ AI 对话（自定义模型，OpenAI 兼容协议）
+        /// <summary>简易聊天：用户自定义 Endpoint / API Key / 模型，把历史对话发给 /chat/completions</summary>
         private void Chat(string json)
         {
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
@@ -840,10 +815,11 @@ namespace RichTextGen
                 {
                     string endpoint = Field(json, "endpoint").Trim();
                     string key = Field(json, "key").Trim();
+                    string model = Field(json, "model").Trim();
                     string history = Field(json, "history");           // JS 序列化的消息数组（JSON 字符串）
                     if (history.Length == 0)
                     {
-                        // 兜底：若 history 以数组形态传回，直接从原文截取，避免「对话内容为空」
+                        // 兜底：若 history 以数组形态传回，直接从原文截取
                         Match ra = Regex.Match(json ?? "", "\"history\"\\s*:\\s*(\\[[\\s\\S]*?\\])\\s*[,}]");
                         if (ra.Success) history = ra.Groups[1].Value;
                     }
@@ -852,17 +828,18 @@ namespace RichTextGen
                         Call("chatReply", "{\"ok\":false,\"text\":" + Quote("对话内容为空，请先输入问题") + "}");
                         return;
                     }
-                    if (key.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("尚未填写 API Key（可在「AI 助手」页填写）") + "}"); return; }
+                    if (key.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("尚未填写 API Key（请在「AI 对话」页填入你自己的密钥）") + "}"); return; }
                     if (endpoint.Length == 0) endpoint = "https://api.deepseek.com";
                     if (!endpoint.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
                         endpoint = endpoint.TrimEnd('/') + "/chat/completions";
-                    string body = "{\"model\":\"deepseek-flash\",\"messages\":" + history + ",\"max_tokens\":8192}";
+                    if (model.Length == 0) model = "deepseek-chat";
+                    string body = "{\"model\":" + Quote(model) + ",\"messages\":" + history + ",\"max_tokens\":2048}";
                     string resp = HttpPost(endpoint, key, body, 60000);
                     if (resp.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("网络不可达或 API 无响应，请检查网络与密钥") + "}"); return; }
-                    // deepseek-flash 是推理模型：思考过程在 reasoning_content，最终答案在 content
                     string reply = Regex.Match(resp, "\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
                     if (reply.Length == 0)
                     {
+                        // 推理模型可能思考完才给答案；无 content 时优先取接口错误信息
                         bool thinking = resp.IndexOf("reasoning_content", StringComparison.Ordinal) >= 0;
                         if (thinking) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("模型思考超长未返回答案，请缩短文本或拆成多次提问") + "}"); return; }
                         string err = Regex.Match(resp, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
@@ -876,144 +853,6 @@ namespace RichTextGen
                 catch (Exception ex) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("请求出错：" + ex.Message) + "}"); }
             });
         }
-
-        // ============================================================ Agent：AI 分步处理文本
-        private void AgentRun(string json)
-        {
-            agentStop = false;
-            System.Threading.ThreadPool.QueueUserWorkItem(delegate { AgentLoop(json); });
-        }
-
-        private void AgentLoop(string json)
-        {
-            try
-            {
-                string cmd = Field(json, "cmd").Trim();
-                string key = Field(json, "key").Trim();
-                string curText = Field(json, "text");        // 工作区文本（会话内由 C# 维护）
-                string last = Field(json, "out");            // 最近生成结果
-                if (cmd.Length == 0) { Call("agentReply", "{\"msg\":" + Quote("处理指令为空") + ",\"ok\":false,\"done\":true}"); return; }
-                if (key.Length == 0) key = DsKey();
-                if (key.Length == 0) { Call("agentReply", "{\"msg\":" + Quote("没有可用密钥，请在 AI 助手页填写 API Key") + ",\"ok\":false,\"done\":true}"); return; }
-                string endpoint = "https://api.deepseek.com/chat/completions";
-
-                string sys = "你是「彩色文本生成器」内置的文本处理 Agent。用户会给出处理指令和当前工作区文本。你可以请求执行本地工具。" +
-                    "每轮只能输出一个 JSON 对象，二选一：{\"tool\":\"工具名\",\"args\":{...}} 或 {\"tool\":\"done\",\"text\":\"最终结果\"}。" +
-                    "可用工具：get_text（读取当前文本，无参数）；set_text（args.text 整体替换工作区文本）；" +
-                    "replace_text（args.old → args.new 替换）；toggle_bold / toggle_italic / toggle_underline / toggle_strike（args.on 布尔）；" +
-                    "set_size（args.size 字号）；set_color（args.color 颜色值）；copy（args.text 复制到剪贴板）；send（args.text 发送到游戏）。" +
-                    "注意：所有修改类操作执行前都会询问用户，用户可能拒绝。若不需要工具就能完成，直接输出 done。只输出 JSON，不要包含任何其他文字。";
-
-                List<string> msgs = new List<string>();
-                msgs.Add("{\"role\":\"system\",\"content\":" + Quote(sys) + "}");
-                string initial = "当前工作区文本：\n" + curText +
-                    (last.Length > 0 ? "\n\n最近生成的代码：\n" + last : "") + "\n\n用户指令：" + cmd;
-                msgs.Add("{\"role\":\"user\",\"content\":" + Quote(initial) + "}");
-
-                for (int round = 0; round < 6; round++)
-                {
-                    if (agentStop) { Call("agentReply", "{\"msg\":" + Quote("已停止") + ",\"ok\":false,\"done\":true}"); return; }
-                    string body = "{\"model\":\"deepseek-flash\",\"messages\":[" + string.Join(",", msgs.ToArray()) + "],\"max_tokens\":8192}";
-                    string resp = HttpPost(endpoint, key, body, 60000);
-                    if (resp.Length == 0) { Call("agentReply", "{\"msg\":" + Quote("网络不可达或 API 无响应") + ",\"ok\":false,\"done\":true}"); return; }
-                    string reply = Regex.Match(resp, "\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
-                    if (reply.Length == 0) { Call("agentReply", "{\"msg\":" + Quote("模型未返回内容（可能仍在思考），请重试") + ",\"ok\":false,\"done\":true}"); return; }
-                    reply = Unescape(reply);
-                    string tool = Regex.Match(reply, "\"tool\"\\s*:\\s*\"([a-zA-Z_]+)\"").Groups[1].Value;
-                    if (tool.Length == 0 || tool == "done")
-                    {
-                        string done = Field(reply, "text");
-                        if (done.Length == 0) done = reply;
-                        Call("agentReply", "{\"msg\":" + Quote(done) + ",\"ok\":true,\"done\":true}");
-                        CallStr("status", "Agent 完成");
-                        return;
-                    }
-                    string result = ExecuteTool(tool, reply, ref curText);
-                    Call("agentReply", "{\"msg\":" + Quote("执行 " + tool + "：" + result) + ",\"ok\":true}");
-                    msgs.Add("{\"role\":\"assistant\",\"content\":" + Quote(reply) + "}");
-                    msgs.Add("{\"role\":\"user\",\"content\":" + Quote("工具结果：" + result) + "}");
-                }
-                Call("agentReply", "{\"msg\":" + Quote("已达到最大步骤数，自动停止") + ",\"ok\":false,\"done\":true}");
-            }
-            catch (Exception ex) { Call("agentReply", "{\"msg\":" + Quote("Agent 出错：" + ex.Message) + ",\"ok\":false,\"done\":true}"); }
-        }
-
-        /// <summary>执行 Agent 请求的工具；修改/发送类一律先弹确认</summary>
-        private string ExecuteTool(string tool, string args, ref string curText)
-        {
-            switch (tool)
-            {
-                case "get_text":
-                    return "当前工作区文本：" + (curText.Length > 800 ? curText.Substring(0, 800) + "…（共 " + curText.Length + " 字符）" : curText);
-                case "set_text":
-                    {
-                        string nt = Field(args, "text");
-                        if (!Confirm("Agent 想将工作区文本整体替换为：\r\n\r\n" + Trunc(nt, 500) + "\r\n\r\n允许吗？")) return "用户拒绝了该操作";
-                        curText = nt; ApplyText(nt);
-                        return "已替换工作区文本（" + nt.Length + " 字符）";
-                    }
-                case "replace_text":
-                    {
-                        string o = Field(args, "old"), n = Field(args, "new");
-                        if (!Confirm("Agent 想执行替换：\r\n\r\n“" + Trunc(o, 120) + "” → “" + Trunc(n, 120) + "”\r\n\r\n允许吗？")) return "用户拒绝了该操作";
-                        string nt = curText.Replace(o, n);
-                        curText = nt; ApplyText(nt);
-                        return "已执行替换";
-                    }
-                case "toggle_bold": case "toggle_italic": case "toggle_underline": case "toggle_strike":
-                    {
-                        string id = tool.Substring(7);
-                        bool on = Flag(args, "on");
-                        if (!Confirm("Agent 想" + (on ? "开启" : "关闭") + "「" + id + "」样式，允许吗？")) return "用户拒绝了该操作";
-                        RunJs("$('" + id + "').checked=" + (on ? "true" : "false") + ";gen();");
-                        return "已" + (on ? "开启" : "关闭") + id;
-                    }
-                case "set_size":
-                    {
-                        string sz = Field(args, "size");
-                        if (!Confirm("Agent 想把字号设为 " + sz + "，允许吗？")) return "用户拒绝了该操作";
-                        RunJs("$('size').value=" + QuoteJs(sz) + ";gen();");
-                        return "字号已设为 " + sz;
-                    }
-                case "set_color":
-                    {
-                        string c = Field(args, "color");
-                        if (!Confirm("Agent 想把颜色设为 " + c + "，允许吗？")) return "用户拒绝了该操作";
-                        RunJs("$('color').value=" + QuoteJs(c) + ";gen();");
-                        return "颜色已设为 " + c;
-                    }
-                case "copy":
-                    {
-                        string t = Field(args, "text"); if (t.Length == 0) t = curText;
-                        if (!Confirm("Agent 想复制到剪贴板：\r\n\r\n" + Trunc(t, 150) + "\r\n\r\n允许吗？")) return "用户拒绝了该操作";
-                        try { Clipboard.SetText(t); return "已复制（" + t.Length + " 字符）"; }
-                        catch { return "复制失败（剪贴板被占用）"; }
-                    }
-                case "send":
-                    {
-                        string t = Field(args, "text"); if (t.Length == 0) t = curText;
-                        if (!Confirm("Agent 想把以下内容发送到游戏：\r\n\r\n" + Trunc(t, 150) + "\r\n\r\n允许吗？")) return "用户拒绝了该操作";
-                        if (InvokeRequired) Invoke((Action)(() => SendToGame(t)));
-                        else SendToGame(t);
-                        return "已尝试发送到游戏";
-                    }
-                default:
-                    return "未知工具：" + tool + "，请改用可用工具";
-            }
-        }
-
-        private bool Confirm(string msg)
-        {
-            if (InvokeRequired)
-                return (bool)Invoke((Func<bool>)(() => MessageBox.Show(this, msg, "Agent 操作确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes));
-            return MessageBox.Show(this, msg, "Agent 操作确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
-        }
-        private void ApplyText(string t) { RunJs("txt.value=" + QuoteJs(t) + ";gen();"); }
-        private static string QuoteJs(string s)
-        {
-            return "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "").Replace("\n", "\\n") + "\"";
-        }
-        private static string Trunc(string s, int n) { return s.Length > n ? s.Substring(0, n) + "…" : s; }
 
         // ============================================================ 小彩蛋：点联网 5 次 → 网络音效
         /// <summary>随机从网上取一个音效（下载到临时目录 → SoundPlayer 播放 → 删除）</summary>
