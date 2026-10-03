@@ -840,13 +840,23 @@ namespace RichTextGen
                 {
                     string endpoint = Field(json, "endpoint").Trim();
                     string key = Field(json, "key").Trim();
-                    string history = Field(json, "history");           // JS 序列化的 [{role,content},...]
-                    if (history.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("对话内容为空") + "}"); return; }
+                    string history = Field(json, "history");           // JS 序列化的消息数组（JSON 字符串）
+                    if (history.Length == 0)
+                    {
+                        // 兜底：若 history 以数组形态传回，直接从原文截取，避免「对话内容为空」
+                        Match ra = Regex.Match(json ?? "", "\"history\"\\s*:\\s*(\\[[\\s\\S]*?\\])\\s*[,}]");
+                        if (ra.Success) history = ra.Groups[1].Value;
+                    }
+                    if (history.Length == 0 || !history.TrimStart().StartsWith("["))
+                    {
+                        Call("chatReply", "{\"ok\":false,\"text\":" + Quote("对话内容为空，请先输入问题") + "}");
+                        return;
+                    }
                     if (key.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("尚未填写 API Key（可在「AI 助手」页填写）") + "}"); return; }
                     if (endpoint.Length == 0) endpoint = "https://api.deepseek.com";
                     if (!endpoint.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
                         endpoint = endpoint.TrimEnd('/') + "/chat/completions";
-                    string body = "{\"model\":\"deepseek-flash\",\"messages\":" + history + ",\"max_tokens\":4096}";
+                    string body = "{\"model\":\"deepseek-flash\",\"messages\":" + history + ",\"max_tokens\":8192}";
                     string resp = HttpPost(endpoint, key, body, 60000);
                     if (resp.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("网络不可达或 API 无响应，请检查网络与密钥") + "}"); return; }
                     // deepseek-flash 是推理模型：思考过程在 reasoning_content，最终答案在 content
@@ -854,7 +864,7 @@ namespace RichTextGen
                     if (reply.Length == 0)
                     {
                         bool thinking = resp.IndexOf("reasoning_content", StringComparison.Ordinal) >= 0;
-                        if (thinking) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("模型思考中未返回答案，请重试或加大提问") + "}"); return; }
+                        if (thinking) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("模型思考超长未返回答案，请缩短文本或拆成多次提问") + "}"); return; }
                         string err = Regex.Match(resp, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
                         if (err.Length == 0) err = resp.Length > 200 ? resp.Substring(0, 200) + "…" : resp;
                         Call("chatReply", "{\"ok\":false,\"text\":" + Quote("API 返回异常：" + err) + "}");
@@ -903,7 +913,7 @@ namespace RichTextGen
                 for (int round = 0; round < 6; round++)
                 {
                     if (agentStop) { Call("agentReply", "{\"msg\":" + Quote("已停止") + ",\"ok\":false,\"done\":true}"); return; }
-                    string body = "{\"model\":\"deepseek-flash\",\"messages\":[" + string.Join(",", msgs.ToArray()) + "],\"max_tokens\":1024}";
+                    string body = "{\"model\":\"deepseek-flash\",\"messages\":[" + string.Join(",", msgs.ToArray()) + "],\"max_tokens\":8192}";
                     string resp = HttpPost(endpoint, key, body, 60000);
                     if (resp.Length == 0) { Call("agentReply", "{\"msg\":" + Quote("网络不可达或 API 无响应") + ",\"ok\":false,\"done\":true}"); return; }
                     string reply = Regex.Match(resp, "\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;

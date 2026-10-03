@@ -411,7 +411,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.7.0.5";
+const VERSION = "5.7.0.6";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -589,8 +589,10 @@ function chatSend(){
   cMsg('user', q);
   chatHist.push({ role:'user', content:q });
   chatThinkEl = cMsg('bot', '（正在思考…）');
+  const hist = chatHist.slice(-20);                 // 只带最近 20 条，控制上下文长度
   host('chat|' + encodeURIComponent(JSON.stringify({
-    endpoint:$('cEndpoint').value, key:($('cKey').value || builtinKey), history:chatHist
+    endpoint:$('cEndpoint').value, key:($('cKey').value || builtinKey),
+    history: JSON.stringify(hist)                  // 数组转成 JSON 字符串，C# Field 才能取出
   })));
 }
 
