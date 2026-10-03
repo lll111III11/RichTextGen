@@ -353,8 +353,8 @@
 
     <!-- AI 助手（DeepSeek） -->
     <section class="page" id="p-chat">
-      <div class="card"><h3>✦ AI 助手 · 文本难题对话（DeepSeek）</h3>
-        <p class="hint">遇到文本 / 富文本 / 颜色 / 代码等难题，直接提问即可。API 地址与密钥已预装，可自行修改。</p>
+      <div class="card"><h3>✦ AI 助手 · 文本难题对话（DeepSeek · deepseek-flash）</h3>
+        <p class="hint">遇到文本 / 富文本 / 颜色 / 代码等难题，直接提问即可。API 地址与密钥已预装，可自行修改；模型为 deepseek-flash（推理模型）。</p>
         <div class="row"><label class="f">Endpoint</label>
           <input type="text" id="cEndpoint" value="https://api.deepseek.com" style="width:260px">
           <label class="f">API Key</label>
@@ -391,7 +391,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.7.0.3";
+const VERSION = "5.7.0.4";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */

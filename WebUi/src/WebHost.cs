@@ -821,12 +821,15 @@ namespace RichTextGen
                     if (endpoint.Length == 0) endpoint = "https://api.deepseek.com";
                     if (!endpoint.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
                         endpoint = endpoint.TrimEnd('/') + "/chat/completions";
-                    string body = "{\"model\":\"deepseek-chat\",\"messages\":" + history + ",\"max_tokens\":2048}";
+                    string body = "{\"model\":\"deepseek-flash\",\"messages\":" + history + ",\"max_tokens\":4096}";
                     string resp = HttpPost(endpoint, key, body, 60000);
                     if (resp.Length == 0) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("网络不可达或 API 无响应，请检查网络与密钥") + "}"); return; }
+                    // deepseek-flash 是推理模型：思考过程在 reasoning_content，最终答案在 content
                     string reply = Regex.Match(resp, "\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
                     if (reply.Length == 0)
                     {
+                        bool thinking = resp.IndexOf("reasoning_content", StringComparison.Ordinal) >= 0;
+                        if (thinking) { Call("chatReply", "{\"ok\":false,\"text\":" + Quote("模型思考中未返回答案，请重试或加大提问") + "}"); return; }
                         string err = Regex.Match(resp, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
                         if (err.Length == 0) err = resp.Length > 200 ? resp.Substring(0, 200) + "…" : resp;
                         Call("chatReply", "{\"ok\":false,\"text\":" + Quote("API 返回异常：" + err) + "}");
