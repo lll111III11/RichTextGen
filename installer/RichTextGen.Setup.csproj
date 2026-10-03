@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>RichTextGen-Setup</AssemblyName>
+    <RootNamespace>RichTextGenSetup</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- 版本号：与应用（WebUi\RichTextGen.Web.csproj）保持一致 -->
+    <Version>5.6.0.0</Version>
+    <AssemblyVersion>5.6.0.0</AssemblyVersion>
+    <FileVersion>5.6.0.0</FileVersion>
+    <Product>Rich text &amp; multifunctional tool</Product>
+    <AssemblyTitle>彩色文本生成器 安装程序</AssemblyTitle>
+    <Description>彩色文本生成器 安装/卸载程序</Description>
+    <FileDescription>彩色文本生成器 安装程序</FileDescription>
+    <Copyright>2026-2027 All rights reserved - Reverse engineering strictly prohibited 3576220975@qq.com</Copyright>
+    <Company>3576220975@qq.com</Company>
+    <NeutralLanguage>zh-Hans</NeutralLanguage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Setup.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 载荷：资源名 = 文件名（多段名如 Microsoft.Web.WebView2.Core.dll 必须原样保留） -->
+    <EmbeddedResource Include="payload_web\*.*">
+      <LogicalName>%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

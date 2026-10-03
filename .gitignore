@@ -3,4 +3,4 @@ obj/
 *.user
 *.log
 *.pdb
-installer/payload/
+installer/payload*/

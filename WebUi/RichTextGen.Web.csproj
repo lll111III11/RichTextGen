@@ -1,34 +1,38 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>7.3</LangVersion>
-    <AssemblyName>RichTextGen</AssemblyName>
+    <AssemblyName>彩色文本生成器</AssemblyName>
     <RootNamespace>RichTextGen</RootNamespace>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <Version>5.2.0.0</Version>
     <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
 
-    <!-- ===== exe 属性（鼠标右键→属性→详细信息 里显示）===== -->
+    <!-- exe 属性 -->
+    <Version>5.6.0.0</Version>
+    <AssemblyVersion>5.6.0.0</AssemblyVersion>
+    <FileVersion>5.6.0.0</FileVersion>
     <Product>Rich text &amp; multifunctional tool</Product>
     <AssemblyTitle>多功能性的一种工具</AssemblyTitle>
     <Description>多功能性的一种工具</Description>
     <FileDescription>多功能性的一种工具</FileDescription>
-    <ProductVersion>5.2.0.0</ProductVersion>
-    <FileVersion>5.2.0.0</FileVersion>
-    <AssemblyVersion>5.2.0.0</AssemblyVersion>
     <Copyright>2026-2027 All rights reserved - Reverse engineering strictly prohibited 3576220975@qq.com</Copyright>
     <Company>3576220975@qq.com</Company>
-    <Trademark>Rich text &amp; multifunctional tool</Trademark>
     <NeutralLanguage>zh-Hans</NeutralLanguage>
-    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- HTML 宿主 + 全局热键 -->
     <Compile Include="src\*.cs" />
-    <EmbeddedResource Include="assets\appbg.png" LogicalName="appbg.png" />
+    <!-- 界面资源 -->
+    <EmbeddedResource Include="ui\index.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
   </ItemGroup>
 
 </Project>

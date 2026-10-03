@@ -2,13 +2,14 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.4.1.0",
-  "minSupported": "5.0.0.0",
+  "version": "5.6.0.0",
+  "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
+  "type": "fix",
   "downloads": {
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen.exe"
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "修复安装程序释放 WebView2 组件时文件名被截断（Core.dll / WinForms.dll）导致安装后无法启动；安装向导版本号与程序版本保持一致。本次发布用于验证自动更新链路。"
+  "notes": "v5.6.0.0 修复与改进：\n· 修复生成结果不显示（宿主回传的 JSON 非法，界面静默不刷新）\n· 修复复制 / 导出 / 发送内容被 URL 编码污染（中文变乱码）\n· 修复桥接对反斜杠、控制字符的转义错误，含特殊字符的文本不再被破坏\n· 修复无边框窗口标题栏无法拖动（改为宿主代拖，双击最大化）\n· 恢复全局热键：Ctrl+Alt+T 显示/隐藏、O 导入、G 生成、C 复制、S 发送\n· 修复更新提示（版本号 / 更新说明 / 类型角标）读取错误\n· 安装器改用全新 HTML 风格界面：渐变流动 + 黑色斜杠扫描，可选 Win11 毛玻璃\n· 源码收敛为单一 HTML 工程（WebView2），移除旧版 WinForms 代码"
 }

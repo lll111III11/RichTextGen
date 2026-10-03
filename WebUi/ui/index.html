@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>彩色文本生成器</title>
+<style>
+  :root{
+    --bg:#f3f3f3; --card:#ffffff; --text:#1b1b1b; --sub:#5d5d5d; --line:#e5e5e5;
+    --input:#ffffff; --inputLine:#d6d6d6; --accent:#0067c0; --accentText:#ffffff;
+    --hover:#f0f0f0; --shadow:0 1px 3px rgba(0,0,0,.08);
+    --r8:8px; --r4:4px;
+  }
+  body.dark{
+    --bg:#202020; --card:#2b2b2b; --text:#ffffff; --sub:#c5c5c5; --line:#3a3a3a;
+    --input:#262626; --inputLine:#454545; --accent:#4cc2ff; --accentText:#10222e;
+    --hover:#333333; --shadow:0 1px 3px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--text);
+       font:14px/1.6 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif;
+       display:flex;flex-direction:column;overflow:hidden;user-select:none}
+  /* 标题栏 */
+  #titlebar{height:40px;display:flex;align-items:center;padding:0 6px 0 14px;gap:8px;flex:0 0 auto}
+  #titlebar .logo{width:18px;height:18px;border-radius:var(--r4);
+    background:linear-gradient(135deg,#0067c0,#4cc2ff)}
+  #titlebar .t{font-weight:600;font-size:13px}
+  #titlebar .sp{flex:1}
+  .wbtn{width:44px;height:30px;border:0;background:transparent;color:var(--text);
+        border-radius:var(--r4);font-size:13px;cursor:pointer}
+  .wbtn:hover{background:var(--hover)}
+  .wbtn.close:hover{background:#c42b1c;color:#fff}
+  /* 主体 */
+  #main{flex:1;display:flex;min-height:0;padding:0 12px 12px;gap:12px}
+  nav{width:190px;flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding-top:4px}
+  nav button{text-align:left;padding:10px 12px;border:0;background:transparent;color:var(--text);
+             border-radius:var(--r4);cursor:pointer;font-size:13.5px;display:flex;gap:10px;align-items:center}
+  nav button:hover{background:var(--hover)}
+  nav button.on{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+  nav button.on::before{content:"";position:absolute}
+  nav .g{width:16px;text-align:center;opacity:.85}
+  #pages{flex:1;min-width:0;overflow:auto}
+  .page{display:none}
+  .page.on{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);
+        padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 10px;font-size:14px;font-weight:600}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .row:last-child{margin-bottom:0}
+  label.f{color:var(--sub);font-size:12.5px;min-width:64px}
+  input[type=text],input[type=number],select,textarea{
+    background:var(--input);color:var(--text);border:1px solid var(--inputLine);
+    border-radius:var(--r4);padding:7px 9px;font:inherit;font-size:13px;outline:none}
+  input[type=text]:focus,input[type=number]:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  textarea{width:100%;resize:vertical;min-height:120px;user-select:text}
+  button.b{border:1px solid var(--inputLine);background:var(--input);color:var(--text);
+           border-radius:var(--r4);padding:8px 14px;cursor:pointer;font:inherit;font-size:13px}
+  button.b:hover{background:var(--hover)}
+  button.p{background:var(--accent);color:var(--accentText);border-color:transparent;font-weight:600}
+  button.p:hover{filter:brightness(1.06)}
+  .chk{display:inline-flex;align-items:center;gap:6px;margin-right:12px;font-size:13px;cursor:pointer}
+  .sw{width:34px;height:26px;border:1px solid var(--inputLine);border-radius:var(--r4);display:inline-block;vertical-align:middle}
+  #preview{background:#000;color:#f0f0f0;border-radius:var(--r8);padding:14px;min-height:180px;
+           font-size:18px;word-break:break-word;user-select:text;overflow:auto;max-height:340px}
+  #out{width:100%;min-height:90px;font-family:Consolas,monospace;font-size:12.5px;user-select:text}
+  .stat{display:flex;gap:16px;flex-wrap:wrap;color:var(--sub);font-size:12.5px}
+  .stat b{color:var(--text);font-weight:600}
+  #statusbar{flex:0 0 auto;height:30px;display:flex;align-items:center;gap:14px;
+             padding:0 16px;color:var(--sub);font-size:12px;border-top:1px solid var(--line)}
+  #net.ok{color:#0a7d38} #net.bad{color:#c42b1c}
+  .badge{border:1px solid var(--line);border-radius:99px;padding:1px 8px;font-size:11.5px}
+  #updateBar{display:none;background:linear-gradient(90deg,#0067c0,#4cc2ff);color:#fff;
+             border-radius:var(--r8);padding:10px 14px;margin-bottom:12px;display:none;
+             align-items:center;gap:12px}
+  #updateBar.on{display:flex}
+  #drop{position:fixed;inset:0;background:rgba(0,103,192,.12);border:3px dashed var(--accent);
+        display:none;align-items:center;justify-content:center;font-size:20px;color:var(--accent);z-index:9}
+  #drop.on{display:flex}
+  .hint{color:var(--sub);font-size:12px}
+  .upbtn{display:none;background:#0f7b3f;color:#fff;border:0;border-radius:99px;padding:4px 12px;
+         font-size:12px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .upbtn:hover{background:#12924b}
+  #updatedMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;
+               justify-content:center;z-index:20}
+  #updatedMask.on{display:flex}
+  #updatedBox{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);padding:20px 22px;
+              max-width:520px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+</style>
+</head>
+<body>
+
+<div id="titlebar">
+  <div class="logo"></div>
+  <div class="t">彩色文本生成器 <span class="hint" id="ver"></span></div>
+  <div class="sp"></div>
+  <button id="upBtn" class="upbtn" onclick="host('doUpdate')">⬆ 更新到 <span id="upVer"></span></button>
+  <div class="sp"></div>
+  <button class="wbtn" onclick="host('minimize')">—</button>
+  <button class="wbtn" onclick="host('maximize')">▢</button>
+  <button class="wbtn close" onclick="host('close')">✕</button>
+</div>
+<div id="main">
+  <nav>
+    <button class="on" data-p="work"><span class="g">◈</span>工作台</button>
+    <button data-p="gen"><span class="g">✎</span>文本生成</button>
+    <button data-p="send"><span class="g">➤</span>发送中心</button>
+    <button data-p="img"><span class="g">▦</span>图片系统</button>
+    <button data-p="trans"><span class="g">⇄</span>在线翻译</button>
+    <button data-p="set"><span class="g">⚙</span>设置</button>
+  </nav>
+
+  <div id="pages">
+
+    <!-- 工作台 -->
+    <section class="page on" id="p-work">
+      <div id="updateBar">
+        <b id="upTitle">有新版本</b>
+        <span class="hint" id="upNotes" style="color:#eaf4ff"></span>
+        <span style="flex:1"></span>
+        <button class="b" onclick="host('doUpdate')">立即更新</button>
+      </div>
+
+      <div class="card">
+        <h3>文本</h3>
+        <textarea id="txt" placeholder="在这里输入文本，或把 .txt 文件直接拖进窗口…"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="b" onclick="host('importTxt')">导入 TXT</button>
+          <button class="b" onclick="host('exportTxt|'+encodeURIComponent(txt.value))">导出文本</button>
+          <button class="b" onclick="txt.value='';gen()">清空</button>
+          <span class="hint">支持拖入 .txt / .md / .log（自动识别 UTF-8 / BOM / UTF-16 / GBK）</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>颜色系统（选色即用 &lt;color&gt; 括住文本）</h3>
+        <div class="row">
+          <label class="f">颜色模式</label>
+          <select id="mode" onchange="gen()">
+            <option value="hex">#十六进制（#FFFFFF）</option>
+            <option value="rgb">RGB 十进制（255,255,255）</option>
+            <option value="name">英文色名（white）</option>
+          </select>
+          <label class="f">颜色值</label>
+          <input type="text" id="color" value="#FFFFFF" style="width:140px" oninput="gen()">
+          <span class="sw" id="sw"></span>
+          <span class="hint" id="colorInfo"></span>
+        </div>
+        <div class="row">
+          <span class="hint">常用色：</span>
+          <span id="quick"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>样式与渐变</h3>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="bold" onchange="gen()">粗体 &lt;b&gt;</label>
+          <label class="chk"><input type="checkbox" id="italic" onchange="gen()">斜体 &lt;i&gt;</label>
+          <label class="chk"><input type="checkbox" id="underline" onchange="gen()">下划线 &lt;u&gt;</label>
+          <label class="chk"><input type="checkbox" id="strike" onchange="gen()">删除线 &lt;s&gt;</label>
+          <label class="chk"><input type="checkbox" id="sub" onchange="gen()">下标 &lt;sub&gt;</label>
+          <label class="chk"><input type="checkbox" id="sup" onchange="gen()">上标 &lt;sup&gt;</label>
+        </div>
+        <div class="row">
+          <label class="f">字号</label><input type="text" id="size" style="width:80px" placeholder="24 / +4 / 2em" oninput="gen()">
+          <label class="f">高亮底</label><label class="chk"><input type="checkbox" id="mark" onchange="gen()">&lt;mark&gt;</label>
+          <input type="text" id="markColor" value="#FFFF00" style="width:110px" oninput="gen()">
+          <label class="f">透明度</label><input type="text" id="alpha" style="width:60px" placeholder="C8" oninput="gen()">
+        </div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="grad" onchange="gen()">启用渐变</label>
+          <label class="f">起始</label><input type="text" id="gradStart" value="#FF0000" style="width:110px" oninput="gen()">
+          <label class="f">结束</label><input type="text" id="gradEnd" value="#0000FF" style="width:110px" oninput="gen()">
+          <label class="chk"><input type="checkbox" id="axial" onchange="gen()">轴对称（A→B→A）</label>
+          <label class="chk"><input type="checkbox" id="loop" onchange="gen()">循环</label>
+        </div>
+        <div class="row">
+          <label class="f">超链接</label>
+          <input type="text" id="link" placeholder="https://…" style="width:220px" oninput="gen()">
+          <input type="text" id="linkText" placeholder="显示文字（留空=用正文）" style="width:200px" oninput="gen()">
+        </div>
+        <div class="row">
+          <label class="f">装饰</label>
+          <select id="frame" onchange="gen()"><option value="">无</option><option value="bar">▌竖条▌</option><option value="star">★星标★</option></select>
+          <label class="f">括号</label>
+          <select id="bracket" onchange="gen()"><option value="">无</option><option value="（）">（）</option><option value="【】">【】</option><option value="「」">「」</option></select>
+          <label class="f">指令</label>
+          <select id="prefix" onchange="gen()"><option value="">不加</option><option value=".BC">.BC 全服</option><option value=".C">.C 团队</option></select>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>实时预览（黑底 · 与游戏内观感一致）</h3>
+        <div id="preview">（输入文本后此处显示预览）</div>
+      </div>
+
+      <div class="card">
+        <h3>生成的代码</h3>
+        <textarea id="out" readonly></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="b p" onclick="host('copy|'+encodeURIComponent(out.value))">复制代码</button>
+          <button class="b" onclick="host('copy|'+encodeURIComponent(out.value))">发送到游戏（复制后粘贴）</button>
+          <span class="stat"><span>字符数 <b id="len">0</b></span><span>标签数 <b id="tagc">0</b></span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 文本生成（占位页，功能已并入工作台） -->
+    <section class="page" id="p-gen">
+      <div class="card"><h3>文本生成</h3>
+        <p class="hint">生成能力已并入「工作台」：颜色系统三模式、Unity/TMP 全标签、逐字符渐变 / 轴对称渐变、黑底实时预览、一键复制。</p>
+        <button class="b" onclick="go('work')">去工作台</button></div>
+    </section>
+
+    <!-- 发送中心 -->
+    <section class="page" id="p-send">
+      <div class="card"><h3>发送中心</h3>
+        <p class="hint">把生成的代码送进 SCP:SL 控制台：程序会自动检测游戏进程、激活窗口、打开控制台(~)、粘贴并回车。</p>
+        <div class="row"><button class="b p" onclick="host('sendGame|'+encodeURIComponent(out.value))">⚡ 全自动发送到游戏</button>
+        <button class="b" onclick="host('copy|'+encodeURIComponent(out.value));host('status|已复制，切到游戏按 ~ 粘贴')">仅复制（手动粘贴）</button>
+        <button class="b" onclick="host('openUrl|https://github.com/lll111III11/RichTextGen')">打开仓库</button></div>
+        <p class="hint">全自动发送：自动检测 SCP:SL 进程 → 激活窗口 → 打开控制台(~) → 粘贴 → 回车 → 关闭控制台；发送前会弹确认。<b>建议游戏使用窗口化、并以管理员身份运行本程序。</b></p>
+      </div>
+    </section>
+
+    <!-- 图片系统 -->
+    <section class="page" id="p-img">
+      <div class="card"><h3>图片系统 · 色块图（不用 URL）</h3>
+        <p class="hint">把图片拖进窗口 → 自动转成「彩色全块字符 █ + &lt;color&gt;」的方块画，可直接发进游戏。</p>
+        <div class="row"><span class="hint">也可以：</span><button class="b" onclick="host('status|把图片文件直接拖进窗口即可')">怎么用？</button></div>
+        <div class="row"><label class="f">结果</label></div>
+        <textarea id="art" readonly style="min-height:140px;font-family:Consolas,monospace"></textarea>
+        <div class="row" style="margin-top:10px"><span class="hint" id="artInfo"></span></div>
+      </div>
+    </section>
+
+    <!-- 在线翻译 -->
+    <section class="page" id="p-trans">
+      <div class="card"><h3>在线翻译（标签自动保护）</h3>
+        <div class="row"><label class="f">Endpoint</label>
+          <input type="text" id="tEndpoint" placeholder="翻译服务的 API 地址（POST JSON）" style="width:420px"></div>
+        <div class="row"><label class="f">API Key</label>
+          <input type="text" id="tKey" placeholder="可留空（部分服务不需要）" style="width:300px">
+          <label class="f">源语言</label><input type="text" id="tFrom" value="zh" style="width:70px">
+          <label class="f">目标语言</label><input type="text" id="tTo" value="en" style="width:70px"></div>
+        <div class="row"><button class="b p" onclick="doTranslate()">翻译工作台文本</button>
+          <span class="hint">翻译时会先把 &lt;color&gt; 等标签抽成占位符，翻完再回填，保证标签不被破坏</span></div>
+        <div class="row"><label class="f">结果</label></div>
+        <textarea id="transOut" readonly style="min-height:110px"></textarea>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="page" id="p-set">
+      <div class="card"><h3>外观</h3>
+        <div class="row"><label class="f">主题</label>
+          <select id="theme" onchange="setTheme(this.value)">
+            <option value="light">亮色（Win11）</option><option value="dark">深色（Win11）</option></select>
+          <span class="hint">圆角 8px / 控件 4px · Segoe UI Variable · Fluent 配色</span></div>
+      </div>
+      <div class="card"><h3>全局热键</h3>
+        <div class="row"><span class="hint" id="hotkeyInfo">热键状态读取中…</span>
+          <button class="b" onclick="host('registerHotkeys')">重新注册热键</button></div>
+        <div class="row"><span class="hint">Ctrl+Alt+T 显示/隐藏窗口 · Ctrl+Alt+O 导入 TXT · Ctrl+Alt+G 重新生成 · Ctrl+Alt+C 复制结果 · Ctrl+Alt+S 发送到游戏（发送前会弹确认）</span></div>
+      </div>
+      <div class="card"><h3>更新</h3>
+        <div class="row"><button class="b" onclick="host('checkUpdate')">检查更新</button>
+          <span class="hint" id="upInfo"></span></div>
+      </div>
+      <div class="card"><h3>关于</h3>
+        <div class="stat"><span>产品 <b>Rich text &amp; multifunctional tool</b></span>
+          <span>描述 <b>多功能性的一种工具</b></span><span>版本 <b id="ver2"></b></span></div>
+        <p class="hint">2026-2027 All rights reserved · Reverse engineering strictly prohibited · 3576220975@qq.com</p>
+        <button class="b" onclick="host('openUrl|https://github.com/lll111III11/RichTextGen/releases/latest')">查看发布页</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div id="statusbar">
+  <span class="badge" id="net">● 检测中</span>
+  <span id="status">就绪</span>
+  <span style="flex:1"></span>
+  <span class="badge">Unity 6 / TextMeshPro</span>
+</div>
+<div id="updatedMask" onclick="this.classList.remove('on')">
+  <div id="updatedBox" onclick="event.stopPropagation()">
+    <h3 id="updTitle" style="margin:0 0 8px">✅ 更新成功</h3>
+    <div class="row"><span class="badge" id="updBadge">更新</span></div>
+    <div class="hint" id="updNotes" style="white-space:pre-wrap;user-select:text"></div>
+    <div class="row" style="margin-top:14px"><button class="b p" onclick="document.getElementById('updatedMask').classList.remove('on')">知道了</button></div>
+  </div>
+</div>
+<div id="drop">松开鼠标 → 导入文件</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const txt = $('txt'), out = $('out');
+const VERSION = "5.6.0.0";
+$('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
+
+/* ---------- 与 C# 通信 ---------- */
+function host(msg){
+  try{ window.chrome.webview.postMessage(msg); }catch(e){ status("（未在宿主中运行）" + msg); }
+}
+function status(s){ $('status').textContent = s; }
+function go(p){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.p===p));
+  document.querySelectorAll('.page').forEach(s=>s.classList.toggle('on', s.id==='p-'+p));
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.p));
+
+/* ---------- 无边框窗口：标题栏拖动 / 双击最大化 ---------- */
+(function(){
+  const tb = $('titlebar');
+  tb.addEventListener('mousedown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    host('drag');           // WebView2 覆盖在窗体上，必须由宿主代为拖动
+  });
+  tb.addEventListener('dblclick', e => {
+    if (e.target.closest('button')) return;
+    host('maximize');
+  });
+})();
+
+/* ---------- C# 回调 ---------- */
+window.ui = {
+  version: v => { if(!v) return; $('ver').textContent = "v" + v; $('ver2').textContent = v; },
+  hotkeys: s => { const e = $('hotkeyInfo'); if(e) e.textContent = s || ""; },
+  updated: o => {
+    const badge = (o.type === "security") ? "安全更新" : (o.type === "fix" ? "问题修复" : "功能更新");
+    const color = (o.type === "security") ? "#c42b1c" : (o.type === "fix" ? "#8a6d00" : "#0f7b3f");
+    document.getElementById("updTitle").textContent = "✅ 更新成功  " + (o.from ? o.from + " → " : "") + o.version;
+    document.getElementById("updBadge").textContent = badge;
+    document.getElementById("updBadge").style.background = color;
+    document.getElementById("updNotes").textContent = o.notes || "（本次更新未提供说明）";
+    document.getElementById("updatedMask").classList.add("on");
+  },
+  status: status,
+  toast: status,
+  net: s => { const n=$('net'); n.textContent = "● "+s; n.className = "badge " + (s.indexOf("正常")>=0?"ok":"bad"); },
+  result: o => {
+    out.value = o.code || "";
+    $('preview').innerHTML = o.preview || '（空）';
+    $('len').textContent = (o.code||"").length;
+    $('tagc').textContent = ((o.code||"").match(/<[a-zA-Z]/g)||[]).length;
+  },
+  textIn: o => { txt.value = o.text || ""; status("已导入 " + (o.name||"")); gen(); },
+  update: o => {
+    const b = $('upBtn');
+    $('upVer').textContent = o.version;
+    b.style.display = "inline-block";
+    b.title = (o.mandatory ? "强制更新 · " : "") + (o.notes || "");
+    $('upInfo').textContent = "可更新到 " + o.version;
+    $('upTitle').textContent = "有新版本 " + o.version + (o.mandatory ? "（强制更新）" : "");
+    $('upNotes').textContent = o.notes || "";
+    $('updateBar').classList.add('on');
+  },
+  blockArt: o => { $('art').value = o.code || ""; $('artInfo').textContent = o.info || ""; },
+  translated: o => { $('transOut').value = o.text || ""; }
+};
+
+/* ---------- 生成 ---------- */
+function gen(){
+  const opts = {
+    text: txt.value,
+    mode: $('mode').value, color: $('color').value,
+    size: $('size').value, frame: $('frame').value, bracket: $('bracket').value, prefix: $('prefix').value,
+    bold: $('bold').checked, italic: $('italic').checked, underline: $('underline').checked, strike: $('strike').checked,
+    sub: $('sub').checked, sup: $('sup').checked, mark: $('mark').checked, markColor: $('markColor').value,
+    alpha: $('alpha').value, grad: $('grad').checked, axial: $('axial').checked, loop: $('loop').checked,
+    gradStart: $('gradStart').value, gradEnd: $('gradEnd').value,
+    link: $('link').value, linkText: $('linkText').value
+  };
+  host('generate|' + JSON.stringify(opts));   // 宿主只按第一个 '|' 切分，正文里的 '|' 无需删除
+  updateColorInfo();
+}
+function updateColorInfo(){
+  const c = $('color').value.trim();
+  $('sw').style.background = c;
+  $('colorInfo').textContent = "将生成 <color=" + c + ">";
+}
+txt.addEventListener('input', gen);
+
+/* 常用色 */
+const quick = ['#FFFFFF','#FF0000','#FF8800','#FFFF00','#00FF00','#00FFFF','#0066FF','#FF00FF','#000000','#808080'];
+quick.forEach(c=>{
+  const b=document.createElement('button'); b.className='b'; b.style.cssText='padding:4px 8px;margin:2px';
+  b.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:'+c+';vertical-align:-2px"></span>';
+  b.onclick=()=>{ $('color').value=c; gen(); };
+  $('quick').appendChild(b);
+});
+
+/* ---------- 主题 ---------- */
+function setTheme(v){ document.body.classList.toggle('dark', v==='dark'); }
+
+/* ---------- 翻译 ---------- */
+function doTranslate(){
+  host('translate|' + JSON.stringify({
+    endpoint:$('tEndpoint').value, key:$('tKey').value, from:$('tFrom').value, to:$('tTo').value, text: txt.value
+  }));
+}
+
+/* ---------- 拖放导入 / 色块图 ---------- */
+const drop = $('drop');
+window.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('on'); });
+window.addEventListener('dragleave', e=>{ drop.classList.remove('on'); });
+window.addEventListener('drop', e=>{
+  e.preventDefault(); drop.classList.remove('on');
+  const f = e.dataTransfer.files[0]; if(!f) return;
+  const p = f.path || f.name;                       // WebView2 在拖放时会带上真实路径
+  const img = /\.(png|jpg|jpeg|bmp|gif|webp)$/i.test(f.name);
+  if(img){ go('img'); host('blockArt|' + encodeURIComponent(p)); }
+  else { host('dropFile|' + encodeURIComponent(p)); }
+});
+
+/* ---------- 启动 ---------- */
+setTheme('light');
+host('ready');
+</script>
+<script>
+/* ================= 追加：选区套富文本 + TXT 多段处理 ================= */
+
+/* ---------- 1) 选区套富文本（基于 textarea 的 Selection） ---------- */
+(function(){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h3>选区套富文本（在文本里选中一段 → 点下面按钮只给该段加标签）</h3>' +
+    '<div class="row" id="selBtns"></div>' +
+    '<div class="row"><span class="hint" id="selInfo">未选中内容（先在「文本」里用鼠标选中一段文字）</span></div>';
+  const pages = document.getElementById('p-work');
+  const anchor = document.getElementById('preview').closest('.card');
+  pages.insertBefore(card, anchor);
+
+  const wrap = (before, after) => {
+    const t = document.getElementById('txt');
+    const s = t.selectionStart, e = t.selectionEnd;
+    if (s === e) { ui.status('请先在文本里选中一段文字'); return; }
+    const sel = t.value.slice(s, e);
+    t.value = t.value.slice(0, s) + before + sel + after + t.value.slice(e);
+    t.selectionStart = s; t.selectionEnd = e + before.length + after.length;
+    t.focus(); gen();
+    ui.status('已给选中内容套上标签');
+  };
+  const unwrap = () => {
+    const t = document.getElementById('txt');
+    const s = t.selectionStart, e = t.selectionEnd;
+    if (s === e) { ui.status('请先选中一段文字'); return; }
+    const sel = t.value.slice(s, e);
+    const cleaned = sel.replace(/<\/?(color|b|i|u|s|sub|sup|mark|size|alpha)(=[^>]*)?>/gi, '');
+    t.value = t.value.slice(0, s) + cleaned + t.value.slice(e);
+    t.selectionStart = s; t.selectionEnd = s + cleaned.length;
+    t.focus(); gen();
+    ui.status('已清除选中内容里的标签');
+  };
+
+  const c = () => document.getElementById('color').value || '#FFFFFF';
+  const items = [
+    ['套颜色',   () => wrap('<color=' + c() + '>', '</color>')],
+    ['粗体',     () => wrap('<b>', '</b>')],
+    ['斜体',     () => wrap('<i>', '</i>')],
+    ['下划线',   () => wrap('<u>', '</u>')],
+    ['删除线',   () => wrap('<s>', '</s>')],
+    ['下标',     () => wrap('<sub>', '</sub>')],
+    ['上标',     () => wrap('<sup>', '</sup>')],
+    ['高亮底',   () => wrap('<mark=#FFFF0080>', '</mark>')],
+    ['清除标签', unwrap]
+  ];
+  const box = card.querySelector('#selBtns');
+  items.forEach(([label, fn]) => {
+    const b = document.createElement('button');
+    b.className = 'b'; b.textContent = label; b.onclick = fn;
+    box.appendChild(b);
+  });
+
+  const t = document.getElementById('txt');
+  const upd = () => {
+    const n = t.selectionEnd - t.selectionStart;
+    card.querySelector('#selInfo').textContent = n > 0
+      ? ('已选中 ' + n + ' 个字符：' + t.value.slice(t.selectionStart, t.selectionEnd).slice(0, 40))
+      : '未选中内容（先在「文本」里用鼠标选中一段文字）';
+  };
+  t.addEventListener('select', upd);
+  t.addEventListener('keyup', upd);
+  t.addEventListener('mouseup', upd);
+  t.addEventListener('input', upd);
+})();
+
+/* ---------- 2) TXT 多段处理视图 ---------- */
+(function(){
+  /* 导航按钮 */
+  const nav = document.querySelector('nav');
+  const btn = document.createElement('button');
+  btn.dataset.p = 'txtproc';
+  btn.innerHTML = '<span class="g">≣</span>TXT 多段处理';
+  btn.onclick = () => go('txtproc');
+  nav.insertBefore(btn, nav.querySelector('button[data-p="set"]'));
+
+  /* 页面 */
+  const page = document.createElement('section');
+  page.className = 'page'; page.id = 'p-txtproc';
+  page.innerHTML =
+    '<div class="card"><h3>TXT 多段处理（按行勾选 → 送进处理区 → 改完回写）</h3>' +
+      '<div class="row">' +
+        '<button class="b" onclick="tpLoad()">从工作台载入文本</button>' +
+        '<button class="b" onclick="host(\'importTxt\')">导入 TXT 文件</button>' +
+        '<button class="b" onclick="tpAll(true)">全选</button>' +
+        '<button class="b" onclick="tpAll(false)">全不选</button>' +
+        '<span class="hint" id="tpInfo">尚未载入</span>' +
+      '</div>' +
+      '<div class="row"><span class="hint">勾选要处理的行 → 点「送入选区」→ 在下面处理区修改 → 点「应用回写」替换原行</span></div>' +
+      '<div id="tpList" style="max-height:280px;overflow:auto;border:1px solid var(--inputLine);' +
+        'border-radius:var(--r4);padding:8px;background:var(--input)"></div>' +
+    '</div>' +
+    '<div class="card"><h3>处理区</h3>' +
+      '<textarea id="tpEdit" placeholder="选中行会被送到这里，改完点「应用回写」"></textarea>' +
+      '<div class="row" style="margin-top:10px">' +
+        '<button class="b p" onclick="tpApply()">应用回写</button>' +
+        '<button class="b" onclick="tpCancel()">取消修改</button>' +
+        '<button class="b" onclick="tpExport()">导出处理后的 TXT</button>' +
+        '<button class="b" onclick="tpToWork()">回填到工作台</button>' +
+      '</div>' +
+    '</div>';
+  document.getElementById('pages').appendChild(page);
+
+  window.tpLines = [];
+  window.tpPicked = [];
+
+  window.tpLoad = function(){
+    tpLines = document.getElementById('txt').value.replace(/\r\n/g,'\n').split('\n');
+    tpRender();
+  };
+  window.tpAll = function(v){
+    document.querySelectorAll('#tpList input[type=checkbox]').forEach(cb => cb.checked = v);
+    tpSync();
+  };
+  window.tpRender = function(){
+    const box = document.getElementById('tpList');
+    box.innerHTML = '';
+    tpLines.forEach((line, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:2px 0';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.i = i;
+      cb.onchange = tpSync;
+      const no = document.createElement('span'); no.className='hint'; no.style.minWidth='34px';
+      no.textContent = '#' + (i + 1);
+      const tx = document.createElement('span');
+      tx.textContent = line.length > 90 ? line.slice(0, 90) + '…' : (line || '（空行）');
+      tx.style.cssText = 'user-select:text;font-family:Consolas,monospace;font-size:12.5px';
+      row.append(cb, no, tx);
+      box.appendChild(row);
+    });
+    document.getElementById('tpInfo').textContent = '共 ' + tpLines.length + ' 行';
+  };
+  window.tpSync = function(){
+    tpPicked = [];
+    document.querySelectorAll('#tpList input[type=checkbox]').forEach(cb => {
+      if (cb.checked) tpPicked.push(parseInt(cb.dataset.i, 10));
+    });
+    const n = tpPicked.length;
+    document.getElementById('tpInfo').textContent = '共 ' + tpLines.length + ' 行 · 已选 ' + n + ' 行';
+    if (n > 0) document.getElementById('tpEdit').value = tpPicked.map(i => tpLines[i]).join('\n');
+  };
+  window.tpApply = function(){
+    if (tpPicked.length === 0) { ui.status('先勾选要处理的行'); return; }
+    const edited = document.getElementById('tpEdit').value.replace(/\r\n/g,'\n').split('\n');
+    if (edited.length !== tpPicked.length) {
+      if (!confirm('处理区的行数（' + edited.length + '）与勾选行数（' + tpPicked.length + '）不一致，按行序替换？')) return;
+    }
+    tpPicked.forEach((idx, k) => { if (k < edited.length) tpLines[idx] = edited[k]; });
+    tpRender();
+    ui.status('已回写 ' + Math.min(edited.length, tpPicked.length) + ' 行');
+  };
+  window.tpCancel = function(){ document.getElementById('tpEdit').value = ''; ui.status('已取消修改'); };
+  window.tpExport = function(){
+    if (tpLines.length === 0) { ui.status('没有内容可导出'); return; }
+    host('exportTxt|' + encodeURIComponent(tpLines.join('\r\n')));
+  };
+  window.tpToWork = function(){
+    document.getElementById('txt').value = tpLines.join('\n');
+    gen(); go('work'); ui.status('已回填到工作台');
+  };
+})();
+</script></body>
+</html>
