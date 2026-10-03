@@ -101,6 +101,31 @@
               font-size:16px;word-break:break-all;user-select:text;overflow:auto;box-sizing:border-box}
   #tpEditPreview{background:#000;color:#f0f0f0;border-radius:var(--r4);padding:10px 12px;font-size:16px;
                  word-break:break-all;user-select:text;min-height:46px;margin-top:10px}
+  /* ---- 拾色器 / 颜色库 ---- */
+  /* 遮罩可滚动 + 卡片 margin:auto：窗口高度不足（默认 800，最小 600）时保证「确定/取消」始终可达 */
+  #pickMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;
+            justify-content:center;z-index:30;overflow:auto;padding:14px;box-sizing:border-box}
+  #pickMask.on{display:flex}
+  #pickBox{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);padding:16px 20px;
+           box-shadow:0 10px 34px rgba(0,0,0,.4);cursor:default;margin:auto;max-width:100%;box-sizing:border-box}
+  #pickBox h3{margin:0 0 12px;font-size:14px;font-weight:600}
+  #pickBox .row{margin-bottom:8px}
+  #svWrap{position:relative;width:256px;height:256px;cursor:crosshair;border:1px solid var(--line);
+          border-radius:4px;overflow:hidden;flex:0 0 auto}
+  #svCanvas{display:block;width:256px;height:256px}
+  #hueWrap{position:relative;width:26px;height:256px;cursor:pointer;border:1px solid var(--line);
+           border-radius:4px;overflow:hidden;flex:0 0 auto}
+  #hueCanvas{display:block;width:26px;height:256px}
+  #pickDot{position:absolute;width:12px;height:12px;border-radius:50%;border:2px solid #fff;
+           box-shadow:0 0 0 1px #000;pointer-events:none;transform:translate(-50%,-50%)}
+  #hueDot{position:absolute;left:-3px;width:30px;height:4px;border-radius:2px;border:1px solid #fff;
+          box-shadow:0 0 0 1px #000;pointer-events:none;transform:translateY(-50%)}
+  .pickSw{display:inline-block;width:56px;height:30px;border:1px solid var(--line);border-radius:4px;vertical-align:middle}
+  .numMini{width:58px}
+  #pickLib{max-height:92px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;
+           background:var(--input);display:flex;flex-wrap:wrap;gap:4px;width:520px;box-sizing:border-box}
+  .libSw{width:22px;height:22px;border-radius:4px;border:1px solid var(--line);cursor:pointer}
+  .libSw:hover{outline:2px solid var(--accent);outline-offset:1px}
 </style>
 </head>
 <body>
@@ -158,11 +183,12 @@
           </select>
           <label class="f">颜色值</label>
           <input type="text" id="color" value="#FFFFFF" style="width:140px" oninput="gen()">
-          <span class="sw" id="sw"></span>
+          <span class="sw" id="sw" title="点击打开拾色器" style="cursor:pointer" onclick="openPicker()"></span>
+          <button class="b" onclick="openPicker()">🎨 拾色器 / 颜色库…</button>
           <span class="hint" id="colorInfo"></span>
         </div>
         <div class="row">
-          <span class="hint">常用色：</span>
+          <span class="hint">常用色（点击即用；更多颜色请点「拾色器 / 颜色库…」）：</span>
           <span id="quick"></span>
         </div>
       </div>
@@ -314,7 +340,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.7.0.0";
+const VERSION = "5.7.0.1";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -780,6 +806,325 @@ host('ready');
   window.tpToWork = function(){
     document.getElementById('txt').value = tpLines.join('\n');
     gen(); go('work'); ui.status('已回填到工作台');
+  };
+})();
+</script>
+<script>
+/* ================= 追加：拾色器 / 颜色库 =================
+   5.7.0.1 紧急补丁：HTML 界面上此前只有文本框 + 10 个常用色，
+   旧版（WinForms）里的 SV 方块 / 色相条 / RGB·HSV 输入 / 颜色库整套丢失，这里补齐。
+   内置色表与 ColorUtil.cs 同源（140 个 CSS 色名）；「在线取色」走宿主 OnlineColors。 */
+(function(){
+  /* ---- 内置 CSS 色名表（与 ColorUtil.cs 同源，140 色） ---- */
+  const CSS_TABLE =
+    "indianred=CD5C5C;lightcoral=F08080;salmon=FA8072;darksalmon=E9967A;lightsalmon=FFA07A;" +
+    "crimson=DC143C;red=FF0000;firebrick=B22222;darkred=8B0000;coral=FF7F50;tomato=FF6347;" +
+    "orangered=FF4500;gold=FFD700;orange=FFA500;darkorange=FF8C00;lightyellow=FFFFE0;" +
+    "lemonchiffon=FFFACD;lightgoldenrodyellow=FAFAD2;papayawhip=FFEFD5;moccasin=FFE4B5;" +
+    "peachpuff=FFDAB9;palegoldenrod=EEE8AA;khaki=F0E68C;darkkhaki=BDB76B;yellow=FFFF00;" +
+    "cornsilk=FFF8DC;blanchedalmond=FFEBCD;bisque=FFE4C4;navajowhite=FFDEAD;wheat=F5DEB3;" +
+    "burlywood=DEB887;tan=D2B48C;rosybrown=BC8F8F;sandybrown=F4A460;goldenrod=DAA520;" +
+    "darkgoldenrod=B8860B;peru=CD853F;chocolate=D2691E;saddlebrown=8B4513;sienna=A0522D;" +
+    "brown=A52A2A;maroon=800000;pink=FFC0CB;lightpink=FFB6C1;hotpink=FF69B4;deeppink=FF1493;" +
+    "palevioletred=DB7093;mediumvioletred=C71585;lavenderblush=FFF0F5;mistyrose=FFE4E1;" +
+    "lavender=E6E6FA;thistle=D8BFD8;plum=DDA0DD;violet=EE82EE;orchid=DA70D6;fuchsia=FF00FF;" +
+    "magenta=FF00FF;mediumorchid=BA55D3;mediumpurple=9370DB;blueviolet=8A2BE2;darkviolet=9400D3;" +
+    "darkorchid=9932CC;darkmagenta=8B008B;purple=800080;indigo=4B0082;lawngreen=7CFC00;" +
+    "chartreuse=7FFF00;limegreen=32CD32;lime=00FF00;forestgreen=228B22;green=008000;" +
+    "darkgreen=006400;greenyellow=ADFF2F;yellowgreen=9ACD32;springgreen=00FF7F;" +
+    "mediumspringgreen=00FA9A;lightgreen=90EE90;palegreen=98FB98;darkseagreen=8FBC8F;" +
+    "mediumseagreen=3CB371;seagreen=2E8B57;olive=808000;darkolivegreen=556B2F;olivedrab=6B8E23;" +
+    "lightcyan=E0FFFF;cyan=00FFFF;aqua=00FFFF;aquamarine=7FFFD4;mediumaquamarine=66CDAA;" +
+    "paleturquoise=AFEEEE;turquoise=40E0D0;mediumturquoise=48D1CC;darkturquoise=00CED1;" +
+    "lightseagreen=20B2AA;cadetblue=5F9EA0;darkcyan=008B8B;teal=008080;powderblue=B0E0E6;" +
+    "lightblue=ADD8E6;lightskyblue=87CEFA;skyblue=87CEEB;deepskyblue=00BFFF;" +
+    "lightsteelblue=B0C4DE;dodgerblue=1E90FF;cornflowerblue=6495ED;steelblue=4682B4;" +
+    "royalblue=4169E1;blue=0000FF;mediumblue=0000CD;darkblue=00008B;navy=000080;" +
+    "midnightblue=191970;mediumslateblue=7B68EE;slateblue=6A5ACD;darkslateblue=483D8B;" +
+    "gainsboro=DCDCDC;lightgray=D3D3D3;silver=C0C0C0;darkgray=A9A9A9;gray=808080;" +
+    "dimgray=696969;lightslategray=778899;slategray=708090;darkslategray=2F4F4F;black=000000;" +
+    "white=FFFFFF;snow=FFFAFA;honeydew=F0FFF0;mintcream=F5FFFA;azure=F0FFFF;aliceblue=F0F8FF;" +
+    "ghostwhite=F8F8FF;whitesmoke=F5F5F5;seashell=FFF5EE;beige=F5F5DC;oldlace=FDF5E6;" +
+    "floralwhite=FFFAF0;ivory=FFFFF0;antiquewhite=FAEBD7;linen=FAF0E6;";
+
+  const LIB = [];            // [{name, hex}]
+  const LIB_BY_HEX = {};     // '#RRGGBB' -> 第一个精确匹配的色名
+  CSS_TABLE.split(';').forEach(function(part){
+    if (!part) return;
+    const eq = part.indexOf('=');
+    if (eq <= 0) return;
+    const hex = '#' + part.slice(eq + 1).toUpperCase();
+    if (!/^#[0-9A-F]{6}$/.test(hex)) return;
+    const name = part.slice(0, eq);
+    LIB.push({ name: name, hex: hex });
+    if (!LIB_BY_HEX[hex]) LIB_BY_HEX[hex] = name;
+  });
+
+  /* ---- HSV <-> RGB ---- */
+  function hsv2rgb(h, s, v){
+    h = ((h % 360) + 360) % 360;
+    const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c;
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+  function rgb2hsv(r, g, b){
+    r /= 255; g /= 255; b /= 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    let h = 0;
+    if (d > 0){
+      if (mx === r) h = 60 * (((g - b) / d) % 6);
+      else if (mx === g) h = 60 * ((b - r) / d + 2);
+      else h = 60 * ((r - g) / d + 4);
+    }
+    if (h < 0) h += 360;
+    return [h, mx <= 0 ? 0 : d / mx, mx];
+  }
+  function hexOf(r, g, b){
+    return '#' + [r, g, b].map(function(v){
+      v = Math.max(0, Math.min(255, Math.round(v)));
+      return v.toString(16).toUpperCase().padStart(2, '0');
+    }).join('');
+  }
+  function clamp01(x){ return x < 0 ? 0 : (x > 1 ? 1 : x); }
+  function curRgb(){ return hsv2rgb(P.h, P.s, P.v); }
+  function curHex(){ const c = curRgb(); return hexOf(c[0], c[1], c[2]); }
+
+  /* ---- 状态 ---- */
+  const P = { h: 0, s: 0, v: 1, orig: '#FFFFFF' };
+  let dragging = null;
+
+  /* ---- 弹窗 DOM ---- */
+  const mask = document.createElement('div');
+  mask.id = 'pickMask';
+  mask.innerHTML =
+    '<div id="pickBox">' +
+      '<h3>拾色器 / 颜色库</h3>' +
+      '<div class="row" style="align-items:flex-start">' +
+        '<div id="svWrap"><canvas id="svCanvas" width="256" height="256"></canvas><div id="pickDot"></div></div>' +
+        '<div id="hueWrap"><canvas id="hueCanvas" width="26" height="256"></canvas><div id="hueDot"></div></div>' +
+        '<div style="min-width:230px;margin-left:14px">' +
+          '<div class="row"><span class="pickSw" id="pickNew"></span>' +
+            '<span class="pickSw" id="pickOld"></span><span class="hint">当前 / 原色</span></div>' +
+          '<div class="row"><label class="f">R</label><input type="number" id="pR" class="numMini" min="0" max="255">' +
+            '<label class="f">G</label><input type="number" id="pG" class="numMini" min="0" max="255">' +
+            '<label class="f">B</label><input type="number" id="pB" class="numMini" min="0" max="255"></div>' +
+          '<div class="row"><label class="f">H</label><input type="number" id="pH" class="numMini" min="0" max="360">' +
+            '<label class="f">S</label><input type="number" id="pS" class="numMini" min="0" max="100">' +
+            '<label class="f">V</label><input type="number" id="pV" class="numMini" min="0" max="100"></div>' +
+          '<div class="row"><label class="f">HEX</label><input type="text" id="pHex" style="width:110px"></div>' +
+          '<div class="row"><span class="hint" id="pName"></span></div>' +
+          '<div class="row"><span class="hint" id="pOut"></span></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="row" style="margin-top:12px">' +
+        '<span class="hint">颜色库：</span>' +
+        '<button class="b" id="pOnline">在线取色</button>' +
+        '<span class="hint" id="pLibInfo"></span>' +
+      '</div>' +
+      '<div id="pickLib"></div>' +
+      '<div class="row" style="margin-top:12px;justify-content:flex-end">' +
+        '<button class="b p" id="pOk">确定应用</button>' +
+        '<button class="b" id="pCancel">取消</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(mask);
+
+  const svC = document.getElementById('svCanvas'), svCtx = svC.getContext('2d');
+  const hueC = document.getElementById('hueCanvas'), hueCtx = hueC.getContext('2d');
+  const dot = document.getElementById('pickDot');
+  const hdot = document.getElementById('hueDot');
+  const elR = document.getElementById('pR'), elG = document.getElementById('pG'), elB = document.getElementById('pB');
+  const elH = document.getElementById('pH'), elS = document.getElementById('pS'), elV = document.getElementById('pV');
+  const elHex = document.getElementById('pHex');
+  const swNew = document.getElementById('pickNew'), swOld = document.getElementById('pickOld');
+  const out = document.getElementById('pOut'), nameOut = document.getElementById('pName');
+  const libBox = document.getElementById('pickLib'), libInfo = document.getElementById('pLibInfo');
+  let suppress = false;
+
+  /* ---- 绘制 ---- */
+  function drawSV(){
+    const w = svC.width, h = svC.height;
+    const img = svCtx.createImageData(w, h), d = img.data;
+    for (let y = 0; y < h; y++){
+      const v = 1 - y / (h - 1);
+      for (let x = 0; x < w; x++){
+        const rgb = hsv2rgb(P.h, x / (w - 1), v);
+        const i = (y * w + x) * 4;
+        d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = 255;
+      }
+    }
+    svCtx.putImageData(img, 0, 0);
+  }
+  function drawHue(){
+    const w = hueC.width, h = hueC.height;
+    const img = hueCtx.createImageData(w, h), d = img.data;
+    for (let y = 0; y < h; y++){
+      const rgb = hsv2rgb(y / (h - 1) * 360, 1, 1);
+      for (let x = 0; x < w; x++){
+        const i = (y * w + x) * 4;
+        d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = 255;
+      }
+    }
+    hueCtx.putImageData(img, 0, 0);
+  }
+  function placeDots(){
+    dot.style.left = (P.s * 100) + '%';
+    dot.style.top = ((1 - P.v) * 100) + '%';
+    hdot.style.top = (P.h / 360 * 100) + '%';
+  }
+
+  /* ---- 同步读数 ---- */
+  function sync(){
+    const rgb = curRgb(), hex = curHex();
+    swNew.style.background = hex;
+    if (!suppress){
+      elR.value = rgb[0]; elG.value = rgb[1]; elB.value = rgb[2];
+      elH.value = Math.round(P.h);
+      elS.value = Math.round(P.s * 100);
+      elV.value = Math.round(P.v * 100);
+      elHex.value = hex;
+    }
+    const exact = LIB_BY_HEX[hex];
+    nameOut.textContent = exact ? ('色名 ' + exact) : '无精确色名（将取最近色名）';
+    out.textContent = '将生成 <color=' + hex + '>';
+    placeDots();
+  }
+
+  function setHsv(h, s, v, redraw){
+    P.h = ((h % 360) + 360) % 360;
+    P.s = clamp01(s);
+    P.v = clamp01(v);
+    if (redraw !== false) drawSV();
+    sync();
+  }
+  function setHex(hex){
+    const p = parseColor(hex);
+    if (!p || p.charAt(0) !== '#') return false;
+    const r = parseInt(p.substr(1, 2), 16), g = parseInt(p.substr(3, 2), 16), b = parseInt(p.substr(5, 2), 16);
+    const hsv = rgb2hsv(r, g, b);
+    // 灰阶/黑白时色相无意义，保留当前色相，避免色相条跳到 0
+    const keepH = (hsv[1] === 0);
+    setHsv(keepH ? P.h : hsv[0], hsv[1], hsv[2], true);
+    return true;
+  }
+
+  /* ---- 拖动 ---- */
+  function bindDrag(wrap, handler){
+    wrap.addEventListener('mousedown', function(ev){
+      dragging = handler;
+      handler(ev);
+      ev.preventDefault();
+    });
+  }
+  function ratio(ev, el){
+    const r = el.getBoundingClientRect();
+    return [clamp01((ev.clientX - r.left) / r.width), clamp01((ev.clientY - r.top) / r.height)];
+  }
+  bindDrag(document.getElementById('svWrap'), function(ev){
+    const p = ratio(ev, document.getElementById('svWrap'));
+    setHsv(P.h, p[0], 1 - p[1], false);
+    drawSV();
+  });
+  bindDrag(document.getElementById('hueWrap'), function(ev){
+    const p = ratio(ev, document.getElementById('hueWrap'));
+    setHsv(p[1] * 360, P.s, P.v, true);
+  });
+  document.addEventListener('mousemove', function(ev){
+    if (!dragging) return;
+    dragging(ev);
+  });
+  document.addEventListener('mouseup', function(){ dragging = null; });
+
+  /* ---- 数值输入 ---- */
+  function fromRgbInputs(){
+    if (suppress) return;
+    const r = parseInt(elR.value, 10) || 0, g = parseInt(elG.value, 10) || 0, b = parseInt(elB.value, 10) || 0;
+    const hsv = rgb2hsv(Math.min(255, Math.max(0, r)), Math.min(255, Math.max(0, g)), Math.min(255, Math.max(0, b)));
+    setHsv(hsv[1] === 0 ? P.h : hsv[0], hsv[1], hsv[2], true);
+  }
+  function fromHsvInputs(){
+    if (suppress) return;
+    setHsv(parseFloat(elH.value) || 0, (parseFloat(elS.value) || 0) / 100, (parseFloat(elV.value) || 0) / 100, true);
+  }
+  [elR, elG, elB].forEach(function(el){ el.addEventListener('input', fromRgbInputs); });
+  [elH, elS, elV].forEach(function(el){ el.addEventListener('input', fromHsvInputs); });
+  elHex.addEventListener('input', function(){
+    if (suppress) return;
+    const p = parseColor(elHex.value);
+    if (p && p.charAt(0) === '#') setHex(p);
+  });
+
+  /* ---- 颜色库 ---- */
+  function addLibSwatches(list, source){
+    list.forEach(function(it){
+      const b = document.createElement('div');
+      b.className = 'libSw';
+      b.style.background = it.hex;
+      b.title = it.name + '  ' + it.hex;
+      b.onclick = function(){ setHex(it.hex); };
+      libBox.appendChild(b);
+    });
+    libInfo.textContent = source + '（' + list.length + ' 色）';
+  }
+  addLibSwatches(LIB, '内置 140 色（点击色块即选中）');
+
+  window.pickFetchOnline = function(){
+    libInfo.textContent = '正在获取在线颜色…';
+    host('colorLib');
+  };
+
+  /* ---- 打开 / 关闭 / 应用 ---- */
+  window.openPicker = function(){
+    const p = parseColor(document.getElementById('color').value) || '#FFFFFF';
+    if (p.charAt(0) === '#'){ P.orig = p; setHex(p); }
+    else {
+      // 输入的是色名：交给浏览器解析成 hex
+      const tmp = document.createElement('span');
+      tmp.style.color = p;
+      document.body.appendChild(tmp);
+      const rgb = getComputedStyle(tmp).color;
+      document.body.removeChild(tmp);
+      const m = rgb.match(/(\d+)\D+(\d+)\D+(\d+)/);
+      if (m){ P.orig = hexOf(+m[1], +m[2], +m[3]); setHex(P.orig); }
+    }
+    swOld.style.background = P.orig;
+    drawHue();
+    drawSV();
+    sync();
+    mask.classList.add('on');
+  };
+  window.pickClose = function(){ mask.classList.remove('on'); };
+  window.pickApply = function(){
+    const hex = curHex();
+    const mode = document.getElementById('mode').value;
+    // 色名模式下，有精确色名就写色名，否则写 hex（宿主会取最近色名）
+    document.getElementById('color').value = (mode === 'name' && LIB_BY_HEX[hex]) ? LIB_BY_HEX[hex] : hex;
+    pickClose();
+    gen();
+    ui.status('已应用颜色 ' + hex);
+  };
+
+  document.getElementById('pOk').onclick = function(){ pickApply(); };
+  document.getElementById('pCancel').onclick = function(){ pickClose(); };
+  document.getElementById('pOnline').onclick = function(){ pickFetchOnline(); };
+  mask.addEventListener('mousedown', function(ev){ if (ev.target === mask) pickClose(); });
+  document.addEventListener('keydown', function(ev){
+    if (!mask.classList.contains('on')) return;
+    if (ev.key === 'Escape'){ pickClose(); ev.preventDefault(); }
+    else if (ev.key === 'Enter'){ pickApply(); ev.preventDefault(); }
+  });
+
+  /* ---- 宿主回传在线颜色表 ---- */
+  window.ui.colorLib = function(o){
+    if (!o || !o.list || !o.list.length){ libInfo.textContent = (o && o.source) ? o.source : '在线取色失败（已用内置 140 色）'; return; }
+    libBox.innerHTML = '';
+    addLibSwatches(o.list.map(function(x){ return { name: x[0], hex: x[1] }; }), o.source);
   };
 })();
 </script></body>

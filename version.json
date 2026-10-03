@@ -2,7 +2,7 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.7.0.0",
+  "version": "5.7.0.1",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
@@ -11,5 +11,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.7.0.0 修复与改进：\n· 修复 TXT 处理区富文本预览的闭合标签错配：<link>/<noparse>/<cspace>/<voffset> 等标签会让颜色、字号等样式提前失效，现按标签名配对并覆盖全部包裹型标签\n· 修复颜色输入框：输入 255,136,0 这类写法时色块不显示、读数与实际生成不一致；现与生成逻辑同源解析\n· 修复卸载残留：卸载前先结束正在运行的程序，并清理 %APPDATA%\\RichTextGen（WebView2 缓存、更新标记、错误日志）\n· 修复安装器可能误删安装目录内的用户文件（改为只清理本产品白名单文件）\n· 修复安装可能「半成品却提示完成」：逐文件校验写入完整性，失败即报错\n· 安装器界面支持高 DPI：窗口、控件与字号按屏幕 DPI 等比缩放，并处理跨屏 DPI 变化\n· 补齐程序与安装包图标；退出程序时释放全局热键，避免下次启动提示「热键被占用」\n· 拖放文件到窗口中不再闪烁；点击 TXT 行内任意位置即可载入集中编辑区\n· 界面回调失败等关键异常会记录到 %APPDATA%\\RichTextGen\\error.log，便于排查"
+  "notes": "v5.7.0.1 紧急补丁：\n· 找回丢失的「拾色器 / 颜色库」——HTML 界面此前只剩颜色文本框和 10 个常用色，旧版里的整套拾色器在迁移时丢了。现补齐：SV 方块 + 色相条（可拖动）、R/G/B 与 H/S/V 数值输入、HEX 输入、当前/原色对比、将生成的 <color=...> 预览\n· 新增颜色库：内置 140 个 CSS 色名色块（点击即选中），并支持「在线取色」（jsdelivr color-name → color.pizza，失败自动保留内置 140 色）\n· 拾色器入口：颜色值右侧的「🎨 拾色器 / 颜色库…」按钮，或直接点击色块\n· 色名模式下有精确色名时写入色名（如 orange），否则写入 #RRGGBB（宿主自动取最近色名）\n· 快捷键：Esc 取消、Enter 确定；点击遮罩空白处关闭\n\nv5.7.0.0 的修复一并包含：TXT 处理区富文本预览标签配对、颜色读数与实际输出一致、卸载残留清理、安装器不再误删安装目录内的用户文件、安装失败即报错、安装器高 DPI 缩放、程序与安装包图标、退出释放全局热键等。"
 }

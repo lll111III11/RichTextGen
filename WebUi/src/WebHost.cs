@@ -320,11 +320,39 @@ namespace RichTextGen
                 case "checkUpdate": CheckUpdate(); break;
                 case "doUpdate": DoUpdate(); break;
                 case "openUrl": OpenUrl(arg); break;
+                case "colorLib": FetchColorLibrary(); break;
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
                 case "sendGame": SendToGame(Un(arg)); break;
                 case "copy": try { Clipboard.SetText(Un(arg)); CallStr("status", "已复制到剪贴板"); } catch { } break;
             }
+        }
+
+        /// <summary>取在线颜色表（jsdelivr color-name → color.pizza，失败则回报状态、前端继续用内置 140 色）</summary>
+        private void FetchColorLibrary()
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                bool ok = false;
+                try { ok = OnlineColors.Fetch(); }
+                catch (Exception ex) { LogOnce("在线取色失败：" + ex.Message); }
+
+                StringBuilder sb = new StringBuilder();
+                sb.Append("{\"ok\":").Append(ok ? "true" : "false");
+                sb.Append(",\"source\":").Append(Quote(OnlineColors.Source));
+                sb.Append(",\"list\":[");
+                List<NamedColor> list = OnlineColors.Cached;
+                if (ok && list != null)
+                {
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        sb.Append('[').Append(Quote(list[i].Name)).Append(',').Append(Quote(list[i].Color.HexSharp)).Append(']');
+                    }
+                }
+                sb.Append("]}");
+                Call("colorLib", sb.ToString());
+            });
         }
 
         /// <summary>用浏览器打开链接；失败时给出提示而不是静默无反应</summary>
