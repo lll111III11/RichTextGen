@@ -41,7 +41,9 @@ namespace RichTextGen
         private System.Windows.Forms.Timer updateTimer;
         private string pendingVer = "", pendingNotes = "", pendingType = "", pendingUrl = "";
         private HotkeyManager hotkeys;
-        private string lastCode = "";                    // 最近一次生成结果（热键复制 / 热键发送用）
+        private NotifyIcon tray;                         // 托盘图标（Ctrl+F2 隐藏后的唤回入口）
+        private bool trayTipShown;
+        private string lastCode = "";                    // 最近一次生成结果（供热键发送使用）
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -82,15 +84,15 @@ namespace RichTextGen
             web.CoreWebView2InitializationCompleted += OnWebReady;
             try { web.EnsureCoreWebView2Async(null); } catch { }
 
-            // 更新检测：启动后 8 秒首次，之后每 60 秒一次（按需求"每分钟检测"）
+            // 更新检测：启动后 8 秒首次，之后每 60 秒一次（自动检测保持静默，仅发现新版本时才提示）
             updateTimer = new System.Windows.Forms.Timer();
             updateTimer.Interval = 60000;
-            updateTimer.Tick += delegate { CheckUpdate(); };
+            updateTimer.Tick += delegate { CheckUpdate(false); };
             updateTimer.Start();
-            SetTimeout(8000, CheckUpdate);
+            SetTimeout(8000, delegate { CheckUpdate(false); });
             SetTimeout(1500, ReportUpdateResult);
 
-            // 全局热键（Ctrl+Alt+T/O/G/C/S）：句柄创建后注册，见 OnHandleCreated
+            // 全局热键（Ctrl+F2 / Ctrl+Alt+O / Ctrl+Alt+G / Ctrl+Alt+F4）：句柄创建后注册，见 OnHandleCreated
             hotkeys = new HotkeyManager(this, OnHotkey);
         }
 
@@ -105,29 +107,61 @@ namespace RichTextGen
         {
             switch (action)
             {
-                case "toggle": ToggleWindowVisible(); break;
-                case "import": ImportTxt(); break;
-                case "generate": RunJs("gen()"); CallStr("status", "已重新生成（Ctrl+Alt+G）"); break;
-                case "copy": CopyLastCode(); break;
-                case "send": SendToGame(lastCode); break;
+                case "hide": HideWindow(); break;
+                case "import": ImportTxt(); HideWindow(); break;        // 导入完自动收后台
+                case "generate": RunJs("gen()"); HideWindow(); break;   // 重新生成完自动收后台
+                case "send": SendToGame(lastCode); break;               // 发送前会弹确认框
             }
         }
 
-        private void ToggleWindowVisible()
+        /// <summary>隐藏窗口到后台。托盘图标（双击或右键「显示窗口」）可唤回。</summary>
+        private void HideWindow()
         {
-            if (Visible) Hide();
-            else { Show(); WindowState = FormWindowState.Normal; Activate(); }
+            if (!Visible) return;
+            Hide();
+            EnsureTray();
+            // 首次隐藏时提示一次，避免用户以为程序被关掉了
+            if (!trayTipShown && tray != null)
+            {
+                trayTipShown = true;
+                try
+                {
+                    tray.BalloonTipTitle = "彩色文本生成器仍在后台运行";
+                    tray.BalloonTipText = "双击托盘图标（或右键 →「显示窗口」）可唤回窗口。退出请用 ✕ 或托盘菜单「退出」。";
+                    tray.ShowBalloonTip(4000);
+                }
+                catch { }
+            }
         }
 
-        private void CopyLastCode()
+        private void RestoreWindow()
         {
-            if (lastCode.Length == 0) { CallStr("status", "还没有生成结果可复制"); return; }
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
+            BringToFront();
+        }
+
+        /// <summary>托盘图标：Ctrl+F2 隐藏后唯一的唤回入口，同时提供退出</summary>
+        private void EnsureTray()
+        {
+            if (tray != null) return;
             try
             {
-                Clipboard.SetText(lastCode);
-                CallStr("status", "已复制生成结果（" + lastCode.Length + " 字符）· Ctrl+Alt+C");
+                tray = new NotifyIcon();
+                tray.Icon = Icon != null ? Icon : SystemIcons.Application;
+                tray.Text = "彩色文本生成器 v" + Version;
+                ContextMenuStrip menu = new ContextMenuStrip();
+                menu.Items.Add("显示窗口", null, delegate { RestoreWindow(); });
+                menu.Items.Add("立即检测更新", null, delegate { CheckUpdate(true); });
+                menu.Items.Add("发送到游戏", null, delegate { SendToGame(lastCode); });
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add("退出", null, delegate { Close(); });
+                tray.ContextMenuStrip = menu;
+                tray.DoubleClick += delegate { RestoreWindow(); };
+                tray.Visible = true;
             }
-            catch { CallStr("status", "复制失败（剪贴板被占用）"); }
+            catch { tray = null; }
         }
 
         /// <summary>执行页面里的全局函数（热键触发 UI 侧动作）</summary>
@@ -296,7 +330,7 @@ namespace RichTextGen
                     CallStr("status", "界面就绪 · v" + Version);
                     CallStr("net", OnlineColors.IsOnline() ? "联网正常" : "网络断开");
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
-                    CheckUpdate();
+                    CheckUpdate(false);
                     break;
                 case "hotkeys":
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
@@ -317,7 +351,7 @@ namespace RichTextGen
                 case "importTxt": ImportTxt(); break;
                 case "exportTxt": ExportTxt(Un(arg)); break;
                 case "dropFile": DropFile(Un(arg)); break;
-                case "checkUpdate": CheckUpdate(); break;
+                case "checkUpdate": CheckUpdate(true); break;
                 case "doUpdate": DoUpdate(); break;
                 case "openUrl": OpenUrl(arg); break;
                 case "colorLib": FetchColorLibrary(); break;
@@ -664,8 +698,10 @@ namespace RichTextGen
         }
 
         // ============================================================ 更新
-        private void CheckUpdate()
+        /// <param name="manual">true = 用户点击「立即检测更新」，无论结果如何都要在界面上给出可见反馈</param>
+        private void CheckUpdate(bool manual)
         {
+            if (manual) CallStr("upInfo", "正在检测更新…");
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 string ver = "", url = "", notes = "", type = "";
@@ -675,7 +711,7 @@ namespace RichTextGen
                     string txt = Http("https://raw.githubusercontent.com/lll111III11/RichTextGen/main/version.json", 8000);
                     if (string.IsNullOrEmpty(txt) || txt.IndexOf("\"version\"", StringComparison.Ordinal) < 0)
                         txt = Http("https://cdn.jsdelivr.net/gh/lll111III11/RichTextGen@main/version.json", 8000);
-                    if (string.IsNullOrEmpty(txt)) { CallStr("status", "更新检查失败（网络不可达）"); return; }
+                    if (string.IsNullOrEmpty(txt)) { FailUpdate(manual, "更新检查失败（网络不可达）"); return; }
                     ver = Field(txt, "version");
                     url = Field(txt, "installer");
                     notes = Field(txt, "notes");
@@ -683,16 +719,27 @@ namespace RichTextGen
                     mandatory = Regex.IsMatch(txt, "\"mandatory\"\\s*:\\s*true", RegexOptions.IgnoreCase);
                 }
                 catch { }
-                if (ver.Length == 0) { CallStr("status", "更新检查失败"); return; }
+                if (ver.Length == 0) { FailUpdate(manual, "更新检查失败"); return; }
                 if (Newer(ver, Version))
                 {
                     // 记下清单内容：更新成功后要写进 pending_update.json，供下次启动弹「更新内容」
                     pendingVer = ver; pendingNotes = notes; pendingType = type; pendingUrl = url;
                     Call("update", "{" + Quote("version") + ":" + Quote(ver) + "," + Quote("url") + ":" + Quote(url) + "," + Quote("notes") + ":" + Quote(notes) + "," + Quote("type") + ":" + Quote(type) + "," + Quote("mandatory") + ":" + (mandatory ? "true" : "false") + "}");
                     CallStr("status", "发现新版本 " + ver + "（当前 " + Version + "）");
+                    if (manual) CallStr("upInfo", "发现新版本 " + ver + "（当前 " + Version + "）");
                 }
-                else CallStr("status", "已是最新版本 " + Version);
+                else
+                {
+                    CallStr("status", "已是最新版本 " + Version);
+                    if (manual) CallStr("upInfo", "已是最新版本 v" + Version + "（" + DateTime.Now.ToString("HH:mm:ss") + " 检测）");
+                }
             });
+        }
+        /// <summary>更新检查失败：状态栏始终提示；手动检测时 #upInfo 也要显示，避免按钮"点了没反应"</summary>
+        private void FailUpdate(bool manual, string why)
+        {
+            CallStr("status", why);
+            if (manual) CallStr("upInfo", why + "，请检查网络后重试");
         }
         private static bool Newer(string remote, string local)
         {

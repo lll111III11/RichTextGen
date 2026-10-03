@@ -303,10 +303,10 @@
       <div class="card"><h3>全局热键</h3>
         <div class="row"><span class="hint" id="hotkeyInfo">热键状态读取中…</span>
           <button class="b" onclick="host('registerHotkeys')">重新注册热键</button></div>
-        <div class="row"><span class="hint">Ctrl+Alt+T 显示/隐藏窗口 · Ctrl+Alt+O 导入 TXT · Ctrl+Alt+G 重新生成 · Ctrl+Alt+C 复制结果 · Ctrl+Alt+S 发送到游戏（发送前会弹确认）</span></div>
+        <div class="row"><span class="hint">Ctrl+F2 隐藏窗口（收至后台，托盘图标可唤回） · Ctrl+Alt+O 导入 TXT（完成后自动隐藏） · Ctrl+Alt+G 重新生成（完成后自动隐藏） · Ctrl+Alt+F4 发送到游戏（发送前会弹确认）</span></div>
       </div>
       <div class="card"><h3>更新</h3>
-        <div class="row"><button class="b" onclick="host('checkUpdate')">检查更新</button>
+        <div class="row"><button class="b" onclick="host('checkUpdate')">立即检测更新</button>
           <span class="hint" id="upInfo"></span></div>
       </div>
       <div class="card"><h3>关于</h3>
@@ -340,7 +340,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.7.0.1";
+const VERSION = "5.7.0.2";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
