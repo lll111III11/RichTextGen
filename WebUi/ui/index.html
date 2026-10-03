@@ -147,6 +147,9 @@
   @keyframes zoomPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
   #cursorHide{position:fixed;inset:0;cursor:none;z-index:40;display:none}
   #cursorHide.on{display:block}
+  #agLog{max-height:180px;overflow:auto;border:1px solid var(--inputLine);border-radius:var(--r8);padding:8px;
+        background:var(--input);display:flex;flex-direction:column;gap:6px}
+  #agCmd{min-height:64px}
 </style>
 </head>
 <body>
@@ -358,13 +361,30 @@
         <div class="row"><label class="f">Endpoint</label>
           <input type="text" id="cEndpoint" value="https://api.deepseek.com" style="width:260px">
           <label class="f">API Key</label>
-          <input type="password" id="cKey" value="sk-ce1de2ef091d40dcba9428c2a414ea31" style="width:280px"></div>
+          <input type="password" id="cKey" placeholder="内置密钥（仅本机解密）· 可填写覆盖" style="width:280px">
+          <button class="b" onclick="restoreKey()">恢复内置</button></div>
         <div id="chatBox"></div>
         <div class="row" style="margin-top:10px">
           <textarea id="chatInput" placeholder="输入你的问题，例如：帮我解释这段 &lt;color&gt; 标签的含义…" style="flex:1;min-height:64px;user-select:text"></textarea>
           <button class="b p" onclick="chatSend()">发送</button>
           <button class="b" onclick="chatClear()">清空</button></div>
         <div class="row"><span class="hint">提示：历史对话会自动带上；输入框内按 Enter 发送、Shift+Enter 换行。</span></div>
+      </div>
+      <div class="card"><h3>🤖 Agent · 智能处理（每次操作前都会询问你）</h3>
+        <p class="hint">用一句话描述你想对「工作区文本」做的事。AI 会拆成步骤逐步执行；凡是修改文本、改样式、复制或发送的操作，执行前都会弹出确认框，你可以随时点「停止」。</p>
+        <div class="row"><label class="f">预设</label>
+          <select id="agPreset" onchange="agPresetApply()">
+            <option value="">—— 选择预设 ——</option>
+            <option value="translate-en">翻译成英文（保留标签）</option>
+            <option value="clean">清理多余空格 / 空行 / 统一格式</option>
+            <option value="extract-colors">提取所有颜色清单</option>
+            <option value="line-number">每一行加行号</option>
+          </select>
+          <button class="b p" onclick="agRun()">执行</button>
+          <button class="b" onclick="host('agentStop')">停止</button>
+          <span class="hint" id="agState"></span></div>
+        <textarea id="agCmd" placeholder="例如：把文本翻译成英文；把所有红色改成橙色；去掉多余空行并统一格式…"></textarea>
+        <div id="agLog"></div>
       </div>
     </section>
 
@@ -391,7 +411,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.7.0.4";
+const VERSION = "5.7.0.5";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -421,6 +441,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.p)
 /* ---------- C# 回调 ---------- */
 window.ui = {
   version: v => { if(!v) return; $('ver').textContent = "v" + v; $('ver2').textContent = v; },
+  dsKey: k => { builtinKey = k || ""; },
   hotkeys: s => { const e = $('hotkeyInfo'); if(e) e.textContent = s || ""; },
   updated: o => {
     const badge = (o.type === "security") ? "安全更新" : (o.type === "fix" ? "问题修复" : "功能更新");
@@ -458,6 +479,13 @@ window.ui = {
     else cMsg('bot', o.text, o.ok ? '' : ' c-err');
     if(o.ok && o.text && o.text !== '（无回复）') chatHist.push({ role:'assistant', content:o.text });
     status(o.ok ? '回复完成' : '请求失败');
+  },
+  agentReply: o => {
+    const d = document.createElement('div');
+    d.className = 'c-msg c-bot';
+    d.textContent = (o.ok ? '✓ ' : '⚠ ') + (o.msg || '');
+    $('agLog').appendChild(d);
+    if(o.done){ status(o.ok ? 'Agent 完成' : 'Agent 结束'); $('agState').textContent = ''; }
   }
 };
 
@@ -541,6 +569,8 @@ function doTranslate(){
 }
 
 /* ---------- AI 助手（DeepSeek，OpenAI 兼容协议） ---------- */
+let builtinKey = '';                            // 宿主启动时下发的内置密钥（仅内存；本机指纹匹配才非空）
+function restoreKey(){ if(builtinKey){ $('cKey').value = builtinKey; status('已恢复内置密钥'); } else status('本机未匹配内置密钥，请手动填写 API Key'); }
 let chatHist = [];                              // [{role:'user'|'assistant', content}]
 const chatBox = $('chatBox'), chatInput = $('chatInput');
 function cMsg(role, text, cls){
@@ -560,7 +590,25 @@ function chatSend(){
   chatHist.push({ role:'user', content:q });
   chatThinkEl = cMsg('bot', '（正在思考…）');
   host('chat|' + encodeURIComponent(JSON.stringify({
-    endpoint:$('cEndpoint').value, key:$('cKey').value, history:chatHist
+    endpoint:$('cEndpoint').value, key:($('cKey').value || builtinKey), history:chatHist
+  })));
+}
+
+/* ---------- Agent：AI 分步处理文本（写操作一律先询问） ---------- */
+const AG_PRESETS = {
+  'translate-en':   '把工作区文本翻译成英文，保持原有富文本标签不被破坏',
+  'clean':          '清理工作区文本：去掉多余空格和多余空行，统一标点为中文，保持富文本标签不被破坏',
+  'extract-colors': '提取工作区文本里出现的所有颜色，输出清单即可',
+  'line-number':    '给工作区文本的每一行前面加上行号（1. 2. 3. …），保持富文本标签不被破坏'
+};
+function agPresetApply(){ const v = $('agPreset').value; if(v && AG_PRESETS[v]) $('agCmd').value = AG_PRESETS[v]; }
+function agRun(){
+  const cmd = $('agCmd').value.trim();
+  if(!cmd){ status('先输入处理指令'); return; }
+  status('Agent 执行中…');
+  $('agLog').innerHTML = '';
+  host('agent|' + encodeURIComponent(JSON.stringify({
+    cmd:cmd, key:($('cKey').value || builtinKey), text:txt.value, out:out.value
   })));
 }
 chatInput.addEventListener('keydown', e => {
