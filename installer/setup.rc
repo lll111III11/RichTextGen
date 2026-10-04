@@ -4,8 +4,8 @@ IDI_ICON1 ICON "app.ico"
 
 // 版本信息（资源管理器「属性 → 详细信息」可见）
 1 VERSIONINFO
-FILEVERSION 5,7,0,7
-PRODUCTVERSION 5,7,0,7
+FILEVERSION 5,7,0,8
+PRODUCTVERSION 5,7,0,8
 FILEOS 0x40004L
 FILETYPE 0x1L
 BEGIN
@@ -15,12 +15,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "3576220975@qq.com"
             VALUE "FileDescription",  "彩色文本生成器 安装程序"
-            VALUE "FileVersion",      "5.7.0.7"
+            VALUE "FileVersion",      "5.7.0.8"
             VALUE "InternalName",     "RichTextGen-Setup"
             VALUE "LegalCopyright",   "2026-2027 All rights reserved - Reverse engineering strictly prohibited"
             VALUE "OriginalFilename", "RichTextGen-Setup.exe"
             VALUE "ProductName",      "Rich text & multifunctional tool"
-            VALUE "ProductVersion",   "5.7.0.7"
+            VALUE "ProductVersion",   "5.7.0.8"
         END
     END
     BLOCK "VarFileInfo"

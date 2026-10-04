@@ -1,11 +1,11 @@
-// 彩色文本生成器 安装程序（原生 C++ / 零依赖）
+﻿// 彩色文本生成器 安装程序（原生 C++ / 零依赖）
 // ---------------------------------------------------------------------------
 // 特性
 //   · 纯 Win32 原生程序：不依赖 .NET Framework、不依赖 WebView2 运行时，
 //     只链接系统自带 DLL（user32/gdi32/shell32/ole32/gdiplus/comctl32/advapi32）。
 //   · 载荷（程序 exe/config + WebView2 三个组件）由 gen_embedded.ps1 转成字节数组
 //     内嵌进本 exe，安装时逐个释放，文件名原样保留（含中文名与多段名）。
-//   · 界面：GDI+ 45° 渐变沿左上→右下流动 + 一条黑色斜杠斜着扫过；
+//   · 界面：经典浅色 Windows 安装程序样式（白色标题区 + 浅灰主体 + 标准控件）；
 //     Win11 22H2+ 可选系统级毛玻璃（亚克力）。
 //   · 静默安装：RichTextGen-Setup.exe --silent "D:\路径"
 //   · 卸载：     RichTextGen-Setup.exe /uninstall   （或安装目录下 Uninstall.exe /uninstall）
@@ -47,7 +47,7 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.7.0.7";
+    const wchar_t* const kVersion   = L"5.7.0.8";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
@@ -79,8 +79,6 @@ namespace
     HINSTANCE g_hInst = NULL;
 
     // 动画状态
-    double g_phase = 0.0;    // 渐变色相位 0..1
-    double g_sweep = 0.0;    // 黑色斜杠相位 0..1
     bool g_glass = false;    // 毛玻璃是否生效
     bool g_installing = false;
     // DPI 缩放：窗口、控件与字号按屏幕 DPI 等比放大，避免高 DPI 下界面过小（96 DPI = 1.0）
@@ -425,99 +423,7 @@ namespace
     }
 
     // ==================================================================== 界面绘制
-    void PaintGradient(Graphics& g, int w, int h, int alpha)
-    {
-        const int n = 6;
-        double sp = g_phase * n;
-        int k = (int)std::floor(sp);
-        double f = sp - k;
-        Color stops[n + 1];
-        float pos[n + 1];
-        for (int i = 0; i <= n; i++)
-        {
-            Color c = Mix(Palette(i + k), Palette(i + k + 1), f);
-            stops[i] = (alpha < 255) ? Color((BYTE)alpha, c.GetR(), c.GetG(), c.GetB()) : c;
-            pos[i] = (float)i / n;
-        }
-        RectF r(-2.0f, -2.0f, (float)(w + 4), (float)(h + 4));
-        // 构造时首尾色不同（GDI+ 不允许两色相同），实际色带由 SetInterpolationColors 决定
-        LinearGradientBrush br(r, stops[0], stops[1], 45.0f);
-        br.SetInterpolationColors(stops, pos, n + 1);
-        g.FillRectangle(&br, Rect(0, 0, w, h));
-    }
-
-    void PaintSweep(Graphics& g, int w, int h)
-    {
-        int diag = (int)std::sqrt((double)w * w + (double)h * h);
-        GraphicsState st = g.Save();
-        g.TranslateTransform(w / 2.0f, h / 2.0f);
-        g.RotateTransform(45.0f);
-        int cx = (int)(-diag * 0.5 + g_sweep * diag * 1.0);
-        Rect band(cx - 62, -diag, 124, diag * 2);
-        Color c0(0, 0, 0, 0), c1(150, 0, 0, 0);
-        LinearGradientBrush bg(band, c0, c1, 0.0f);
-        Color cols[4] = { Color(0, 0, 0, 0), Color(150, 0, 0, 0), Color(150, 0, 0, 0), Color(0, 0, 0, 0) };
-        float p[4] = { 0.0f, 0.3f, 0.7f, 1.0f };
-        bg.SetInterpolationColors(cols, p, 4);
-        g.FillRectangle(&bg, band);
-        g.Restore(st);
-    }
-
-    void PaintLogo(Graphics& g)
-    {
-        Rect r(18, 15, 20, 20);
-        GraphicsPath path;
-        int d = 10;
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.GetRight() - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.GetRight() - d, r.GetBottom() - d, d, d, 0, 90);
-        path.AddArc(r.X, r.GetBottom() - d, d, d, 90, 90);
-        path.CloseFigure();
-        RectF rf(18.0f, 15.0f, 20.0f, 20.0f);
-        LinearGradientBrush b(rf, Color(0x6C, 0xD4, 0xFF), Color(0x00, 0x67, 0xC0), 45.0f);
-        g.FillPath(&b, &path);
-    }
-
-    void PaintChrome(Graphics& g, int w, int h, bool glass)
-    {
-        PaintLogo(g);
-
-        // 卡片：圆角矩形
-        RectF card(24.0f, 62.0f, 672.0f, 414.0f);
-        GraphicsPath cp;
-        int cd = 24;
-        cp.AddArc((int)card.X, (int)card.Y, cd, cd, 180, 90);
-        cp.AddArc((int)(card.X + card.Width - cd), (int)card.Y, cd, cd, 270, 90);
-        cp.AddArc((int)(card.X + card.Width - cd), (int)(card.Y + card.Height - cd), cd, cd, 0, 90);
-        cp.AddArc((int)card.X, (int)(card.Y + card.Height - cd), cd, cd, 90, 90);
-        cp.CloseFigure();
-        SolidBrush cardBrush(glass ? Color(236, 252, 252, 252) : Color(248, 250, 252));
-        g.FillPath(&cardBrush, &cp);
-
-        // 标题栏文字
-        FontFamily ff(L"Microsoft YaHei UI");
-        Font title(&ff, 12.5f, FontStyleBold, UnitPoint);
-        SolidBrush white(Color(255, 255, 255, 255));
-        PointF pt1(46.0f, 9.0f);
-        g.DrawString(kAppName, -1, &title, pt1, &white);
-        Font sub(&ff, 8.5f, FontStyleRegular, UnitPoint);
-        SolidBrush subBrush(Color(206, 226, 250));
-        PointF pt2(46.0f, 32.0f);
-        std::wstring verText = std::wstring(L"v") + kVersion + L" · HTML 界面版（WebView2）";
-        g.DrawString(verText.c_str(), -1, &sub, pt2, &subBrush);
-
-        // 标题栏按钮
-        Font wbtn(&ff, 10.0f, FontStyleRegular, UnitPoint);
-        SolidBrush wb(Color(232, 240, 252));
-        RectF minR(630.0f, 0.0f, 42.0f, 40.0f);
-        StringFormat sf;
-        sf.SetAlignment(StringAlignmentCenter);
-        sf.SetLineAlignment(StringAlignmentCenter);
-        g.DrawString(L"—", -1, &wbtn, minR, &sf, &wb);
-        RectF closeR(672.0f, 0.0f, 48.0f, 40.0f);
-        g.DrawString(L"✕", -1, &wbtn, closeR, &sf, &wb);
-    }
-
+    // 经典浅色界面：浅灰主体 + 系统标准控件（传统 Windows 安装程序样式）
     void Paint(HWND hwnd, HDC hdc)
     {
         RECT rc; GetClientRect(hwnd, &rc);
@@ -530,13 +436,10 @@ namespace
 
         Graphics g(mem);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
-        // 按屏幕 DPI 缩放：绘制代码仍用 96 DPI 的逻辑坐标，由 GDI+ 放大到物理像素
-        g.ScaleTransform((REAL)g_scale, (REAL)g_scale);
 
-        int alpha = g_glass ? 128 : 255;
-        PaintGradient(g, kWinW, kWinH, alpha);
-        if (!g_glass) PaintSweep(g, kWinW, kWinH);
-        PaintChrome(g, kWinW, kWinH, g_glass);
+        // 经典浅灰主体（毛玻璃开启时用半透明白，让亚克力透出）
+        SolidBrush bg(g_glass ? Color(210, 244, 246, 249) : Color(243, 245, 248));
+        g.FillRectangle(&bg, Rect(0, 0, pw, ph));
 
         BitBlt(hdc, 0, 0, pw, ph, mem, 0, 0, SRCCOPY);
         SelectObject(mem, old);
@@ -565,20 +468,25 @@ namespace
         g_fBody = MakeFont(S(13), FW_NORMAL);
         g_fBold = MakeFont(S(15), FW_BOLD);
 
+        // 关闭子控件主题渲染，强制经典浅色样式（深色系统主题下也保持白底黑字/浅灰控件）
+        typedef HRESULT(WINAPI* FnTheme)(HWND, LPCWSTR, LPCWSTR);
+        HMODULE ux = LoadLibraryW(L"uxtheme.dll");
+        FnTheme fnTheme = ux ? (FnTheme)GetProcAddress(ux, "SetWindowTheme") : NULL;
+
         struct Item { int id; int x, y, w, h; bool bold; };
         const Item items[] = {
-            { IDC_EDIT_LICENSE, 44, 102, 632,  92, false },
-            { IDC_LBL_PATH,     44, 210,  60,  20, false },
-            { IDC_EDIT_PATH,   116, 207, 466,  25, false },
-            { IDC_BTN_BROWSE,  594, 206,  82,  26, false },
-            { IDC_CHK_DESKTOP,  44, 246, 170,  22, false },
-            { IDC_CHK_START,   254, 246, 190,  22, false },
-            { IDC_CHK_RUN,     494, 246, 170,  22, false },
-            { IDC_CHK_GLASS,    44, 274, 380,  22, false },
-            { IDC_PROGRESS,     44, 314, 632,  14, false },
-            { IDC_STATUS,       44, 336, 632,  20, false },
-            { IDC_BTN_INSTALL, 452, 414, 126,  36, true  },
-            { IDC_BTN_CANCEL,  586, 414,  96,  36, false }
+            { IDC_EDIT_LICENSE, 44,  40, 632,  92, false },
+            { IDC_LBL_PATH,     44, 148,  60,  20, false },
+            { IDC_EDIT_PATH,   116, 145, 466,  25, false },
+            { IDC_BTN_BROWSE,  594, 144,  82,  26, false },
+            { IDC_CHK_DESKTOP,  44, 184, 170,  22, false },
+            { IDC_CHK_START,   254, 184, 190,  22, false },
+            { IDC_CHK_RUN,     494, 184, 170,  22, false },
+            { IDC_CHK_GLASS,    44, 212, 380,  22, false },
+            { IDC_PROGRESS,     44, 252, 632,  14, false },
+            { IDC_STATUS,       44, 274, 632,  20, false },
+            { IDC_BTN_INSTALL, 452, 416, 126,  36, true  },
+            { IDC_BTN_CANCEL,  586, 416,  96,  36, false }
         };
         for (int i = 0; i < (int)(sizeof(items) / sizeof(items[0])); i++)
         {
@@ -587,6 +495,7 @@ namespace
             SetWindowPos(c, NULL, S(items[i].x), S(items[i].y), S(items[i].w), S(items[i].h),
                          SWP_NOZORDER | SWP_NOACTIVATE);
             SendMessageW(c, WM_SETFONT, (WPARAM)(items[i].bold ? g_fBold : g_fBody), TRUE);
+            if (fnTheme) fnTheme(c, L"", L"");   // 经典样式：白底黑字、浅灰按钮、绿进度条
         }
     }
 
@@ -599,13 +508,12 @@ namespace
         if (on && !g_glass)
         {
             Button_SetCheck(GetDlgItem(g_hwnd, IDC_CHK_GLASS), BST_UNCHECKED);
-            SetDlgItemTextW(g_hwnd, IDC_STATUS, L"毛玻璃启用失败，已回退到渐变流动背景。");
+            SetDlgItemTextW(g_hwnd, IDC_STATUS, L"毛玻璃启用失败，已回退到浅色经典界面。");
         }
         else
         {
-            SetDlgItemTextW(g_hwnd, IDC_STATUS, g_glass ? L"毛玻璃背景已开启（亚克力）。" : L"渐变流动背景（黑色斜杠扫描）。");
+            SetDlgItemTextW(g_hwnd, IDC_STATUS, g_glass ? L"毛玻璃背景已开启（亚克力）。" : L"浅色经典界面（标准 Windows 安装程序样式）。");
         }
-        if (g_glass) KillTimer(g_hwnd, IDC_ANIM); else SetTimer(g_hwnd, IDC_ANIM, 33, NULL);
         InvalidateRect(g_hwnd, NULL, TRUE);
     }
 
@@ -628,7 +536,6 @@ namespace
         g_installing = true;
         EnableWindow(GetDlgItem(hwnd, IDC_BTN_INSTALL), FALSE);
         EnableWindow(GetDlgItem(hwnd, IDC_BTN_CANCEL), FALSE);
-        KillTimer(hwnd, IDC_ANIM);
 
         struct Ctx { HWND hwnd; } ctx = { hwnd };
         bool ok = Install(dir, desktop, startMenu,
@@ -655,7 +562,6 @@ namespace
             g_installing = false;
             EnableWindow(GetDlgItem(hwnd, IDC_BTN_INSTALL), TRUE);
             EnableWindow(GetDlgItem(hwnd, IDC_BTN_CANCEL), TRUE);
-            if (!g_glass) SetTimer(hwnd, IDC_ANIM, 33, NULL);
             MessageBoxW(hwnd, L"安装失败，请检查目录权限后重试。", L"错误", MB_OK | MB_ICONERROR);
         }
     }
@@ -703,7 +609,7 @@ namespace
                 0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_RUN, g_hInst, NULL);
             Button_SetCheck(chkRun, BST_CHECKED);
 
-            HWND chkGlass = CreateWindowExW(0, L"BUTTON", L"毛玻璃背景（Win11 22H2，关闭则显示渐变流动）",
+            HWND chkGlass = CreateWindowExW(0, L"BUTTON", L"毛玻璃背景（Win11 22H2）",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
                 0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_GLASS, g_hInst, NULL);
             if (!BackdropSupported()) EnableWindow(chkGlass, FALSE);
@@ -713,11 +619,11 @@ namespace
             SendMessageW(prog, PBM_SETRANGE32, 0, 100);
 
             CreateWindowExW(0, L"STATIC",
-                (BackdropSupported() ? L"准备就绪，点击“立即安装”开始。" : L"当前系统不支持系统级毛玻璃（需 Win11 22H2+），已使用渐变流动背景。"),
+                (BackdropSupported() ? L"准备就绪，点击“立即安装”开始。" : L"当前系统不支持系统级毛玻璃（需 Win11 22H2+），已使用浅色经典界面。"),
                 WS_CHILD | WS_VISIBLE | SS_LEFT,
                 0, 0, 0, 0, hwnd, (HMENU)IDC_STATUS, g_hInst, NULL);
 
-            CreateWindowExW(0, L"BUTTON", L"立即安装", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            CreateWindowExW(0, L"BUTTON", L"立即安装", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
                 0, 0, 0, 0, hwnd, (HMENU)IDC_BTN_INSTALL, g_hInst, NULL);
 
             CreateWindowExW(0, L"BUTTON", L"取消", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
@@ -725,7 +631,6 @@ namespace
 
             LayoutControls(hwnd);
 
-            SetTimer(hwnd, IDC_ANIM, 33, NULL);
             return 0;
         }
 
@@ -772,16 +677,6 @@ namespace
             }
             break;
 
-        case WM_TIMER:
-            if (wp == IDC_ANIM)
-            {
-                g_phase += 0.0045; if (g_phase >= 1) g_phase -= 1;
-                g_sweep += 0.0075; if (g_sweep >= 1) g_sweep -= 1;
-                InvalidateRect(hwnd, NULL, TRUE);
-                return 0;
-            }
-            break;
-
         case WM_PAINT:
         {
             PAINTSTRUCT ps;
@@ -798,40 +693,47 @@ namespace
             Paint(hwnd, (HDC)wp);
             return 1;
 
-        case WM_ERASEBKGND:
-            return 1;
-
-        case WM_LBUTTONDOWN:
+        case WM_CTLCOLOREDIT:
         {
-            // 物理像素 → 逻辑坐标（标题栏命中判定用的是 96 DPI 逻辑坐标）
-            int x = (int)(GET_X_LPARAM(lp) / g_scale), y = (int)(GET_Y_LPARAM(lp) / g_scale);
-            if (y < 40 && !(x >= kBtnMin.left && x < kBtnClose.right))
-            {
-                ReleaseCapture();
-                SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-                return 0;
-            }
-            break;
-        }
-
-        case WM_LBUTTONUP:
-        {
-            int x = (int)(GET_X_LPARAM(lp) / g_scale), y = (int)(GET_Y_LPARAM(lp) / g_scale);
-            if (y < 40)
-            {
-                if (x >= kBtnMin.left && x < kBtnMin.right) { ShowWindow(hwnd, SW_MINIMIZE); return 0; }
-                if (x >= kBtnClose.left && x < kBtnClose.right) { PostMessageW(hwnd, WM_CLOSE, 0, 0); return 0; }
-            }
-            break;
+            // 强制文本框浅色（深色系统主题下也保持白底黑字）
+            HDC dc = (HDC)wp;
+            SetTextColor(dc, RGB(30, 30, 30));
+            SetBkColor(dc, RGB(255, 255, 255));
+            return (LRESULT)GetStockObject(WHITE_BRUSH);
         }
 
         case WM_CTLCOLORSTATIC:
         {
-            HDC hdc = (HDC)wp;
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(93, 93, 93));
-            return (LRESULT)GetStockObject(NULL_BRUSH);
+            // 静态标签 / 复选框文字 / 只读 EDIT：浅色实心底（深色主题下不露黑）
+            HDC dc = (HDC)wp;
+            if (lp)
+            {
+                wchar_t cls[32] = { 0 };
+                GetClassNameW((HWND)lp, cls, 32);
+                if (_wcsicmp(cls, L"Edit") == 0)
+                {
+                    SetTextColor(dc, RGB(30, 30, 30));
+                    SetBkColor(dc, RGB(255, 255, 255));
+                    return (LRESULT)GetStockObject(WHITE_BRUSH);
+                }
+            }
+            SetTextColor(dc, RGB(40, 42, 46));
+            SetBkColor(dc, RGB(243, 245, 248));
+            static HBRUSH sbg = CreateSolidBrush(RGB(243, 245, 248));
+            return (LRESULT)sbg;
         }
+
+        case WM_CTLCOLORBTN:
+        {
+            // 按钮 / 复选框：浅色背景 + 深色文字
+            HDC dc = (HDC)wp;
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, RGB(30, 30, 30));
+            return (LRESULT)GetStockObject(WHITE_BRUSH);
+        }
+
+        case WM_ERASEBKGND:
+            return 1;
 
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -842,10 +744,8 @@ namespace
 
     void EnableDpiAwareness()
     {
-        typedef BOOL(WINAPI* Fn)(HANDLE);
-        Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext");
-        if (fn && fn((HANDLE)(INT_PTR)-4)) return;      // PER_MONITOR_AWARE_V2（Win10 1703+）
-        // 旧系统回退：至少启用系统级 DPI 感知，避免被系统整体拉伸导致模糊
+        // 系统级 DPI 感知：窗口与所有子控件按 96 DPI 逻辑坐标布局，
+        // 由系统在 125%/150% 屏幕上统一放大（经典 Win32 安装程序做法，控件不会错位）。
         typedef BOOL(WINAPI* Fn10)(void);
         Fn10 old = (Fn10)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDPIAware");
         if (old) old();
@@ -888,10 +788,12 @@ namespace
         INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_PROGRESS_CLASS | ICC_STANDARD_CLASSES };
         InitCommonControlsEx(&icc);
 
-        // 先按系统 DPI 估一个初始缩放，避免创建时尺寸突兀
-        g_scale = PrimaryDpi() / 96.0;
+        // 标准窗口 + 系统级 DPI 缩放：控件统一按 96 DPI 逻辑坐标布局，
+        // 在 125%/150% 屏幕上由系统整体放大（经典 Win32 安装程序做法，不会错位溢出）
+        g_scale = 1.0;
 
-        WNDCLASSEXW wc = { 0 };
+        // 窗口类：标准边框（原生标题栏 + 系统按钮），Win11 经典风格
+    WNDCLASSEXW wc = { 0 };
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = WndProc;
         wc.hInstance = g_hInst;
@@ -903,24 +805,14 @@ namespace
 
         std::wstring title = std::wstring(kAppName) + L" 安装向导  v" + kVersion;
         g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, title.c_str(),
-            WS_POPUP | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, S(kWinW), S(kWinH),
+            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
+            CW_USEDEFAULT, CW_USEDEFAULT, 736, 560,
             NULL, NULL, g_hInst, NULL);
         if (!g_hwnd) return 1;
 
-        // 以窗口实际 DPI 为准：系统 DPI 与显示器 DPI 不一致时（常见于 125%/150% 缩放），
-        // GetDpiForSystem 可能返回 96，必须用 GetDpiForWindow 纠正并重排一次
-        UINT wdpi = WindowDpi(g_hwnd);
-        if (wdpi >= 96)
-        {
-            double real = wdpi / 96.0;
-            if (real != g_scale)
-            {
-                g_scale = real;
-                LayoutControls(g_hwnd);
-            }
-        }
+        g_scale = 1.0;
 
-        int winW = S(kWinW), winH = S(kWinH);
+        int winW = 736, winH = 560;
         int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
         SetWindowPos(g_hwnd, NULL, (sw - winW) / 2, (sh - winH) / 2, winW, winH, SWP_NOZORDER);
         ShowWindow(g_hwnd, SW_SHOW);
