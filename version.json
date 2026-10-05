@@ -2,7 +2,7 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.7.0.8",
+  "version": "5.7.0.9",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
@@ -11,5 +11,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.7.0.8 功能更新：\n· 安装包界面改为传统 Windows 安装程序样式：原生系统标题栏、浅灰经典主体、全部标准控件（协议文本框 / 安装路径 / 复选框 / 进度条 / 标准按钮），修复深色系统下控件黑块与高 DPI 错位问题"
+  "notes": "v5.7.0.9 功能更新：\n· 全局热键支持自定义：设置页点击快捷键即可录制修改（需含 Ctrl / Alt / Shift 加功能键），自动保存到本机，下次启动生效；组合冲突或被占用会明确提示，可一键恢复默认"
 }

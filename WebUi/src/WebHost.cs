@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -334,15 +334,43 @@ namespace RichTextGen
                     CallStr("status", "界面就绪 · v" + Version);
                     CallStr("net", OnlineColors.IsOnline() ? "联网正常" : "网络断开");
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
+                    CallStr("hotkeyDefs", hotkeys != null ? hotkeys.HotkeysJson() : "[]");
                     CheckUpdate(false);
                     break;
                 case "hotkeys":
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
+                    CallStr("hotkeyDefs", hotkeys != null ? hotkeys.HotkeysJson() : "[]");
                     break;
                 case "registerHotkeys":
                     if (hotkeys != null) hotkeys.RegisterAll();
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
+                    CallStr("hotkeyDefs", hotkeys != null ? hotkeys.HotkeysJson() : "[]");
                     CallStr("status", "已重新注册全局热键");
+                    break;
+                case "setHotkey":
+                {
+                    // arg: "action|keysInt"
+                    int sep = arg.IndexOf('|');
+                    if (hotkeys != null && sep > 0)
+                    {
+                        string action = arg.Substring(0, sep);
+                        int v;
+                        string err = null;
+                        if (int.TryParse(arg.Substring(sep + 1), out v) &&
+                            hotkeys.UpdateDef(action, (Keys)v, out err))
+                            CallStr("status", "热键已更新并注册");
+                        else
+                            CallStr("status", "改键失败：" + (err ?? "参数错误"));
+                        CallStr("hotkeys", hotkeys.StatusText);
+                        CallStr("hotkeyDefs", hotkeys.HotkeysJson());
+                    }
+                    break;
+                }
+                case "resetHotkeys":
+                    if (hotkeys != null) hotkeys.ResetDefaults();
+                    CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
+                    CallStr("hotkeyDefs", hotkeys != null ? hotkeys.HotkeysJson() : "[]");
+                    CallStr("status", "已恢复默认热键");
                     break;
                 case "generate":
                     DoGenerate(arg);

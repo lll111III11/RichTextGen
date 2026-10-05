@@ -1,4 +1,4 @@
-﻿// 彩色文本生成器 安装程序（原生 C++ / 零依赖）
+// 彩色文本生成器 安装程序（原生 C++ / 零依赖）
 // ---------------------------------------------------------------------------
 // 特性
 //   · 纯 Win32 原生程序：不依赖 .NET Framework、不依赖 WebView2 运行时，
@@ -47,7 +47,7 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.7.0.8";
+    const wchar_t* const kVersion   = L"5.7.0.9";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
