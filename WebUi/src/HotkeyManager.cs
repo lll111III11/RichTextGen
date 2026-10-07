@@ -14,7 +14,6 @@ namespace RichTextGen
     ///   Ctrl+F2        隐藏 ↔ 显示 切换（收后台后托盘图标也可唤回）
     ///   Ctrl+Alt+O     导入 TXT（完成后自动隐藏）
     ///   Ctrl+Alt+G     重新生成（完成后自动隐藏）
-    ///   Ctrl+Alt+F4    发送到游戏（发送前弹确认）
     /// 用户可在设置页改键，配置持久化到 %APPDATA%\RichTextGen\hotkeys.json，
     /// 下次启动自动加载；未配置的动作回退默认键。
     /// 注：注册时一律带 MOD_NOREPEAT，否则长按会连续触发。
@@ -43,9 +42,7 @@ namespace RichTextGen
             new HotkeyDef { Action = "import",   Keys = Keys.Control | Keys.Alt | Keys.O,
                             Desc = "导入 TXT（完成后自动隐藏）" },
             new HotkeyDef { Action = "generate", Keys = Keys.Control | Keys.Alt | Keys.G,
-                            Desc = "重新生成（完成后自动隐藏）" },
-            new HotkeyDef { Action = "send",     Keys = Keys.Control | Keys.Alt | Keys.F4,
-                            Desc = "发送到游戏（发送前弹确认）" }
+                            Desc = "重新生成（完成后自动隐藏）" }
         };
 
         private readonly Form owner;

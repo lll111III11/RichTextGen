@@ -29,7 +29,7 @@ namespace RichTextGen
     }
 
     /// <summary>
-    /// WebView2 宿主：无边框 + DWM 圆角 + 高 DPI；HTML 做界面，C# 做核心（生成/网络/文件/更新/发送）
+    /// WebView2 宿主：无边框 + DWM 圆角 + 高 DPI；HTML 做界面，C# 做核心（生成/网络/文件/更新/导出）
     /// 通信协议：JS → C#  postMessage("cmd|payload")；C# → JS  ExecuteScriptAsync("ui.onXxx(...)")
     /// </summary>
     public partial class MainForm : Form
@@ -43,7 +43,6 @@ namespace RichTextGen
         private HotkeyManager hotkeys;
         private NotifyIcon tray;                         // 托盘图标（Ctrl+F2 隐藏后的唤回入口）
         private bool trayTipShown;
-        private string lastCode = "";                    // 最近一次生成结果（供热键发送使用）
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -114,7 +113,6 @@ namespace RichTextGen
                     break;
                 case "import": ImportTxt(); HideWindow(); break;        // 导入完自动收后台
                 case "generate": RunJs("gen()"); HideWindow(); break;   // 重新生成完自动收后台
-                case "send": SendToGame(lastCode); break;               // 发送前会弹确认框
             }
         }
 
@@ -158,7 +156,6 @@ namespace RichTextGen
                 ContextMenuStrip menu = new ContextMenuStrip();
                 menu.Items.Add("显示窗口", null, delegate { RestoreWindow(); });
                 menu.Items.Add("立即检测更新", null, delegate { CheckUpdate(true); });
-                menu.Items.Add("发送到游戏", null, delegate { SendToGame(lastCode); });
                 menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add("退出", null, delegate { Close(); });
                 tray.ContextMenuStrip = menu;
@@ -380,6 +377,9 @@ namespace RichTextGen
                 case "close": Close(); break;
                 case "drag": DragWindow(); break;
                 case "status": CallStr("status", arg); break;
+                case "openFile": OpenFile(); break;
+                case "saveFile": SaveFile(arg); break;
+                case "saveAsFile": SaveAsFile(Un(arg)); break;
                 case "importTxt": ImportTxt(); break;
                 case "exportTxt": ExportTxt(Un(arg)); break;
                 case "dropFile": DropFile(Un(arg)); break;
@@ -392,7 +392,7 @@ namespace RichTextGen
                 case "chat": Chat(Un(arg)); break;
                 case "easterEgg": PlayNetSound(); break;
                 case "uninstall": UninstallApp(); break;
-                case "sendGame": SendToGame(Un(arg)); break;
+                case "exportHtml": ExportHtml(Un(arg)); break;
                 case "copy": try { Clipboard.SetText(Un(arg)); CallStr("status", "已复制到剪贴板"); } catch { } break;
             }
         }
@@ -452,47 +452,28 @@ namespace RichTextGen
             catch { }
         }
 
-        // ============================================================ 发送到游戏（全自动）
-        private void SendToGame(string text)
+        // ============================================================ 导出 HTML（取代原「发送到游戏」）
+        private void ExportHtml(string code)
         {
-            text = (text ?? "").Trim();
-            if (text.Length == 0) { CallStr("status", "没有内容可发送"); return; }
-            System.Diagnostics.Process proc = null;
-            foreach (string pn in new string[] { "SCPSL", "SCP Secret Laboratory" })
+            code = code ?? "";
+            using (SaveFileDialog d = new SaveFileDialog())
             {
+                d.Filter = "HTML 文件|*.html|所有文件|*.*";
+                d.FileName = "彩色文本生成器.html";
+                if (d.ShowDialog(this) != DialogResult.OK) return;
                 try
                 {
-                    foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcessesByName(pn))
-                    {
-                        if (p.MainWindowHandle != IntPtr.Zero) { proc = p; break; }
-                    }
+                    string page =
+                        "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">" +
+                        "<title>彩色文本生成器 · 导出</title><style>" +
+                        "body{margin:0;padding:24px;background:#0b0b0f;color:#f0f0f0;" +
+                        "font:16px/1.7 'Segoe UI',system-ui,'Microsoft YaHei UI',sans-serif;white-space:pre-wrap;word-break:break-word}" +
+                        "</style></head><body>" + RenderPreview(code) + "</body></html>";
+                    File.WriteAllText(d.FileName, page, new UTF8Encoding(false));
+                    CallStr("status", "已导出：" + d.FileName);
                 }
-                catch { }
-                if (proc != null) break;
+                catch (Exception ex) { CallStr("status", "导出失败：" + ex.Message); }
             }
-            if (proc == null) { CallStr("status", "未检测到 SCP:SL 窗口（请先启动游戏，并让游戏以窗口化运行）"); return; }
-            string preview = text.Length > 120 ? text.Substring(0, 120) + "…" : text;
-            DialogResult r = MessageBox.Show(this, "即将发送到 SCP:SL 控制台：\r\n\r\n" + preview + "\r\n\r\n继续吗？", "发送到游戏", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (r != DialogResult.Yes) { CallStr("status", "已取消发送"); return; }
-            try
-            {
-                IntPtr h = proc.MainWindowHandle;
-                ShowWindow(h, 9);
-                SetForegroundWindow(h);
-                System.Threading.Thread.Sleep(450);
-                Clipboard.SetText(text);
-                SendKeys.SendWait("`");          // 打开控制台
-                System.Threading.Thread.Sleep(420);
-                SendKeys.SendWait("^a");
-                System.Threading.Thread.Sleep(120);
-                SendKeys.SendWait("^v");
-                System.Threading.Thread.Sleep(150);
-                SendKeys.SendWait("{ENTER}");
-                System.Threading.Thread.Sleep(220);
-                SendKeys.SendWait("`");          // 关闭控制台
-                CallStr("status", "✓ 已发送到游戏");
-            }
-            catch (Exception ex) { CallStr("status", "发送失败：" + ex.Message); }
         }
 
         // ============================================================ 生成
@@ -578,7 +559,6 @@ namespace RichTextGen
             }
             string code = sb.ToString();
             if (prefix.Length > 0 && code.Length > 0) code = prefix + " " + code;
-            lastCode = code;                       // 供全局热键「复制 / 发送」使用
 
             Call("result", "{\"code\":" + Quote(code) + ",\"preview\":" + Quote(RenderPreview(code)) + ",\"length\":" + code.Length + "}");
         }
@@ -686,6 +666,73 @@ namespace RichTextGen
         }
 
         // ============================================================ 文件
+        // ---------- 记事本文档（概念设计 M2）：打开 / 保存 / 另存为 ----------
+        private void OpenFile()
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Filter = "文本文件|*.txt;*.md;*.log;*.csv|所有文件|*.*";
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    string txt = ReadText(d.FileName);
+                    Call("fileOpened",
+                        "{\"ok\":true,\"path\":" + Quote(d.FileName) +
+                        ",\"name\":" + Quote(Path.GetFileName(d.FileName)) +
+                        ",\"text\":" + Quote(txt) + "}");
+                    CallStr("status", "已打开 " + Path.GetFileName(d.FileName) + "（" + txt.Length + " 字符）");
+                }
+                catch (Exception ex)
+                {
+                    Call("fileOpened", "{\"ok\":false,\"msg\":" + Quote("打开失败：" + ex.Message) + "}");
+                }
+            }
+        }
+        private void SaveFile(string arg)
+        {
+            // arg = encodeURIComponent(path) 或 "encodeURIComponent(path)|encodeURIComponent(text)"
+            //（Windows 文件名不允许含 '|'，用第一个 '|' 切分安全；无路径 → 走另存为弹窗）
+            string path = "", text = "";
+            int sep = arg.IndexOf('|');
+            if (sep < 0) { text = Un(arg); }
+            else { path = Un(arg.Substring(0, sep)); text = Un(arg.Substring(sep + 1)); }
+            if (path.Length == 0) { SaveAs(text); return; }
+            try
+            {
+                WriteText(path, text);
+                Call("fileSaved", "{\"ok\":true,\"path\":" + Quote(path) +
+                     ",\"name\":" + Quote(Path.GetFileName(path)) + "}");
+            }
+            catch (Exception ex)
+            {
+                Call("fileSaved", "{\"ok\":false,\"msg\":" + Quote("保存失败：" + ex.Message) + "}");
+            }
+        }
+        private void SaveAsFile(string text) { SaveAs(text); }
+        private void SaveAs(string text)
+        {
+            using (SaveFileDialog d = new SaveFileDialog())
+            {
+                d.Filter = "文本文件|*.txt|所有文件|*.*";
+                d.FilterIndex = 1;
+                d.FileName = "无标题.txt";
+                if (d.ShowDialog(this) != DialogResult.OK) { Call("fileSaved", "{\"ok\":false,\"msg\":\"已取消\"}"); return; }
+                try
+                {
+                    WriteText(d.FileName, text);
+                    Call("fileSaved", "{\"ok\":true,\"path\":" + Quote(d.FileName) +
+                         ",\"name\":" + Quote(Path.GetFileName(d.FileName)) + "}");
+                }
+                catch (Exception ex)
+                {
+                    Call("fileSaved", "{\"ok\":false,\"msg\":" + Quote("保存失败：" + ex.Message) + "}");
+                }
+            }
+        }
+        private static void WriteText(string path, string text)
+        {
+            File.WriteAllText(path, text, new UTF8Encoding(true));
+        }
         private void ImportTxt()
         {
             using (OpenFileDialog d = new OpenFileDialog())

@@ -148,6 +148,71 @@
   .c-user{align-self:flex-end;background:var(--accent);color:var(--accentText)}
   .c-bot{align-self:flex-start;background:var(--card);border:1px solid var(--line)}
   .c-err{border:1px solid #c42b1c;color:#c42b1c}
+  /* ===== Win11 记事本式容器（概念设计 M1） ===== */
+  #menubar{flex:0 0 auto;height:33px;display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--bg)}
+  #menubar .mi{padding:4px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer}
+  #menubar .mi:hover{background:var(--hover)}
+  #tabBar{flex:0 0 auto;height:36px;display:flex;align-items:flex-end;gap:4px;padding:3px 10px 0;background:var(--bg);border-bottom:1px solid var(--line);overflow:hidden}
+  #tabs{display:flex;align-items:flex-end;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:thin}
+  #tabs::-webkit-scrollbar{height:4px}
+  #newTab{flex:0 0 auto;width:34px;height:28px;border:1px solid var(--inputLine);background:var(--input);color:var(--text);
+          border-radius:var(--r4);cursor:pointer;font-size:15px;line-height:1}
+  #newTab:hover{background:var(--hover)}
+  .tab{display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;height:31px;min-width:120px;max-width:220px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--bg);color:var(--sub);font-size:12.5px;cursor:pointer;white-space:nowrap;overflow:hidden}
+  .tab.on{background:var(--card);color:var(--text);font-weight:600}
+  .tab .tbt{overflow:hidden;text-overflow:ellipsis}
+  .tab .tbx{flex:0 0 auto;width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:.7}
+  .tab .tbx:hover{background:var(--hover);opacity:1}
+  /* 菜单下拉 */
+  #menuDrop{position:fixed;min-width:210px;background:var(--card);border:1px solid var(--line);border-radius:var(--r8);
+            box-shadow:0 8px 28px rgba(0,0,0,.28);padding:4px;z-index:60;display:none}
+  #menuDrop.on{display:block}
+  #menuDrop .mi-item{padding:6px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer;
+                     display:flex;justify-content:space-between;gap:24px;align-items:center;color:var(--text)}
+  #menuDrop .mi-item:hover{background:var(--accent);color:var(--accentText);filter:none}
+  #menuDrop .mi-item .k{opacity:.6;font-size:11.5px;white-space:nowrap}
+  #menuDrop .mi-sep{height:1px;background:var(--line);margin:4px 6px}
+  /* 选区浮动工具条（M4） */
+  #fmtBar{position:fixed;display:none;align-items:center;gap:4px;background:var(--card);border:1px solid var(--line);
+          border-radius:var(--r8);box-shadow:0 6px 22px rgba(0,0,0,.28);padding:5px 8px;z-index:70}
+  #fmtBar.on{display:flex}
+  #fmtBar button{min-width:28px;height:26px;border:1px solid var(--inputLine);background:var(--input);color:var(--text);
+                 border-radius:var(--r4);cursor:pointer;font-size:12.5px;padding:0 8px;font:inherit}
+  #fmtBar button:hover{filter:brightness(.92)}
+  #fmtBar button:active{transform:scale(.94)}
+  #fmtBar .fb-sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+  #main{padding:0 12px 12px;gap:12px}
+  #mainEditor{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+  #edToolbar{flex:0 0 auto;height:34px;display:flex;align-items:center;gap:10px;padding:0 4px}
+  #edToolbar .seg{display:flex;border:1px solid var(--inputLine);border-radius:var(--r4);overflow:hidden}
+  #edToolbar .seg button{border:0;background:var(--input);color:var(--sub);padding:5px 14px;font-size:12.5px;cursor:pointer;font:inherit}
+  #edToolbar .seg button.on{background:var(--accent);color:var(--accentText);font-weight:600}
+  #edToolbar .seg button:not(.on):hover{background:var(--hover)}
+  #edToolbar .sp{flex:1}
+  #edSrc{flex:1;min-height:0;width:100%;resize:none;background:var(--input);color:var(--text);border:1px solid var(--inputLine);
+         border-radius:var(--r8);padding:10px 12px;font:13.5px/1.6 "Cascadia Mono","Consolas",monospace;outline:none;
+         user-select:text;white-space:pre;overflow:auto}
+  #edSrc:focus{border-color:var(--accent)}
+  #edRich{flex:1;min-height:0;background:var(--input);color:var(--text);border:1px solid var(--inputLine);
+          border-radius:var(--r8);padding:10px 12px;overflow:auto;font-size:15px;line-height:1.6;outline:none;
+          user-select:text;white-space:pre-wrap;word-break:break-word;display:none}
+  #edRich:focus{border-color:var(--accent)}
+  #ws{flex:0 0 540px;min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);transition:flex-basis .18s ease;position:relative}
+  #ws.cold{flex-basis:38px}
+  #wsHead{flex:0 0 auto;height:40px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px}
+  #wsHead .wt{font-weight:600;font-size:13px}
+  #wsHead .sp{flex:1}
+  #wsFold{width:30px;height:26px;border:1px solid var(--inputLine);background:var(--input);color:var(--text);
+          border-radius:var(--r4);cursor:pointer;font-size:14px;line-height:1}
+  #wsFold:hover{background:var(--hover)}
+  #wsInner{flex:1;min-height:0;display:flex;flex-direction:column}
+  #wsBody{flex:1;min-height:0;display:flex;gap:12px;min-width:0;padding:0 12px 12px 10px}
+  #ws.cold #wsHead,#ws.cold #wsInner{display:none}
+  #wsFold2{display:none}
+  #ws.cold #wsFold2{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;height:100%;border:0;
+                    background:transparent;color:var(--sub);cursor:pointer;font-size:18px;padding-top:14px}
+  #ws.cold #wsFold2:hover{color:var(--accent)}
+  #ws.cold #wsFold2 .wst{writing-mode:vertical-rl;font-size:12px;letter-spacing:4px}
 </style>
 </head>
 <body>
@@ -163,11 +228,42 @@
   <button class="wbtn close" onclick="host('close')">✕</button>
 </div>
 <div id="cursorHide"></div>
+<div id="menubar">
+  <span class="mi" data-m="file">文件</span>
+  <span class="mi" data-m="edit">编辑</span>
+  <span class="mi" data-m="format">格式</span>
+  <span class="mi" data-m="help">帮助</span>
+</div>
+<div id="tabBar">
+  <span id="tabs"></span>
+  <button id="newTab" title="新建标签页（Ctrl+N）">+</button>
+</div>
 <div id="main">
-  <nav>
+  <!-- 主体编辑区（记事本核心；M3 接入标签 / HTML 双向渲染） -->
+  <div id="mainEditor">
+    <div id="edToolbar">
+      <span class="seg">
+        <button id="mdSrc" class="on" title="源码模式：显示原始标签文本（关闭渲染）">源码</button>
+        <button id="mdRich" title="渲染模式：所见即所得，选中文本可加样式（开启渲染）">渲染</button>
+      </span>
+      <span class="hint" id="mdHint">渲染模式：文本实时按 Unity/TMP 标签渲染，标签与本文双向转换</span>
+    </div>
+    <textarea id="edSrc" spellcheck="false" placeholder="在这里输入文本（支持多标签）…（M3 里程碑将接入标签 / HTML 双向实时渲染）"></textarea>
+    <div id="edRich" contenteditable="true"></div>
+  </div>
+
+  <!-- 右侧工作台（RichTextGen 全部功能迁入；可折叠到侧边留出白边） -->
+  <div id="ws">
+    <div id="wsHead">
+      <span class="wt">📋 工作台</span>
+      <span class="sp"></span>
+      <button id="wsFold" title="折叠到侧边">‹</button>
+    </div>
+    <div id="wsInner">
+      <div id="wsBody">
+        <nav>
     <button class="on" data-p="work"><span class="g">◈</span>工作台</button>
     <button data-p="gen"><span class="g">✎</span>文本生成</button>
-    <button data-p="send"><span class="g">➤</span>发送中心</button>
     <button data-p="img"><span class="g">▦</span>图片系统</button>
     <button data-p="trans"><span class="g">⇄</span>在线翻译</button>
     <button data-p="chat"><span class="g">✦</span>AI 对话</button>
@@ -265,7 +361,7 @@
         <textarea id="out" readonly></textarea>
         <div class="row" style="margin-top:10px">
           <button class="b p" onclick="host('copy|'+encodeURIComponent(out.value))">复制代码</button>
-          <button class="b" onclick="host('copy|'+encodeURIComponent(out.value))">发送到游戏（复制后粘贴）</button>
+          <button class="b" onclick="host('exportHtml|'+encodeURIComponent(out.value))">导出 HTML（浏览器预览）</button>
           <span class="stat"><span>字符数 <b id="len">0</b></span><span>标签数 <b id="tagc">0</b></span></span>
         </div>
       </div>
@@ -276,17 +372,6 @@
       <div class="card"><h3>文本生成</h3>
         <p class="hint">生成能力已并入「工作台」：颜色系统三模式、Unity/TMP 全标签、逐字符渐变 / 轴对称渐变、黑底实时预览、一键复制。</p>
         <button class="b" onclick="go('work')">去工作台</button></div>
-    </section>
-
-    <!-- 发送中心 -->
-    <section class="page" id="p-send">
-      <div class="card"><h3>发送中心</h3>
-        <p class="hint">把生成的代码送进 SCP:SL 控制台：程序会自动检测游戏进程、激活窗口、打开控制台(~)、粘贴并回车。</p>
-        <div class="row"><button class="b p" onclick="host('sendGame|'+encodeURIComponent(out.value))">⚡ 全自动发送到游戏</button>
-        <button class="b" onclick="host('copy|'+encodeURIComponent(out.value));host('status|已复制，切到游戏按 ~ 粘贴')">仅复制（手动粘贴）</button>
-        <button class="b" onclick="host('openUrl|https://github.com/lll111III11/RichTextGen')">打开仓库</button></div>
-        <p class="hint">全自动发送：自动检测 SCP:SL 进程 → 激活窗口 → 打开控制台(~) → 粘贴 → 回车 → 关闭控制台；发送前会弹确认。<b>建议游戏使用窗口化、并以管理员身份运行本程序。</b></p>
-      </div>
     </section>
 
     <!-- 图片系统 -->
@@ -311,7 +396,7 @@
           </select>
           <span class="hint">已预装免费服务，开箱即用</span></div>
         <div class="row"><label class="f">Endpoint</label>
-          <input type="text" id="tEndpoint" placeholder="翻译服务的 API 地址（POST JSON）" style="width:420px"></div>
+          <input type="text" id="tEndpoint" placeholder="翻译服务的 API 地址（POST JSON）" style="flex:1;min-width:180px;max-width:420px"></div>
         <div class="row"><label class="f">API Key</label>
           <input type="text" id="tKey" placeholder="可留空（部分服务不需要）" style="width:300px">
           <label class="f">源语言</label><input type="text" id="tFrom" value="zh" style="width:70px">
@@ -374,6 +459,10 @@
     </section>
 
   </div>
+      </div>
+    </div>
+    <button id="wsFold2" title="展开工作台"><span>≫</span><span class="wst">工作台</span></button>
+  </div>
 </div>
 
 <div id="statusbar">
@@ -396,7 +485,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.7.0.9";
+const VERSION = "5.8.0.0";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -881,6 +970,7 @@ host('ready');
     while (stack.length) out += RENDER[stack.pop()].close;
     return out;
   }
+  window.renderLine = renderLine;   // 追加（M3）：编辑器渲染模式复用「标签 → HTML」渲染
 
   /* ---- 逐行渲染 ---- */
   window.tpRender = function(){
@@ -1312,6 +1402,527 @@ host('ready');
     libBox.innerHTML = '';
     addLibSwatches(o.list.map(function(x){ return { name: x[0], hex: x[1] }; }), o.source);
   };
+})();
+</script>
+<script>
+/* ================= 追加：Win11 记事本式容器交互 + 菜单（概念设计 M1/M2） ================= */
+(function(){
+  const ws = document.getElementById('ws');
+  let cold = false;
+  try { cold = localStorage.getItem('rtgWsCold') === '1'; } catch(e) {}
+  const apply = () => {
+    ws.classList.toggle('cold', cold);
+    try { localStorage.setItem('rtgWsCold', cold ? '1' : '0'); } catch(e) {}
+  };
+  document.getElementById('wsFold').onclick = () => { cold = true; apply(); };
+  document.getElementById('wsFold2').onclick = () => { cold = false; apply(); };
+  apply();
+
+  /* 折叠态点击右侧导航 → 自动展开 */
+  document.addEventListener('click', function(ev){
+    if (ev.target.closest('nav button') && cold) { cold = false; apply(); }
+  });
+
+  /* ---- 菜单下拉（M2：文件完整；编辑走原生命令；格式/帮助占位） ---- */
+  const MENUS = {
+    file: [
+      { t: '新建',            k: 'Ctrl+N',    fn: () => { DocM.newTab(); } },
+      { t: '打开…',           k: 'Ctrl+O',    fn: () => { host('openFile'); } },
+      { sep: true },
+      { t: '保存',            k: 'Ctrl+S',    fn: () => { DocM.save(); } },
+      { t: '另存为…',         k: 'Ctrl+Shift+S', fn: () => { DocM.saveAs(); } }
+    ],
+    edit: [
+      { t: '撤销',            k: 'Ctrl+Z',    fn: () => edCmd('undo') },
+      { t: '重做',            k: 'Ctrl+Y',    fn: () => edCmd('redo') },
+      { sep: true },
+      { t: '剪切',            k: 'Ctrl+X',    fn: () => edCmd('cut') },
+      { t: '复制',            k: 'Ctrl+C',    fn: () => edCmd('copy') },
+      { t: '粘贴',            k: 'Ctrl+V',    fn: () => edCmd('paste') },
+      { t: '全选',            k: 'Ctrl+A',    fn: () => edCmd('selectAll') }
+    ],
+    format: [
+      { t: '颜色系统…',       k: '',          fn: () => { showWork('work'); } },
+      { t: '样式与渐变…',     k: '',          fn: () => { showWork('work'); } },
+      { t: '拾色器…',         k: '',          fn: () => { showWork('work'); openPicker(); } },
+      { sep: true },
+      { t: '切换渲染模式',  k: 'Ctrl+Shift+R', fn: () => { if (EdMode.current() === 'rich') EdMode.setMode('src'); else EdMode.setMode('rich'); } }
+    ],
+    help: [
+      { t: '立即检测更新',    k: '',          fn: () => { host('checkUpdate'); } },
+      { t: '查看发布页',      k: '',          fn: () => { host('openUrl|https://github.com/lll111III11/RichTextGen/releases/latest'); } },
+      { sep: true },
+      { t: '关于',            k: '',          fn: () => { status('彩色文本生成器 · Win11 记事本概念版 · 采用 CC0 许可'); } }
+    ]
+  };
+  const drop = document.createElement('div');
+  drop.id = 'menuDrop';
+  document.body.appendChild(drop);
+  const openMenu = (name, anchor) => {
+    const items = MENUS[name]; if (!items) return;
+    drop.innerHTML = '';
+    items.forEach(it => {
+      if (it.sep){ const d = document.createElement('div'); d.className = 'mi-sep'; drop.appendChild(d); return; }
+      const d = document.createElement('div'); d.className = 'mi-item';
+      const s1 = document.createElement('span'); s1.textContent = it.t;
+      const s2 = document.createElement('span'); s2.className = 'k'; s2.textContent = it.k;
+      d.appendChild(s1); d.appendChild(s2);
+      d.onclick = () => { drop.classList.remove('on'); it.fn(); };
+      drop.appendChild(d);
+    });
+    drop.classList.add('on');
+    const r = anchor.getBoundingClientRect();
+    let x = r.left, y = r.bottom + 2;
+    if (x + 220 > window.innerWidth) x = Math.max(4, window.innerWidth - 220);
+    drop.style.left = x + 'px'; drop.style.top = y + 'px';
+  };
+  const closeMenu = () => drop.classList.remove('on');
+  document.querySelectorAll('#menubar .mi').forEach(mi => {
+    mi.onclick = e => {
+      e.stopPropagation();
+      if (drop.classList.contains('on') && drop.dataset.m === mi.dataset.m) closeMenu();
+      else { drop.dataset.m = mi.dataset.m; openMenu(mi.dataset.m, mi); }
+    };
+  });
+  document.addEventListener('mousedown', ev => { if (!drop.contains(ev.target)) closeMenu(); });
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeMenu(); });
+  function edCmd(cmd){
+    const ed = document.getElementById('edSrc'); if (!ed) return;
+    ed.focus();
+    try { document.execCommand(cmd); } catch(e) { status('该命令暂不可用'); }
+    ed.focus();
+  }
+  function showWork(p){ if (cold) { cold = false; apply(); } go(p); }
+  window.openMenu = openMenu;
+})();
+</script>
+<script>
+/* ================= 追加：文档管理器（多标签，概念设计 M2） ================= */
+const DocM = (function(){
+  const edSrc = () => document.getElementById('edSrc');
+  const tabsBox = () => document.getElementById('tabs');
+  let docs = [], activeId = 0, seq = 0, viewHook = null;
+  function byId(id){ for (const d of docs) if (d.id === id) return d; return null; }
+  function addDoc(name, path, buffer, activate){
+    seq++;
+    const d = { id: seq, name: name || '无标题', path: path || '', buffer: buffer || '', dirty: false };
+    docs.push(d);
+    if (activate !== false){ activeId = d.id; loadEditor(d); }
+    render();
+    return d;
+  }
+  function render(){
+    const bar = tabsBox(); if (!bar) return;
+    bar.innerHTML = '';
+    for (const d of docs){
+      const tab = document.createElement('div');
+      tab.className = 'tab' + (d.id === activeId ? ' on' : '');
+      const sp = document.createElement('span'); sp.className = 'tbt';
+      sp.textContent = (d.dirty ? '● ' : '') + d.name;
+      const x = document.createElement('span'); x.className = 'tbx'; x.textContent = '✕';
+      x.title = '关闭';
+      x.onclick = ev => { ev.stopPropagation(); closeTab(d.id); };
+      tab.onclick = () => switchTab(d.id);
+      tab.appendChild(sp); tab.appendChild(x);
+      bar.appendChild(tab);
+    }
+    updateTitle();
+  }
+  function loadEditor(d){ edSrc().value = d.buffer; if (viewHook) viewHook(); }
+  /* 当前编辑区的真实文本：渲染模式下 contenteditable 里可能是最新，从这里统一取 */
+  function getActiveText(){
+    if (typeof EdMode !== 'undefined' && EdMode && EdMode.current() === 'rich') return EdMode.serializeNow();
+    return edSrc().value;
+  }
+  /* 渲染模式下输入 → 直接写 buffer（并触发脏标记） */
+  function setActiveBuffer(v){
+    const a = byId(activeId); if (!a) return false;
+    if (a.buffer === v) return false;
+    a.buffer = v;
+    if (!a.dirty){ a.dirty = true; render(); }
+    return true;
+  }
+  function syncEditor(){
+    const a = byId(activeId);
+    if (a) loadEditor(a);
+  }
+  function updateTitle(){
+    const a = byId(activeId);
+    try { document.title = (a && a.name ? a.name : '无标题') + ' - 彩色文本生成器'; } catch(e){}
+  }
+  function newTab(){
+    const d = addDoc('无标题', '', '', true);
+    edSrc().focus();
+    status('已新建标签页');
+    return d;
+  }
+  function switchTab(id){
+    if (id === activeId) return;
+    const prev = byId(activeId);
+    if (prev) prev.buffer = getActiveText();
+    activeId = id;
+    syncEditor();
+    render();
+    edSrc().focus();
+  }
+  function closeTab(id){
+    const d = byId(id); if (!d) return;
+    if (d.id === activeId) d.buffer = getActiveText();
+    if (d.dirty && !confirm('「' + d.name + '」尚未保存，关闭将丢失更改。是否继续？')) return;
+    const at = docs.findIndex(x => x.id === id);
+    docs.splice(at, 1);
+    if (activeId === id){
+      activeId = docs.length ? (docs[at] || docs[at - 1] || docs[0]).id : 0;
+      syncEditor();
+    }
+    if (docs.length === 0) addDoc('无标题', '', '', true);
+    else render();
+  }
+  function save(){
+    const a = byId(activeId); if (!a) return;
+    a.buffer = getActiveText();
+    host('saveFile|' + encodeURIComponent(a.path) + '|' + encodeURIComponent(a.buffer));
+  }
+  function saveAs(){
+    const a = byId(activeId); if (!a) return;
+    a.buffer = getActiveText();
+    host('saveAsFile|' + encodeURIComponent(a.buffer));
+  }
+  function openFromHost(o){
+    const msg = (o && o.msg) || '';
+    if (!o || !o.ok){ status(msg || '打开失败'); return; }
+    const path = o.path || '';
+    for (const d of docs){
+      if (path && d.path && d.path.toLowerCase() === path.toLowerCase()){
+        switchTab(d.id); status('已切换到已打开的 ' + d.name); return;
+      }
+    }
+    addDoc(o.name || '无标题', path, o.text || '', true);
+    status(msg || '已打开 ' + (o.name || ''));
+  }
+  function saved(o){
+    if (!o || !o.ok){ status((o && o.msg) || '保存未完成'); return; }
+    const a = byId(activeId); if (!a) return;
+    a.path = o.path; a.name = o.name; a.dirty = false;
+    render();
+    status('已保存 ' + (o.name || ''));
+  }
+  function markDirty(){
+    const a = byId(activeId); if (!a) return;
+    const v = edSrc().value;
+    if (a.buffer === v && !a.dirty) return;
+    a.buffer = v;
+    if (!a.dirty){ a.dirty = true; render(); }
+  }
+  edSrc().addEventListener('input', markDirty);
+
+  /* C# 回调 */
+  window.ui.fileOpened = o => { openFromHost(o); };
+  window.ui.fileSaved = o => { saved(o); };
+
+  /* 全局快捷键（录制热键时跳过，避免误触发） */
+  document.addEventListener('keydown', function(ev){
+    if (typeof hkCapture !== 'undefined' && hkCapture) return;
+    if (!ev.ctrlKey) return;
+    const k = ev.key;
+    if (k === 'n' || k === 'N'){ ev.preventDefault(); newTab(); }
+    else if (k === 'o' || k === 'O'){ ev.preventDefault(); host('openFile'); }
+    else if (k === 's' || k === 'S'){
+      ev.preventDefault();
+      if (ev.shiftKey) saveAs(); else save();
+    }
+  });
+
+  document.getElementById('newTab').onclick = newTab;
+  return { newTab, switchTab, closeTab, save, saveAs, addDoc, openFromHost, saved, markDirty,
+           setActiveBuffer, setViewHook: f => { viewHook = f; } };
+})();
+/* 启动：创建第一个「无标题」标签 */
+DocM.addDoc('无标题', '', '', true);
+</script>
+<script>
+/* ================= 追加：编辑器双模式（源码 / 渲染所见即所得）+ 标签↔HTML 双向转换（概念设计 M3） ================= */
+const EdMode = (function(){
+  var composing_ = false;               // 中文输入法拼写中不序列化
+  const src = () => document.getElementById('edSrc');
+  const rich = () => document.getElementById('edRich');
+  let mode = 'src';                       // 'src' 源码 | 'rich' 渲染
+
+  /* ---- 源码（TMP 标签）→ HTML：逐行复用 renderLine ---- */
+  function toHtml(tags){
+    const s = tags || '';
+    if (!s) return '';
+    return s.split('\n').map(l => (typeof renderLine === 'function' ? renderLine(l) : l)).join('<br>');
+  }
+
+  /* ---- HTML → 源码（白名单序列化） ---- */
+  function rgbToHex(c){
+    if (!c) return c;
+    c = String(c).trim();
+    if (c.charAt(0) === '#') return c;
+    const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(c);
+    if (m) return '#' + [ +m[1], +m[2], +m[3] ].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).toUpperCase().padStart(2, '0')).join('');
+    return c;
+  }
+  function opacityToAlpha(op){
+    const n = Math.round((parseFloat(op) || 1) * 255);
+    return Math.max(0, Math.min(255, n)).toString(16).toUpperCase();
+  }
+  const PAN = ['b', 'i', 'u', 's', 'sub', 'sup'];       // 白名单：直接映射的 HTML 标签
+  let _buf = '';
+  function walk(node){
+    if (node.nodeType === 3) { _buf += node.textContent; return; }
+    if (node.nodeType !== 1) return;
+    const t = node.tagName.toLowerCase();
+    if (t === 'br') { _buf += '\n'; return; }
+    if (t === 'div' || t === 'p') { _buf += '\n'; walkKids(node.childNodes); return; }
+    if (t === 'a'){
+      const href = node.getAttribute('href');
+      if (href){ _buf += '<link=' + href + '>'; walkKids(node.childNodes); _buf += '</link>'; return; }
+      walkKids(node.childNodes); return;
+    }
+    if (t === 'span'){
+      const st = node.style || {}, open = [], close = [];
+      if (st.color){ open.push('<color=' + rgbToHex(st.color) + '>'); close.push('</color>'); }
+      if (st.fontSize){ open.push('<size=' + st.fontSize + '>'); close.push('</size>'); }
+      if (st.opacity && st.opacity !== '1'){ open.push('<alpha=' + opacityToAlpha(st.opacity) + '>'); close.push('</alpha>'); }
+      if (st.backgroundColor && !/rgba\(0, 0, 0, 0\)|transparent|^none$/i.test(st.backgroundColor)){
+        open.push('<mark=' + rgbToHex(st.backgroundColor) + '>'); close.push('</mark>');
+      }
+      if (!open.length){ walkKids(node.childNodes); return; }
+      _buf += open.join('');
+      walkKids(node.childNodes);
+      _buf += close.slice().reverse().join('');
+      return;
+    }
+    if (PAN.indexOf(t) >= 0){
+      _buf += '<' + t + '>';
+      walkKids(node.childNodes);
+      _buf += '</' + t + '>';
+      return;
+    }
+    walkKids(node.childNodes);
+  }
+  function walkKids(nodes){ for (let i = 0; i < nodes.length; i++) walk(nodes[i]); }
+  function serializeRich(el){
+    _buf = '';
+    walk(el);
+    return _buf.replace(/^\n+/, '').replace(/\n+$/, '');
+  }
+
+  /* ---- 模式切换：关闭渲染→源码 / 开启渲染→所见即所得 ---- */
+  function setMode(m){
+    if (m === mode) return;
+    if (m === 'rich'){
+      rich().innerHTML = toHtml(src().value);
+      src().style.display = 'none';
+      rich().style.display = 'block';
+      mode = 'rich';
+      rich().focus();
+      ui.status('已开启渲染模式（所见即所得编辑）');
+    } else {
+      const text = serializeRich(rich());
+      src().value = text;
+      if (DocM && DocM.setActiveBuffer) DocM.setActiveBuffer(text);
+      rich().style.display = 'none';
+      src().style.display = 'block';
+      mode = 'src';
+      src().focus();
+      ui.status('已关闭渲染，显示原始标签源码');
+    }
+    document.getElementById('mdSrc').classList.toggle('on', mode === 'src');
+    document.getElementById('mdRich').classList.toggle('on', mode === 'rich');
+  }
+  function syncFromRich(){
+    if (mode !== 'rich') return;
+    const text = serializeRich(rich());
+    if (DocM && DocM.setActiveBuffer) DocM.setActiveBuffer(text);
+  }
+  /* 文档切换（换标签 / 打开文件）后把 buffer 渲染进 contenteditable */
+  function onDocChanged(){
+    if (mode !== 'rich') return;
+    rich().innerHTML = toHtml(src().value);
+  }
+
+  document.getElementById('mdSrc').onclick = () => setMode('src');
+  document.getElementById('mdRich').onclick = () => setMode('rich');
+  rich().addEventListener('compositionstart', () => { composing_ = true; });
+  rich().addEventListener('compositionend', () => { composing_ = false; syncFromRich(); });
+  rich().addEventListener('input', () => { if (!composing_) syncFromRich(); });
+  rich().addEventListener('blur', syncFromRich);
+
+  if (DocM && DocM.setViewHook) DocM.setViewHook(onDocChanged);
+
+  /* 渲染模式下按 Ctrl+B/I/U 快捷加粗；Ctrl+Shift+R 切换渲染模式 */
+  document.addEventListener('keydown', function(ev){
+    if (typeof hkCapture !== 'undefined' && hkCapture) return;
+    const ctrl = ev.ctrlKey, k = ev.key.toLowerCase();
+    if (!ctrl) return;
+    if (k === 'r' && ev.shiftKey){
+      ev.preventDefault();
+      if (mode === 'rich') setMode('src'); else setMode('rich');
+      return;
+    }
+    if (mode !== 'rich') return;
+    const tag = (k === 'b') ? 'bold' : (k === 'i') ? 'italic' : (k === 'u') ? 'underline' : null;
+    if (tag){ ev.preventDefault(); document.execCommand(tag); syncFromRich(); }
+  });
+
+  return { current: () => mode, setMode, toHtml, serializeNow: () => serializeRich(rich()),
+             serializeRange: () => {
+               const sel = window.getSelection();
+               if (!sel || sel.rangeCount === 0 || sel.isCollapsed || !rich().contains(sel.anchorNode)) return '';
+               const h = document.createElement('div');
+               h.appendChild(sel.getRangeAt(0).cloneContents());
+               return serializeRich(h);
+             } };
+})();
+</script>
+<script>
+/* ================= 追加：选区浮动工具条 + 选区监视（概念设计 M4） ================= */
+(function(){
+  if (typeof EdMode === 'undefined' || typeof DocM === 'undefined') return;
+  const edSrcEl = () => document.getElementById('edSrc');
+  const richEl = () => document.getElementById('edRich');
+
+  /* ---- 浮动工具条 ---- */
+  const bar = document.createElement('div');
+  bar.id = 'fmtBar';
+  bar.innerHTML =
+    '<button data-f="bold" title="加粗">B</button>' +
+    '<button data-f="italic" title="斜体">I</button>' +
+    '<button data-f="underline" title="下划线">U</button>' +
+    '<button data-f="strike" title="删除线">S</button>' +
+    '<span class="fb-sep"></span>' +
+    '<button data-f="size" title="字号">字号</button>' +
+    '<button data-f="color" title="颜色">颜色</button>' +
+    '<button data-f="clear" title="清除格式">清除</button>';
+  document.body.appendChild(bar);
+  const hideBar = () => bar.classList.remove('on');
+  bar.addEventListener('mousedown', ev => ev.preventDefault());   // 保持编辑器选区不丢
+
+  /* ---- 选区监视卡（工作台顶部；渲染/源码选区实时显示） ---- */
+  const watchCard = document.createElement('div');
+  watchCard.className = 'card';
+  watchCard.style.display = 'none';
+  watchCard.innerHTML =
+    '<h3>选区监视（左键拖拽选中文本，实时显示于此）</h3>' +
+    '<div id="selWatch" class="hint" style="white-space:pre-wrap;word-break:break-all;user-select:text"></div>' +
+    '<div class="row" style="margin-top:10px">' +
+      '<button class="b p" id="selToWork">载入工作台生成</button>' +
+      '<span class="hint" id="selWatchInfo"></span>' +
+    '</div>';
+  const pWork = document.getElementById('p-work');
+  pWork.insertBefore(watchCard, pWork.firstChild);
+  document.getElementById('selToWork').onclick = () => {
+    const t = document.getElementById('selWatch').textContent;
+    if (!t){ ui.status('暂无选中文本'); return; }
+    document.getElementById('txt').value = t;
+    gen();
+    ui.status('已载入选中文本「' + t.slice(0, 20) + '…」到工作台并生成');
+  };
+
+  /* ---- 定位：浮动在选区上方（顶部放不下则放下方） ---- */
+  function positionBar(rect){
+    const bw = bar.offsetWidth || 230, bh = bar.offsetHeight || 36;
+    let x = rect.left + rect.width / 2 - bw / 2;
+    x = Math.max(6, Math.min(x, window.innerWidth - bw - 6));
+    let y = rect.top - bh - 8;
+    if (y < 66) y = rect.top + rect.height + 8;
+    bar.style.left = x + 'px';
+    bar.style.top = y + 'px';
+  }
+
+  /* ---- 选区实时回写工作台监视卡 ---- */
+  let lastWatch = '';
+  function watch(cond, text){
+    if (!cond){ watchCard.style.display = 'none'; return; }
+    const t = text || '';
+    if (t !== lastWatch){
+      lastWatch = t;
+      document.getElementById('selWatch').textContent = t.length > 200 ? t.slice(0, 200) + '…' : t;
+      document.getElementById('selWatchInfo').textContent = '已选中 ' + t.length + ' 字符';
+    }
+    watchCard.style.display = '';
+  }
+
+  document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    if (EdMode.current() === 'rich'){
+      if (sel && !sel.isCollapsed && richEl().contains(sel.anchorNode) && richEl().contains(sel.focusNode)){
+        positionBar(sel.getRangeAt(0).getBoundingClientRect());
+        bar.classList.add('on');
+        watch(true, EdMode.serializeRange ? EdMode.serializeRange() : sel.toString());
+      } else { hideBar(); watch(false); }
+    } else {
+      const ed = edSrcEl();
+      if (ed && ed.selectionStart !== ed.selectionEnd){
+        const r = ed.getBoundingClientRect();
+        bar.classList.add('on');
+        bar.style.top = (r.top + 2) + 'px';
+        bar.style.left = (r.left + 4) + 'px';
+        watch(true, ed.value.slice(ed.selectionStart, ed.selectionEnd));
+      } else { hideBar(); watch(false); }
+    }
+  });
+
+  /* ---- 动作：渲染模式 contenteditable / 源码模式 selectionStart-end 包裹 ---- */
+  const wrapSrc = (before, after) => {
+    const ed = edSrcEl();
+    const s = ed.selectionStart, e = ed.selectionEnd;
+    if (s === e){ ui.status('请先在文本里选中一段文字'); hideBar(); return; }
+    const selText = ed.value.slice(s, e);
+    ed.value = ed.value.slice(0, s) + before + selText + after + ed.value.slice(e);
+    ed.selectionStart = s; ed.selectionEnd = e + before.length + after.length;
+    DocM.markDirty();
+    ed.focus();
+  };
+  const applySpan = style => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    const content = range.extractContents();
+    const span = document.createElement('span');
+    span.style.cssText = style;
+    span.appendChild(content);
+    range.insertNode(span);
+    const r = document.createRange();
+    r.selectNodeContents(span);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  };
+  let lastColor = '#FF0000';
+  const input = (label, def) => { try { return prompt(label, def); } catch(e) { return null; } };
+  bar.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-f]'); if (!b) return;
+    const f = b.dataset.f;
+    if (EdMode.current() === 'rich'){
+      if (f === 'bold') document.execCommand('bold');
+      else if (f === 'italic') document.execCommand('italic');
+      else if (f === 'underline') document.execCommand('underline');
+      else if (f === 'strike') document.execCommand('strikeThrough');
+      else if (f === 'clear') document.execCommand('removeFormat');
+      else if (f === 'size'){ const v = input('字号（px 或 em）：', '24'); if (v) applySpan('font-size:' + v); }
+      else if (f === 'color'){ const v = input('颜色（#RRGGBB 或色名）：', lastColor); if (v){ lastColor = v; applySpan('color:' + v); } }
+    } else {
+      if (f === 'bold') wrapSrc('<b>', '</b>');
+      else if (f === 'italic') wrapSrc('<i>', '</i>');
+      else if (f === 'underline') wrapSrc('<u>', '</u>');
+      else if (f === 'strike') wrapSrc('<s>', '</s>');
+      else if (f === 'clear'){
+        const ed = edSrcEl();
+        const s = ed.selectionStart, e = ed.selectionEnd;
+        if (s === e) return;
+        const cleaned = ed.value.slice(s, e).replace(/<\/?[a-z][^>]*>/gi, '');
+        ed.value = ed.value.slice(0, s) + cleaned + ed.value.slice(e);
+        ed.selectionStart = s; ed.selectionEnd = s + cleaned.length;
+        DocM.markDirty(); ui.status('已清除选中内容里的标签');
+      }
+      else if (f === 'size'){ const v = input('字号（px 或不带单位数字）：', '24'); if (v) wrapSrc('<size=' + v + '>', '</size>'); }
+      else if (f === 'color'){ const v = input('颜色（#RRGGBB 或色名）：', lastColor); if (v){ lastColor = v; wrapSrc('<color=' + v + '>', '</color>'); } }
+    }
+    hideBar();
+  });
 })();
 </script></body>
 </html>
