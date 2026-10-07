@@ -2,14 +2,14 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.8.0.0",
+  "version": "5.8.0.1",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
-  "type": "feature",
+  "type": "fix",
   "downloads": {
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.8.0.0 概念版（Win11 记事本 UI）：\n· 全新 Win11 记事本式界面：菜单栏（文件/编辑/格式/帮助）+ 多标签页 + 状态栏\n· 编辑器双模式：源码模式显示原始标签，渲染模式所见即所得实时渲染（标签↔HTML 双向转换）\n· 在编辑区选中文字后，右侧工作台的颜色/粗体/斜体/下划线/删除线/上下标/字号/高亮/透明度等控件实时套用到该段文字（源码与渲染两种模式均可）；同一项重复修改为替换而非叠加，可一键「清除选中格式」\n· 原生文件支持：打开/保存/另存为（Ctrl+N/O/S/Shift+S），多标签脏标记与关闭确认\n· 主窗口与安装程序支持拖拽缩放并记忆窗口位置大小；右侧工作台保留全部既有功能并可折叠到侧边；取消「发送到游戏」，生成结果支持复制或导出 HTML 预览"
+  "notes": "v5.8.0.1 功能性修复：\n· 修复选中文字时浮出的工具条遮挡正文的问题，移除该浮条；改为右侧工作台的颜色/样式控件实时套用到编辑区选中的文字\n· 修复渲染模式下反复修改颜色会层层嵌套的问题，同一项重复修改现在为替换而非叠加\n· 修复仅设置粗体等单项样式时误加默认白色、导致文字在白底上看不清的问题，改为按控件分别套用\n· 无选区时工作台的整段生成、复制代码与导出 HTML 保持原样"
 }
