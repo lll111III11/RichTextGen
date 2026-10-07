@@ -461,7 +461,9 @@ namespace
         if (g_fBold) { DeleteObject(g_fBold); g_fBold = NULL; }
     }
 
-    /// 按当前 DPI 重排全部控件（WM_CREATE 与 WM_DPICHANGED 共用同一套坐标，避免两处不一致）
+    /// 按当前窗口客户区大小 + DPI 重排全部控件（WM_CREATE / WM_SIZE / WM_DPICHANGED 共用）。
+    /// 可缩放：许可框吃掉多余高度、安装路径框吃掉多余宽度、按钮钉在右下角。
+    /// 缩到设计尺寸(720x500)时坐标与原固定布局逐像素一致，只在更小/更大时才变化。
     void LayoutControls(HWND hwnd)
     {
         DisposeFonts();
@@ -473,26 +475,84 @@ namespace
         HMODULE ux = LoadLibraryW(L"uxtheme.dll");
         FnTheme fnTheme = ux ? (FnTheme)GetProcAddress(ux, "SetWindowTheme") : NULL;
 
+        RECT rc = { 0, 0, 0, 0 };
+        GetClientRect(hwnd, &rc);
+        int cw = rc.right - rc.left, ch = rc.bottom - rc.top;
+        if (cw <= 0 || ch <= 0) { cw = S(kWinW); ch = S(kWinH); }
+
+        // ---- 垂直：设计值 + 把多余/不足的高度按「许可框优先」分配 ----
+        int licY  = S(40);
+        int licH  = S(92);
+        int gapSB = S(122);                       // 状态文字与按钮之间的间距（设计值）
+        int extra = ch - S(kWinH);
+        if (extra > 0)
+        {
+            int add = extra;                      // 拉高：许可框先吃掉，封顶后剩下的留给间距
+            if (add > S(600)) add = S(600);
+            licH += add;
+            gapSB += extra - add;
+        }
+        else if (extra < 0)
+        {
+            int need = -extra;                    // 压矮：先压间距（最低 24），再压许可框（最低 70）
+            int fromGap = gapSB - S(24); if (fromGap < 0) fromGap = 0;
+            int useGap = need < fromGap ? need : fromGap;
+            gapSB -= useGap; need -= useGap;
+            if (need > 0) { licH -= need; if (licH < S(70)) licH = S(70); }
+        }
+
+        int pathY   = licY + licH + S(13);
+        int chk1Y   = pathY + S(39);
+        int chk2Y   = chk1Y + S(28);
+        int progY   = chk2Y + S(40);
+        int statusY = progY + S(22);
+        int btnH    = S(36);
+        int btnY    = statusY + S(20) + gapSB;
+        int bottomPad = ch - (btnY + btnH);        // 按钮贴底（设计高度下 = 48）
+        if (bottomPad < S(12)) { bottomPad = S(12); btnY = ch - bottomPad - btnH; }
+
+        // ---- 水平：路径框随宽度伸缩，浏览按钮钉右 ----
+        const int m = S(44);
+        int lblW = S(60), browseW = S(82);
+        int editX = m + lblW + S(12);
+        int browseX = cw - m - browseW;
+        int editW = browseX - S(12) - editX;
+        if (editW < S(120)) editW = S(120);
+
+        // 三个勾选：宽窗口保持原坐标，窄窗口等分压缩（保证都在可视区内）
+        int k1 = m, w1 = S(170), k2 = S(254), w2 = S(190), k3 = S(494), w3 = S(170);
+        if (k3 + w3 > cw - m)
+        {
+            int cw3 = (cw - m * 2 - S(24)) / 3; if (cw3 < S(96)) cw3 = S(96);
+            k1 = m; w1 = cw3; k2 = k1 + cw3 + S(12); w2 = cw3; k3 = k2 + cw3 + S(12); w3 = cw3;
+        }
+
+        // 按钮钉右下角
+        int cancelW = S(96), installW = S(126);
+        int cancelX = cw - m - cancelW;
+        int installX = cancelX - S(14) - installW;
+        if (installX < m) installX = m;
+
         struct Item { int id; int x, y, w, h; bool bold; };
         const Item items[] = {
-            { IDC_EDIT_LICENSE, 44,  40, 632,  92, false },
-            { IDC_LBL_PATH,     44, 148,  60,  20, false },
-            { IDC_EDIT_PATH,   116, 145, 466,  25, false },
-            { IDC_BTN_BROWSE,  594, 144,  82,  26, false },
-            { IDC_CHK_DESKTOP,  44, 184, 170,  22, false },
-            { IDC_CHK_START,   254, 184, 190,  22, false },
-            { IDC_CHK_RUN,     494, 184, 170,  22, false },
-            { IDC_CHK_GLASS,    44, 212, 380,  22, false },
-            { IDC_PROGRESS,     44, 252, 632,  14, false },
-            { IDC_STATUS,       44, 274, 632,  20, false },
-            { IDC_BTN_INSTALL, 452, 416, 126,  36, true  },
-            { IDC_BTN_CANCEL,  586, 416,  96,  36, false }
+            { IDC_EDIT_LICENSE, m,        licY,           cw - m * 2, licH,    false },
+            { IDC_LBL_PATH,     m,        pathY + S(3),   lblW,       S(20),   false },
+            { IDC_EDIT_PATH,    editX,    pathY,          editW,      S(25),   false },
+            { IDC_BTN_BROWSE,   browseX,  pathY,          browseW,    S(26),   false },
+            { IDC_CHK_DESKTOP,  k1,       chk1Y,          w1,         S(22),   false },
+            { IDC_CHK_START,    k2,       chk1Y,          w2,         S(22),   false },
+            { IDC_CHK_RUN,      k3,       chk1Y,          w3,         S(22),   false },
+            { IDC_CHK_GLASS,    m,        chk2Y,          cw - m * 2, S(22),   false },
+            { IDC_PROGRESS,     m,        progY,          cw - m * 2, S(14),   false },
+            { IDC_STATUS,       m,        statusY,        cw - m * 2, S(20),   false },
+            { IDC_BTN_INSTALL,  installX, btnY,           installW,   btnH,    true  },
+            { IDC_BTN_CANCEL,   cancelX,  btnY,           cancelW,    btnH,    false }
         };
         for (int i = 0; i < (int)(sizeof(items) / sizeof(items[0])); i++)
         {
             HWND c = GetDlgItem(hwnd, items[i].id);
             if (!c) continue;
-            SetWindowPos(c, NULL, S(items[i].x), S(items[i].y), S(items[i].w), S(items[i].h),
+            SetWindowPos(c, NULL, items[i].x, items[i].y, items[i].w, items[i].h,
                          SWP_NOZORDER | SWP_NOACTIVATE);
             SendMessageW(c, WM_SETFONT, (WPARAM)(items[i].bold ? g_fBold : g_fBody), TRUE);
             if (fnTheme) fnTheme(c, L"", L"");   // 经典样式：白底黑字、浅灰按钮、绿进度条
@@ -579,7 +639,7 @@ namespace
             HWND lic = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
                 WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL | ES_AUTOVSCROLL,
                 0, 0, 0, 0, hwnd, (HMENU)IDC_EDIT_LICENSE, g_hInst, NULL);
-            SetWindowTextW(lic, L"1. 本程序按“原样”提供，用于生成 Unity/TextMeshPro 富文本并发送到游戏。\r\n"
+            SetWindowTextW(lic, L"1. 本程序按“原样”提供，用于编辑与生成 Unity/TextMeshPro 富文本（类 Win11 记事本的富文本记事本）。\r\n"
                 L"2. 请勿用于违反游戏服务条款的用途；因使用本程序产生的后果由使用者自负。\r\n"
                 L"3. 程序会联网检查更新（GitHub），并在你点击“更新”时下载新版本。\r\n"
                 L"4. 本程序不收集你的任何个人信息。\r\n\r\n继续安装即表示你同意以上条款。");
@@ -633,6 +693,39 @@ namespace
 
             return 0;
         }
+
+        case WM_GETMINMAXINFO:
+        {
+            // 最小尺寸：保证缩到最小时许可框、勾选与按钮都不重叠
+            MINMAXINFO* mmi = (MINMAXINFO*)lp;
+            RECT r = { 0, 0, S(620), S(400) };
+            DWORD style = (DWORD)GetWindowLongPtrW(hwnd, GWL_STYLE);
+            DWORD ex = (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            AdjustWindowRectEx(&r, style, FALSE, ex);
+            mmi->ptMinTrackSize.x = r.right - r.left;
+            mmi->ptMinTrackSize.y = r.bottom - r.top;
+
+            // 最大化时不要盖住任务栏
+            HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = { sizeof(MONITORINFO) };
+            if (GetMonitorInfoW(mon, &mi))
+            {
+                mmi->ptMaxPosition.x = mi.rcWork.left - mi.rcMonitor.left;
+                mmi->ptMaxPosition.y = mi.rcWork.top - mi.rcMonitor.top;
+                mmi->ptMaxSize.x = mi.rcWork.right - mi.rcWork.left;
+                mmi->ptMaxSize.y = mi.rcWork.bottom - mi.rcWork.top;
+            }
+            return 0;
+        }
+
+        case WM_SIZE:
+            // 鼠标拖拽改变窗口大小：控件按新的客户区重排（最小化时不重排）
+            if (wp != SIZE_MINIMIZED)
+            {
+                LayoutControls(hwnd);
+                InvalidateRect(hwnd, NULL, TRUE);
+            }
+            return 0;
 
         case WM_DPICHANGED:
         {
@@ -804,15 +897,20 @@ namespace
         RegisterClassExW(&wc);
 
         std::wstring title = std::wstring(kAppName) + L" 安装向导  v" + kVersion;
+        // 可缩放窗口：WS_THICKFRAME 让鼠标可以拖拽边框/四角改变大小，WS_MAXIMIZEBOX 允许最大化
+        DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
         g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, title.c_str(),
-            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
+            style | WS_CLIPCHILDREN,
             CW_USEDEFAULT, CW_USEDEFAULT, 736, 560,
             NULL, NULL, g_hInst, NULL);
         if (!g_hwnd) return 1;
 
         g_scale = 1.0;
 
-        int winW = 736, winH = 560;
+        // 客户区严格按设计尺寸 720x500 创建，使首次显示与原固定布局逐像素一致
+        RECT wr = { 0, 0, 720, 500 };
+        AdjustWindowRectEx(&wr, style, FALSE, WS_EX_APPWINDOW);
+        int winW = wr.right - wr.left, winH = wr.bottom - wr.top;
         int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
         SetWindowPos(g_hwnd, NULL, (sw - winW) / 2, (sh - winH) / 2, winW, winH, SWP_NOZORDER);
         ShowWindow(g_hwnd, SW_SHOW);

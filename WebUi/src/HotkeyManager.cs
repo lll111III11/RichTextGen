@@ -233,7 +233,7 @@ namespace RichTextGen
             catch { failed.Add(def.Desc + "（" + FormatKeys(def.Keys) + "）"); }
         }
 
-        /// <summary>Keys → 可读文本（Ctrl+Alt+F4）</summary>
+        /// <summary>Keys → 可读文本（如 Ctrl+Alt+G）</summary>
         internal static string FormatKeys(Keys k)
         {
             StringBuilder sb = new StringBuilder();

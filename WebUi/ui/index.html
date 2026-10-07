@@ -673,7 +673,7 @@ quick.forEach(c=>{
 });
 
 /* ---------- 主题（记住选择） ---------- */
-function setTheme(v){ document.body.classList.toggle('dark', v==='dark'); try{ localStorage.setItem('rtgTheme', v); }catch(e){} }
+function setTheme(v){ document.body.classList.toggle('dark', v==='dark'); try{ localStorage.setItem('rtgTheme', v); }catch(e){} try{ host('theme|'+v); }catch(e){} }
 
 /* ---------- 翻译（预装免费服务） ---------- */
 const TR_PRESETS = {

@@ -55,6 +55,15 @@ namespace RichTextGen
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wp, IntPtr lp);
 
+        // 无边框窗口的鼠标拖拽缩放：WebView2 铺满客户区时窗体收不到边上的命中测试，
+        // 因此留出一圈 resizeBand 宽的「拖拽边」（WebView2 随 Padding 内缩），由 WndProc 返回 HT* 交系统缩放。
+        private const int WM_NCHITTEST = 0x0084;
+        private const int HTCLIENT = 1;
+        private const int HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13;
+        private const int HTTOPRIGHT = 14, HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
+        private int resizeBand = 6;            // 拖拽边宽度（逻辑像素，按 DPI 放大）
+        private int bandState = -1;            // 上次应用的边宽（-1=尚未应用），避免重复 Layout
+
         public MainForm()
         {
             Text = "彩色文本生成器 v" + Version;
@@ -65,6 +74,8 @@ namespace RichTextGen
             ClientSize = new Size(1180, 800);
             MinimumSize = new Size(880, 600);
             StartPosition = FormStartPosition.CenterScreen;
+            LoadWindowState();                           // 还原上次关闭时的位置与大小
+            ApplyResizeBand();                           // 留出可拖拽缩放的边（WebView2 随 Padding 内缩）
             BackColor = Color.FromArgb(243, 243, 243);
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
 
@@ -91,7 +102,7 @@ namespace RichTextGen
             SetTimeout(8000, delegate { CheckUpdate(false); });
             SetTimeout(1500, ReportUpdateResult);
 
-            // 全局热键（Ctrl+F2 / Ctrl+Alt+O / Ctrl+Alt+G / Ctrl+Alt+F4）：句柄创建后注册，见 OnHandleCreated
+            // 全局热键（Ctrl+F2 / Ctrl+Alt+O / Ctrl+Alt+G）：句柄创建后注册，见 OnHandleCreated
             hotkeys = new HotkeyManager(this, OnHotkey);
         }
 
@@ -99,7 +110,143 @@ namespace RichTextGen
         protected override void WndProc(ref Message m)
         {
             if (hotkeys != null && hotkeys.HandleMessage(ref m)) return;
+            // 鼠标落在留出的边上时返回 HTLEFT/HTBOTTOM… 让系统接管缩放（含四角、最小尺寸约束、Aero 贴靠）
+            if (m.Msg == WM_NCHITTEST)
+            {
+                base.WndProc(ref m);
+                if ((int)m.Result == HTCLIENT)
+                {
+                    int lp = m.LParam.ToInt32();
+                    Point p = PointToClient(new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF)));
+                    int ht = HitTestEdge(p);
+                    if (ht != 0) m.Result = (IntPtr)ht;
+                }
+                return;
+            }
             base.WndProc(ref m);
+        }
+
+        // ============================================================ 鼠标拖拽缩放 + 位置大小记忆
+        /// <summary>按当前 DPI 计算拖拽边宽；最大化时不留边（铺满屏幕），其余状态恢复。</summary>
+        private void ApplyResizeBand()
+        {
+            int dpi = DeviceDpi > 0 ? DeviceDpi : 96;
+            resizeBand = Math.Max(4, (int)Math.Round(6.0 * dpi / 96.0));
+            int want = (WindowState == FormWindowState.Normal) ? resizeBand : 0;
+            if (bandState == want) return;
+            bandState = want;
+            Padding = new Padding(want);
+        }
+
+        /// <summary>客户区坐标 → 对应的 HT* 代码；不在边上返回 0。</summary>
+        private int HitTestEdge(Point p)
+        {
+            if (WindowState != FormWindowState.Normal) return 0;
+            int b = resizeBand, w = ClientSize.Width, h = ClientSize.Height;
+            if (w <= 0 || h <= 0) return 0;
+            bool l = p.X < b, r = p.X >= w - b, t = p.Y < b, bo = p.Y >= h - b;
+            if (t && l) return HTTOPLEFT;
+            if (t && r) return HTTOPRIGHT;
+            if (bo && l) return HTBOTTOMLEFT;
+            if (bo && r) return HTBOTTOMRIGHT;
+            if (l) return HTLEFT;
+            if (r) return HTRIGHT;
+            if (t) return HTTOP;
+            if (bo) return HTBOTTOM;
+            return 0;
+        }
+
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+            bandState = -1;              // 换屏后 DPI 变了，重新计算边宽
+            ApplyResizeBand();
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (WindowState != FormWindowState.Minimized) ApplyResizeBand();
+        }
+
+        /// <summary>拖拽边与 HTML 主体同色，否则深色主题下会露一圈浅色边框。</summary>
+        private void ApplyThemeColor(string name)
+        {
+            try { BackColor = (name == "dark") ? Color.FromArgb(32, 32, 32) : Color.FromArgb(243, 243, 243); }
+            catch { }
+        }
+
+        private static string WindowStatePath
+        {
+            get
+            {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen");
+                try { Directory.CreateDirectory(dir); } catch { }
+                return Path.Combine(dir, "window.json");
+            }
+        }
+
+        private static int IntOf(string json, string key)
+        {
+            Match m = Regex.Match(json ?? "", "\"" + key + "\"\\s*:\\s*(-?\\d+)");
+            int v;
+            return (m.Success && int.TryParse(m.Groups[1].Value, out v)) ? v : 0;
+        }
+
+        private void LoadWindowState()
+        {
+            try
+            {
+                string path = WindowStatePath;
+                if (!File.Exists(path)) return;
+                string t = File.ReadAllText(path, Encoding.UTF8);
+                int w = IntOf(t, "width"), h = IntOf(t, "height");
+                if (w >= MinimumSize.Width && h >= MinimumSize.Height)
+                {
+                    Rectangle r = new Rectangle(IntOf(t, "left"), IntOf(t, "top"), w, h);
+                    if (IsOnScreen(r)) { StartPosition = FormStartPosition.Manual; Bounds = r; }
+                }
+                if (Regex.IsMatch(t, "\"maximized\"\\s*:\\s*true")) WindowState = FormWindowState.Maximized;
+            }
+            catch { }
+        }
+
+        /// <summary>记忆的位置至少要有一部分落在某个屏幕工作区内，否则丢弃（显示器拔了/分辨率变了）。</summary>
+        private static bool IsOnScreen(Rectangle r)
+        {
+            foreach (Screen s in Screen.AllScreens)
+            {
+                Rectangle i = Rectangle.Intersect(s.WorkingArea, r);
+                if (i.Width >= 120 && i.Height >= 40) return true;
+            }
+            return false;
+        }
+
+        private void SaveWindowState()
+        {
+            try
+            {
+                Rectangle r = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+                if (r.Width < 200 || r.Height < 150) return;   // 最小化时 RestoreBounds 可能为空，跳过
+                File.WriteAllText(WindowStatePath,
+                    "{" + Quote("left") + ":" + r.Left + "," + Quote("top") + ":" + r.Top + "," +
+                          Quote("width") + ":" + r.Width + "," + Quote("height") + ":" + r.Height + "," +
+                          Quote("maximized") + ":" + (WindowState == FormWindowState.Maximized ? "true" : "false") + "}",
+                    Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        protected override void OnResizeEnd(EventArgs e)
+        {
+            base.OnResizeEnd(e);
+            SaveWindowState();          // 鼠标拖完大小/移动到位就落盘
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            SaveWindowState();
+            base.OnFormClosing(e);
         }
 
         private void OnHotkey(string action)
@@ -376,6 +523,7 @@ namespace RichTextGen
                 case "maximize": WindowState = (WindowState == FormWindowState.Maximized) ? FormWindowState.Normal : FormWindowState.Maximized; break;
                 case "close": Close(); break;
                 case "drag": DragWindow(); break;
+                case "theme": ApplyThemeColor(arg); break;   // 拖拽边跟随界面主题色
                 case "status": CallStr("status", arg); break;
                 case "openFile": OpenFile(); break;
                 case "saveFile": SaveFile(arg); break;
