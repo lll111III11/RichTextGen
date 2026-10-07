@@ -172,15 +172,6 @@
   #menuDrop .mi-item:hover{background:var(--accent);color:var(--accentText);filter:none}
   #menuDrop .mi-item .k{opacity:.6;font-size:11.5px;white-space:nowrap}
   #menuDrop .mi-sep{height:1px;background:var(--line);margin:4px 6px}
-  /* 选区浮动工具条（M4） */
-  #fmtBar{position:fixed;display:none;align-items:center;gap:4px;background:var(--card);border:1px solid var(--line);
-          border-radius:var(--r8);box-shadow:0 6px 22px rgba(0,0,0,.28);padding:5px 8px;z-index:70}
-  #fmtBar.on{display:flex}
-  #fmtBar button{min-width:28px;height:26px;border:1px solid var(--inputLine);background:var(--input);color:var(--text);
-                 border-radius:var(--r4);cursor:pointer;font-size:12.5px;padding:0 8px;font:inherit}
-  #fmtBar button:hover{filter:brightness(.92)}
-  #fmtBar button:active{transform:scale(.94)}
-  #fmtBar .fb-sep{width:1px;height:18px;background:var(--line);margin:0 2px}
   #main{padding:0 12px 12px;gap:12px}
   #mainEditor{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
   #edToolbar{flex:0 0 auto;height:34px;display:flex;align-items:center;gap:10px;padding:0 4px}
@@ -1779,150 +1770,328 @@ const EdMode = (function(){
 })();
 </script>
 <script>
-/* ================= 追加：选区浮动工具条 + 选区监视（概念设计 M4） ================= */
+/* ================= 追加：工作台实时作用于编辑器选区（取代 M4 浮动工具条） ================= */
 (function(){
   if (typeof EdMode === 'undefined' || typeof DocM === 'undefined') return;
-  const edSrcEl = () => document.getElementById('edSrc');
-  const richEl = () => document.getElementById('edRich');
+  const $ = id => document.getElementById(id);
+  const edSrcEl = () => $('edSrc');
+  const richEl = () => $('edRich');
 
-  /* ---- 浮动工具条 ---- */
-  const bar = document.createElement('div');
-  bar.id = 'fmtBar';
-  bar.innerHTML =
-    '<button data-f="bold" title="加粗">B</button>' +
-    '<button data-f="italic" title="斜体">I</button>' +
-    '<button data-f="underline" title="下划线">U</button>' +
-    '<button data-f="strike" title="删除线">S</button>' +
-    '<span class="fb-sep"></span>' +
-    '<button data-f="size" title="字号">字号</button>' +
-    '<button data-f="color" title="颜色">颜色</button>' +
-    '<button data-f="clear" title="清除格式">清除</button>';
-  document.body.appendChild(bar);
-  const hideBar = () => bar.classList.remove('on');
-  bar.addEventListener('mousedown', ev => ev.preventDefault());   // 保持编辑器选区不丢
+  /* ---------- 1) 选区追踪 ---------- */
+  // 渲染模式下点击工作台控件会让焦点离开、window 选区丢失，因此克隆保存一份
+  let savedRange = null;
 
-  /* ---- 选区监视卡（工作台顶部；渲染/源码选区实时显示） ---- */
-  const watchCard = document.createElement('div');
-  watchCard.className = 'card';
-  watchCard.style.display = 'none';
-  watchCard.innerHTML =
-    '<h3>选区监视（左键拖拽选中文本，实时显示于此）</h3>' +
-    '<div id="selWatch" class="hint" style="white-space:pre-wrap;word-break:break-all;user-select:text"></div>' +
-    '<div class="row" style="margin-top:10px">' +
-      '<button class="b p" id="selToWork">载入工作台生成</button>' +
-      '<span class="hint" id="selWatchInfo"></span>' +
-    '</div>';
-  const pWork = document.getElementById('p-work');
-  pWork.insertBefore(watchCard, pWork.firstChild);
-  document.getElementById('selToWork').onclick = () => {
-    const t = document.getElementById('selWatch').textContent;
-    if (!t){ ui.status('暂无选中文本'); return; }
-    document.getElementById('txt').value = t;
-    gen();
-    ui.status('已载入选中文本「' + t.slice(0, 20) + '…」到工作台并生成');
-  };
-
-  /* ---- 定位：浮动在选区上方（顶部放不下则放下方） ---- */
-  function positionBar(rect){
-    const bw = bar.offsetWidth || 230, bh = bar.offsetHeight || 36;
-    let x = rect.left + rect.width / 2 - bw / 2;
-    x = Math.max(6, Math.min(x, window.innerWidth - bw - 6));
-    let y = rect.top - bh - 8;
-    if (y < 66) y = rect.top + rect.height + 8;
-    bar.style.left = x + 'px';
-    bar.style.top = y + 'px';
+  function richRangeValid(){
+    if (!savedRange) return false;
+    if (EdMode.current() !== 'rich') return false;
+    if (!richEl().offsetParent) return false;              // 渲染区不可见（已切回源码）
+    const c = savedRange.commonAncestorContainer;
+    if (!c) return false;
+    return c === richEl() || richEl().contains(c);
   }
-
-  /* ---- 选区实时回写工作台监视卡 ---- */
-  let lastWatch = '';
-  function watch(cond, text){
-    if (!cond){ watchCard.style.display = 'none'; return; }
-    const t = text || '';
-    if (t !== lastWatch){
-      lastWatch = t;
-      document.getElementById('selWatch').textContent = t.length > 200 ? t.slice(0, 200) + '…' : t;
-      document.getElementById('selWatchInfo').textContent = '已选中 ' + t.length + ' 字符';
-    }
-    watchCard.style.display = '';
-  }
-
-  document.addEventListener('selectionchange', () => {
-    const sel = window.getSelection();
-    if (EdMode.current() === 'rich'){
-      if (sel && !sel.isCollapsed && richEl().contains(sel.anchorNode) && richEl().contains(sel.focusNode)){
-        positionBar(sel.getRangeAt(0).getBoundingClientRect());
-        bar.classList.add('on');
-        watch(true, EdMode.serializeRange ? EdMode.serializeRange() : sel.toString());
-      } else { hideBar(); watch(false); }
-    } else {
-      const ed = edSrcEl();
-      if (ed && ed.selectionStart !== ed.selectionEnd){
-        const r = ed.getBoundingClientRect();
-        bar.classList.add('on');
-        bar.style.top = (r.top + 2) + 'px';
-        bar.style.left = (r.left + 4) + 'px';
-        watch(true, ed.value.slice(ed.selectionStart, ed.selectionEnd));
-      } else { hideBar(); watch(false); }
-    }
-  });
-
-  /* ---- 动作：渲染模式 contenteditable / 源码模式 selectionStart-end 包裹 ---- */
-  const wrapSrc = (before, after) => {
+  function srcSel(){
+    if (EdMode.current() !== 'src') return null;
     const ed = edSrcEl();
-    const s = ed.selectionStart, e = ed.selectionEnd;
-    if (s === e){ ui.status('请先在文本里选中一段文字'); hideBar(); return; }
-    const selText = ed.value.slice(s, e);
-    ed.value = ed.value.slice(0, s) + before + selText + after + ed.value.slice(e);
-    ed.selectionStart = s; ed.selectionEnd = e + before.length + after.length;
+    if (!ed || ed.selectionStart === ed.selectionEnd) return null;
+    return { s: ed.selectionStart, e: ed.selectionEnd,
+             text: ed.value.slice(ed.selectionStart, ed.selectionEnd) };
+  }
+  function currentSel(){
+    if (EdMode.current() === 'rich') return richRangeValid() ? { text: savedRange.toString() } : null;
+    return srcSel();
+  }
+  function hasSel(){ return !!currentSel(); }
+
+  /* ---------- 2) 工作台控件 → 选中文字 ---------- */
+  const MANAGED_RE = /<\/?(?:color|b|i|u|s|sub|sup|size|mark|alpha)(?:=[^>]*)?>/gi;
+
+  function toCssSize(v){
+    v = (v == null ? '' : String(v)).trim();
+    if (!v) return '';
+    if (/^-?\d+(\.\d+)?(px|em|rem|%)$/i.test(v)) return v;
+    if (/^-?\d+(\.\d+)?$/.test(v)) return v + 'px';
+    return v;
+  }
+  function toAlpha(v){
+    const n = parseInt(String(v == null ? '' : v).replace('#', '').trim(), 16);
+    return isNaN(n) ? '' : String(Math.round(n / 255 * 1000) / 1000);
+  }
+  function asColor(v){
+    const p = (typeof parseColor === 'function') ? parseColor(v) : null;
+    return p || '';
+  }
+  function markColorVal(){
+    const mc = asColor($('markColor').value);
+    if (!mc) return '#FFFF0080';
+    return mc.charAt(0) === '#' ? mc + '80' : mc;
+  }
+  // 受管样式：控件 → 标签名 / 富文本样式键
+  const WRAP_TAGS    = ['b', 'i', 'u', 's', 'sub', 'sup'];
+  const ASPECT_TAG   = { bold:'b', italic:'i', underline:'u', strike:'s', sub:'sub', sup:'sup',
+                         size:'size', mark:'mark', alpha:'alpha', color:'color' };
+  const ASPECT_STYLE = { color:'color', size:'fontSize', alpha:'opacity', mark:'backgroundColor' };
+  const WRAP_CTRL    = { b:'bold', i:'italic', u:'underline', s:'strike', sub:'sub', sup:'sup' };
+
+  // 该控件当前是否要套用；返回 [开标签, 闭标签] 或 null
+  function aspectTag(aspect){
+    const t = ASPECT_TAG[aspect];
+    if (WRAP_TAGS.indexOf(t) >= 0){
+      const el = $(WRAP_CTRL[t]);
+      return (el && el.checked) ? ['<' + t + '>', '</' + t + '>'] : null;
+    }
+    if (aspect === 'size'){ const v = ($('size').value || '').trim(); return v ? ['<size=' + v + '>', '</size>'] : null; }
+    if (aspect === 'mark'){ return $('mark').checked ? ['<mark=' + markColorVal() + '>', '</mark>'] : null; }
+    if (aspect === 'alpha'){ const a = ($('alpha').value || '').trim(); return a ? ['<alpha=#' + a.replace(/^#/, '') + '>', '</alpha>'] : null; }
+    if (aspect === 'color'){ const c = asColor($('color').value); return c ? ['<color=' + c + '>', '</color>'] : null; }
+    return null;
+  }
+  // 该控件当前的富文本样式（color/fontSize/opacity/backgroundColor）或 null
+  function aspectStyle(aspect){
+    if (aspect === 'color'){ const c = asColor($('color').value); return c ? { color: c } : null; }
+    if (aspect === 'size'){ const v = toCssSize($('size').value); return v ? { fontSize: v } : null; }
+    if (aspect === 'alpha'){ const a = toAlpha($('alpha').value); return a ? { opacity: a } : null; }
+    if (aspect === 'mark'){ const m = asColor($('markColor').value); return ($('mark').checked && m) ? { backgroundColor: m } : null; }
+    return null;
+  }
+
+  // 源码模式：只重写该样式对应的标签（重复应用＝替换，不会层层嵌套）
+  function applySrc(aspect){
+    const sel = srcSel(); if (!sel) return false;
+    const ed = edSrcEl();
+    const tag = ASPECT_TAG[aspect];
+    const inner = sel.text.replace(new RegExp('</?' + tag + '(?:=[^>]*)?>', 'gi'), '');
+    const pair = aspectTag(aspect);
+    const out = pair ? pair[0] + inner + pair[1] : inner;
+    ed.value = ed.value.slice(0, sel.s) + out + ed.value.slice(sel.e);
+    ed.selectionStart = sel.s; ed.selectionEnd = sel.s + out.length;
     DocM.markDirty();
-    ed.focus();
-  };
-  const applySpan = style => {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
-    const range = sel.getRangeAt(0);
-    const content = range.extractContents();
-    const span = document.createElement('span');
-    span.style.cssText = style;
-    span.appendChild(content);
-    range.insertNode(span);
+    return true;
+  }
+  function unwrapEl(el){
+    const p = el.parentNode; if (!p) return;
+    while (el.firstChild) p.insertBefore(el.firstChild, el);
+    p.removeChild(el);
+  }
+  // 清理富文本标记：给了 aspect 只清该样式，否则清全部受管样式
+  function stripRich(node, aspect){
+    const els = [];
+    const w = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT, null, false);
+    let n = w.nextNode();
+    while (n){ els.push(n); n = w.nextNode(); }
+    const tag = aspect ? ASPECT_TAG[aspect] : null;
+    const sk = aspect ? ASPECT_STYLE[aspect] : null;
+    const keys = aspect ? (sk ? [sk] : []) : ['color', 'fontSize', 'opacity', 'backgroundColor'];
+    els.forEach(el => {
+      const t = el.tagName.toLowerCase();
+      if (WRAP_TAGS.indexOf(t) >= 0 && (aspect ? t === tag : true)){ unwrapEl(el); return; }
+      if (t === 'span' && keys.length){
+        keys.forEach(k => { el.style[k] = ''; });
+        if (!el.getAttribute('style')) unwrapEl(el);
+      }
+    });
+  }
+  // 选区是否完全包含该元素
+  function fullyInside(range, el){
+    try {
+      const r = document.createRange();
+      r.selectNode(el);
+      return range.compareBoundaryPoints(Range.START_TO_START, r) <= 0 &&
+             range.compareBoundaryPoints(Range.END_TO_END, r) >= 0;
+    } catch (e) { return false; }
+  }
+  function isManagedEl(el){
+    if (!el || el.nodeType !== 1) return false;
+    const t = el.tagName.toLowerCase();
+    if (WRAP_TAGS.indexOf(t) >= 0) return true;
+    if (t === 'span') return ['color', 'fontSize', 'opacity', 'backgroundColor'].some(k => el.style[k]);
+    return false;
+  }
+  // 选区正好覆盖该元素的全部内容（selectNodeContents 产生的选区即此种）
+  function coversContents(range, el){
+    return range.startContainer === el && range.startOffset === 0 &&
+           range.endContainer === el && range.endOffset === el.childNodes.length;
+  }
+  // 若选区正好覆盖某个受管外层元素（如上次套上的 <span color>），把范围扩展到它，
+  // 这样重复改颜色是「替换」而不是「层层嵌套」
+  function expandManaged(range){
+    let node = range.commonAncestorContainer, target = null;
+    for (let i = 0; i < 8 && node && node !== richEl(); i++){
+      if (node.nodeType === 1 && isManagedEl(node) &&
+          (coversContents(range, node) || fullyInside(range, node))){
+        target = node;                       // 记住最外层符合的受管元素
+      } else if (target){
+        break;
+      }
+      node = node.parentNode;
+    }
+    if (target) range.selectNode(target);
+  }
+  function reselect(sel, node){
     const r = document.createRange();
-    r.selectNodeContents(span);
+    if (node.nodeType === 11){
+      const kids = Array.prototype.slice.call(node.childNodes);
+      if (!kids.length) return;
+      r.setStartBefore(kids[0]);
+      r.setEndAfter(kids[kids.length - 1]);
+    } else {
+      r.selectNodeContents(node);
+    }
     sel.removeAllRanges();
     sel.addRange(r);
-  };
-  let lastColor = '#FF0000';
-  const input = (label, def) => { try { return prompt(label, def); } catch(e) { return null; } };
-  bar.addEventListener('click', ev => {
-    const b = ev.target.closest('button[data-f]'); if (!b) return;
-    const f = b.dataset.f;
-    if (EdMode.current() === 'rich'){
-      if (f === 'bold') document.execCommand('bold');
-      else if (f === 'italic') document.execCommand('italic');
-      else if (f === 'underline') document.execCommand('underline');
-      else if (f === 'strike') document.execCommand('strikeThrough');
-      else if (f === 'clear') document.execCommand('removeFormat');
-      else if (f === 'size'){ const v = input('字号（px 或 em）：', '24'); if (v) applySpan('font-size:' + v); }
-      else if (f === 'color'){ const v = input('颜色（#RRGGBB 或色名）：', lastColor); if (v){ lastColor = v; applySpan('color:' + v); } }
-    } else {
-      if (f === 'bold') wrapSrc('<b>', '</b>');
-      else if (f === 'italic') wrapSrc('<i>', '</i>');
-      else if (f === 'underline') wrapSrc('<u>', '</u>');
-      else if (f === 'strike') wrapSrc('<s>', '</s>');
-      else if (f === 'clear'){
-        const ed = edSrcEl();
-        const s = ed.selectionStart, e = ed.selectionEnd;
-        if (s === e) return;
-        const cleaned = ed.value.slice(s, e).replace(/<\/?[a-z][^>]*>/gi, '');
-        ed.value = ed.value.slice(0, s) + cleaned + ed.value.slice(e);
-        ed.selectionStart = s; ed.selectionEnd = s + cleaned.length;
-        DocM.markDirty(); ui.status('已清除选中内容里的标签');
-      }
-      else if (f === 'size'){ const v = input('字号（px 或不带单位数字）：', '24'); if (v) wrapSrc('<size=' + v + '>', '</size>'); }
-      else if (f === 'color'){ const v = input('颜色（#RRGGBB 或色名）：', lastColor); if (v){ lastColor = v; wrapSrc('<color=' + v + '>', '</color>'); } }
+    savedRange = r.cloneRange();
+  }
+  function applyRich(aspect){
+    if (!richRangeValid()) return false;
+    const sel = window.getSelection(); if (!sel) return false;
+    const range = savedRange.cloneRange();
+    expandManaged(range);
+    const frag = range.extractContents();
+    stripRich(frag, aspect);
+
+    let node = frag;
+    const t = ASPECT_TAG[aspect];
+    if (WRAP_TAGS.indexOf(t) >= 0 && aspectTag(aspect)){
+      const e = document.createElement(t); e.appendChild(node); node = e;
     }
-    hideBar();
+    const st = aspectStyle(aspect);
+    if (st){
+      const sp = document.createElement('span');
+      Object.keys(st).forEach(k => { sp.style[k] = st[k]; });
+      sp.appendChild(node);
+      node = sp;
+    }
+    range.insertNode(node);
+    reselect(sel, node);
+    if (DocM.setActiveBuffer) DocM.setActiveBuffer(EdMode.serializeNow());
+    return true;
+  }
+  function applyToSel(aspect){
+    return EdMode.current() === 'rich' ? applyRich(aspect) : applySrc(aspect);
+  }
+  // 有选区 → 把该控件对应的样式套到选区；无选区 → 维持原有「整段生成」
+  function genOrApply(aspect){
+    if (hasSel() && applyToSel(aspect)){ refreshCard(); return; }
+    gen();
+  }
+
+  /* ---------- 3) 清除选中文字的样式 ---------- */
+  function clearSelStyle(){
+    if (EdMode.current() === 'rich'){
+      if (!richRangeValid()){ ui.status('请先在左侧编辑区选中一段文字'); return; }
+      const sel = window.getSelection(); if (!sel) return;
+      const range = savedRange.cloneRange();
+      expandManaged(range);
+      const frag = range.extractContents();
+      stripRich(frag);
+      range.insertNode(frag);
+      reselect(sel, frag);
+      if (DocM.setActiveBuffer) DocM.setActiveBuffer(EdMode.serializeNow());
+      ui.status('已清除选中文字的样式');
+    } else {
+      const sel = srcSel();
+      if (!sel){ ui.status('请先在左侧编辑区选中一段文字'); return; }
+      const ed = edSrcEl();
+      const inner = sel.text.replace(MANAGED_RE, '');
+      ed.value = ed.value.slice(0, sel.s) + inner + ed.value.slice(sel.e);
+      ed.selectionStart = sel.s; ed.selectionEnd = sel.s + inner.length;
+      DocM.markDirty();
+      ui.status('已清除选中文字里的标签');
+    }
+    refreshCard();
+  }
+
+  /* ---------- 4) 作用目标提示卡（工作台顶部） ---------- */
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML =
+    '<h3>选中文字 · 实时样式</h3>' +
+    '<div id="selTarget" class="hint" style="white-space:pre-wrap;word-break:break-all;user-select:text;min-height:20px"></div>' +
+    '<div class="row" style="margin-top:10px">' +
+      '<span class="hint" id="selInfo"></span>' +
+      '<button class="b" id="selClearBtn">清除选中格式</button>' +
+      '<button class="b" id="selToWork">载入工作台生成</button>' +
+    '</div>' +
+    '<div class="hint">在左侧编辑区选中文字后，下面「颜色系统」「样式与渐变」里改任何一项都会<b>实时套用到这段选中文字</b>；未选中时这些控件仍按整段生成。</div>';
+  const pWork = $('p-work');
+  pWork.insertBefore(card, pWork.firstChild);
+  $('selClearBtn').onclick = clearSelStyle;
+  $('selToWork').onclick = () => {
+    const s = currentSel();
+    if (!s){ ui.status('请先在左侧编辑区选中一段文字'); return; }
+    $('txt').value = s.text;
+    gen();
+    ui.status('已把选中文字载入工作台并整段生成');
+  };
+
+  function refreshCard(){
+    const s = currentSel();
+    const tgt = $('selTarget'), info = $('selInfo');
+    if (!tgt) return;
+    if (s){
+      const t = s.text || '';
+      tgt.textContent = t.length > 160 ? t.slice(0, 160) + '…' : t;
+      info.textContent = '作用目标：编辑区选中 ' + t.length + ' 字';
+    } else {
+      tgt.textContent = '（尚未选中）用鼠标在左侧编辑区拖选一段文字';
+      info.textContent = '作用目标：整段文本';
+    }
+  }
+
+  /* ---------- 5) 选区变化 ---------- */
+  document.addEventListener('selectionchange', () => {
+    if (EdMode.current() === 'rich'){
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && !sel.isCollapsed &&
+          richEl().contains(sel.anchorNode) && richEl().contains(sel.focusNode)){
+        savedRange = sel.getRangeAt(0).cloneRange();
+      } else if (sel && sel.rangeCount && sel.isCollapsed && richEl().contains(sel.anchorNode)){
+        savedRange = null;                                 // 在渲染区内点掉选区
+      }
+      // 焦点移到工作台控件导致的空选区：保留上次的 savedRange，改颜色才能作用到它
+    } else {
+      savedRange = null;
+    }
+    refreshCard();
   });
+  ['select', 'keyup', 'mouseup', 'input'].forEach(ev => {
+    edSrcEl().addEventListener(ev, refreshCard);
+    richEl().addEventListener(ev, refreshCard);
+  });
+  ['mdSrc', 'mdRich'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', () => setTimeout(refreshCard, 0)); });
+
+  /* ---------- 6) 绑定工作台样式控件（摘掉旧的整段 gen()，改为按控件套用） ---------- */
+  const STYLE_CTRLS = [
+    ['color', 'input', 'color'],
+    ['bold', 'change', 'bold'], ['italic', 'change', 'italic'], ['underline', 'change', 'underline'],
+    ['strike', 'change', 'strike'], ['sub', 'change', 'sub'], ['sup', 'change', 'sup'],
+    ['size', 'input', 'size'],
+    ['mark', 'change', 'mark'], ['markColor', 'input', 'mark'],
+    ['alpha', 'input', 'alpha']
+  ];
+  STYLE_CTRLS.forEach(row => {
+    const el = $(row[0]); if (!el) return;
+    if (row[1] === 'change') el.onchange = null; else el.oninput = null;
+    el.addEventListener(row[1], () => genOrApply(row[2]));
+  });
+
+  // 常用色块：点一下即把该色套到选中文字
+  try {
+    document.querySelectorAll('#quick > button').forEach((btn, i) => {
+      btn.onclick = () => { $('color').value = quick[i]; genOrApply('color'); };
+    });
+  } catch (e) { }
+
+  // 拾色器「确定应用」：有选区则套到选区
+  if (typeof window.pickApply === 'function'){
+    const _pa = window.pickApply;
+    window.pickApply = function(){
+      const had = hasSel();
+      _pa();
+      if (had){ applyToSel('color'); refreshCard(); }
+    };
+  }
+
+  refreshCard();
 })();
 </script></body>
 </html>
