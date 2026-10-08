@@ -2,7 +2,7 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.8.0.2",
+  "version": "5.8.0.3",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
@@ -11,5 +11,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.8.0.2 功能更新：\n· 关闭即驻留托盘：任何关闭方式（✕/Alt+F4）都缩到后台，单击托盘图标即可唤回，右键菜单「退出」才真正退出\n· 超链接支持：渲染出的链接点击自动用默认浏览器（Edge/Chrome）打开，无浏览器会提示\n· 编辑区与工作台之间新增可拖动分割条，左右宽度随意调节（双击还原，自动记忆）\n· 在线文档联动：文件菜单「在线文档」内置腾讯文档/金山文档/Google Docs/石墨/飞书/语雀，一键复制当前文本并在浏览器新建文档；受限平台（Notion/Office 网页版）直接跳转并提示\n· 系统右键集成：任意文件右键「用彩色文本生成器打开」（系统记事本图标、当前用户注册免管理员，设置页可开关，卸载自动清理）；也支持命令行直接打开文件"
+  "notes": "v5.8.0.3 功能更新：\n· 【开发计划宣告】即将启动 Android 版「彩色文本生成器」（APK）研发：把本工具的颜色系统、Unity/TMP 标签生成、实时预览与选区套样式等能力带到手机上\n· 桌面端保持稳定维护：本版本为计划宣告版本，功能与 v5.8.0.2 保持一致（托盘常驻、超链接开浏览器、可拖动分割条、在线文档联动、系统右键集成）\n· 后续桌面端将同步 APK 版的新功能与修复"
 }

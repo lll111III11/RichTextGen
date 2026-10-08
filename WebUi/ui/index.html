@@ -443,6 +443,14 @@
         <p class="hint">2026-2027 All rights reserved · Reverse engineering strictly prohibited · 3576220975@qq.com</p>
         <button class="b" onclick="host('openUrl|https://github.com/lll111III11/RichTextGen/releases/latest')">查看发布页</button>
       </div>
+      <div class="card"><h3>🚀 开发计划 · Android（APK）版</h3>
+        <div class="row"><span class="badge" style="background:var(--accent);color:var(--accentText);border-color:transparent">即将研发</span>
+          <span class="hint">彩色文本生成器 移动版</span></div>
+        <p class="hint">我们即将启动 <b>Android 版「彩色文本生成器」（APK）</b> 的研发：把颜色系统、Unity/TMP 标签生成、
+          实时预览与选区套样式等核心能力带到手机上，随时随地生成彩色文本。</p>
+        <p class="hint">桌面端将继续稳定维护，并与移动端同步新功能与修复。敬请期待。</p>
+        <div class="row"><button class="b p" onclick="host('openUrl|https://github.com/lll111III11/RichTextGen')">关注仓库获取进展</button></div>
+      </div>
       <div class="card"><h3>卸载</h3>
         <p class="hint">卸载会查找安装位置及相关位置，删除本产品的所有文件并启动卸载程序。请先退出游戏。</p>
         <button class="b" onclick="host('uninstall')">卸载本程序…</button>
@@ -495,7 +503,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.8.0.2";
+const VERSION = "5.8.0.3";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -1488,6 +1496,7 @@ host('ready');
     help: [
       { t: '立即检测更新',    k: '',          fn: () => { host('checkUpdate'); } },
       { t: '查看发布页',      k: '',          fn: () => { host('openUrl|https://github.com/lll111III11/RichTextGen/releases/latest'); } },
+      { t: 'Android（APK）版 · 即将研发', k: '', fn: () => { showWork('set'); status('Android（APK）版开发计划已启动，详见「设置 → 开发计划」'); } },
       { sep: true },
       { t: '关于',            k: '',          fn: () => { status('彩色文本生成器 · Win11 记事本概念版 · 采用 CC0 许可'); } }
     ]
