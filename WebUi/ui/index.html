@@ -167,12 +167,22 @@
   #menuDrop{position:fixed;min-width:210px;background:var(--card);border:1px solid var(--line);border-radius:var(--r8);
             box-shadow:0 8px 28px rgba(0,0,0,.28);padding:4px;z-index:60;display:none}
   #menuDrop.on{display:block}
+  #menuDrop2{position:fixed;min-width:200px;background:var(--card);border:1px solid var(--line);border-radius:var(--r8);
+             box-shadow:0 8px 28px rgba(0,0,0,.28);padding:4px;z-index:61}
+  #menuDrop2 .mi-item{padding:6px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer;
+                      display:flex;justify-content:space-between;gap:24px;align-items:center;color:var(--text)}
+  #menuDrop2 .mi-item:hover{background:var(--accent);color:var(--accentText)}
+  #menuDrop2 .mi-item .k{opacity:.6;font-size:11.5px;white-space:nowrap}
+  #menuDrop2 .mi-sep{height:1px;background:var(--line);margin:4px 6px}
   #menuDrop .mi-item{padding:6px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer;
                      display:flex;justify-content:space-between;gap:24px;align-items:center;color:var(--text)}
   #menuDrop .mi-item:hover{background:var(--accent);color:var(--accentText);filter:none}
   #menuDrop .mi-item .k{opacity:.6;font-size:11.5px;white-space:nowrap}
   #menuDrop .mi-sep{height:1px;background:var(--line);margin:4px 6px}
   #main{padding:0 12px 12px;gap:12px}
+  #splitter{flex:0 0 6px;cursor:ew-resize;border-radius:3px;align-self:stretch;transition:background .15s ease}
+  #splitter:hover,#splitter:active{background:var(--accent);opacity:.7}
+  #splitter.dragging{background:var(--accent)}
   #mainEditor{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
   #edToolbar{flex:0 0 auto;height:34px;display:flex;align-items:center;gap:10px;padding:0 4px}
   #edToolbar .seg{display:flex;border:1px solid var(--inputLine);border-radius:var(--r4);overflow:hidden}
@@ -189,7 +199,7 @@
           user-select:text;white-space:pre-wrap;word-break:break-word;display:none}
   #edRich:focus{border-color:var(--accent)}
   #ws{flex:0 0 540px;min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);transition:flex-basis .18s ease;position:relative}
-  #ws.cold{flex-basis:38px}
+  #ws.cold{flex-basis:38px !important}   /* 折叠优先于内联拖拽宽度 */
   #wsHead{flex:0 0 auto;height:40px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px}
   #wsHead .wt{font-weight:600;font-size:13px}
   #wsHead .sp{flex:1}
@@ -242,6 +252,8 @@
     <textarea id="edSrc" spellcheck="false" placeholder="在这里输入文本（支持多标签）…（M3 里程碑将接入标签 / HTML 双向实时渲染）"></textarea>
     <div id="edRich" contenteditable="true"></div>
   </div>
+
+  <div id="splitter" title="拖动调整工作台宽度（双击恢复默认）"></div>
 
   <!-- 右侧工作台（RichTextGen 全部功能迁入；可折叠到侧边留出白边） -->
   <div id="ws">
@@ -414,6 +426,13 @@
         <div id="hkList"></div>
         <div class="row"><span class="hint">点击右侧快捷键即可录制修改（需含 Ctrl / Alt / Shift 加功能键），设置自动保存；组合冲突或被占用会提示</span></div>
       </div>
+      <div class="card"><h3>系统集成（右键菜单）</h3>
+        <div class="row">
+          <button class="b" onclick="host('registerShell')">添加到右键菜单</button>
+          <button class="b" onclick="host('unregisterShell')">从右键菜单移除</button>
+          <span class="hint">注册后可在任意文件上右键 →「用彩色文本生成器打开」；仅写入当前用户（免管理员），首次启动自动注册，卸载时自动清理。</span>
+        </div>
+      </div>
       <div class="card"><h3>更新</h3>
         <div class="row"><button class="b" onclick="host('checkUpdate')">立即检测更新</button>
           <span class="hint" id="upInfo"></span></div>
@@ -476,7 +495,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.8.0.1";
+const VERSION = "5.8.0.2";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -1415,13 +1434,40 @@ host('ready');
   });
 
   /* ---- 菜单下拉（M2：文件完整；编辑走原生命令；格式/帮助占位） ---- */
+  /* 在线文档联动（5.8.0.2）：取当前文档真实文本 → C# 复制 + 默认浏览器打开平台新建页 */
+  function currentDocText(){
+    try {
+      if (typeof EdMode !== 'undefined' && EdMode.current() === 'rich')
+        return (EdMode.serializeNow && EdMode.serializeNow()) || '';
+    } catch(e) {}
+    const ed = document.getElementById('edSrc');
+    return ed ? (ed.value || '') : '';
+  }
+  function openDocTo(key){
+    let t = '';
+    try { t = currentDocText(); } catch(e) {}
+    host('openDoc|' + key + '|' + encodeURIComponent(t));
+  }
+  const DOCS = [
+    { t: '腾讯文档',            fn: () => openDocTo('qq') },
+    { t: '金山文档（WPS）',     fn: () => openDocTo('kdocs') },
+    { t: 'Google Docs',         fn: () => openDocTo('gdocs') },
+    { t: '石墨文档',            fn: () => openDocTo('shimo') },
+    { t: '飞书文档',            fn: () => openDocTo('feishu') },
+    { t: '语雀',                fn: () => openDocTo('yuque') },
+    { sep: true },
+    { t: 'Notion',              flag: '部分受限', fn: () => openDocTo('notion') },
+    { t: 'Office 网页版',       flag: '需登录',   fn: () => openDocTo('office') }
+  ];
   const MENUS = {
     file: [
       { t: '新建',            k: 'Ctrl+N',    fn: () => { DocM.newTab(); } },
       { t: '打开…',           k: 'Ctrl+O',    fn: () => { host('openFile'); } },
       { sep: true },
       { t: '保存',            k: 'Ctrl+S',    fn: () => { DocM.save(); } },
-      { t: '另存为…',         k: 'Ctrl+Shift+S', fn: () => { DocM.saveAs(); } }
+      { t: '另存为…',         k: 'Ctrl+Shift+S', fn: () => { DocM.saveAs(); } },
+      { sep: true },
+      { t: '在线文档…',       k: '',          sub: DOCS }
     ],
     edit: [
       { t: '撤销',            k: 'Ctrl+Z',    fn: () => edCmd('undo') },
@@ -1449,16 +1495,44 @@ host('ready');
   const drop = document.createElement('div');
   drop.id = 'menuDrop';
   document.body.appendChild(drop);
+  const drop2 = document.createElement('div');
+  drop2.id = 'menuDrop2';
+  document.body.appendChild(drop2);
+  const closeSub = () => { if (drop2.parentNode === document.body) document.body.removeChild(drop2); };
   const openMenu = (name, anchor) => {
     const items = MENUS[name]; if (!items) return;
+    closeSub();
     drop.innerHTML = '';
     items.forEach(it => {
       if (it.sep){ const d = document.createElement('div'); d.className = 'mi-sep'; drop.appendChild(d); return; }
-      const d = document.createElement('div'); d.className = 'mi-item';
+      const d = document.createElement('div'); d.className = 'mi-item' + (it.sub ? ' has-sub' : '');
       const s1 = document.createElement('span'); s1.textContent = it.t;
-      const s2 = document.createElement('span'); s2.className = 'k'; s2.textContent = it.k;
+      const s2 = document.createElement('span'); s2.className = 'k'; s2.textContent = it.sub ? '▸' : (it.k || '');
       d.appendChild(s1); d.appendChild(s2);
-      d.onclick = () => { drop.classList.remove('on'); it.fn(); };
+      if (it.sub){
+        d.addEventListener('mouseenter', () => {
+          closeSub();
+          const r = d.getBoundingClientRect();
+          drop2.innerHTML = '';
+          it.sub.forEach(p => {
+            if (p.sep){ const x = document.createElement('div'); x.className = 'mi-sep'; drop2.appendChild(x); return; }
+            const x = document.createElement('div'); x.className = 'mi-item';
+            const a = document.createElement('span'); a.textContent = p.t;
+            x.appendChild(a);
+            if (p.flag){ const f = document.createElement('span'); f.className = 'k'; f.textContent = p.flag; x.appendChild(f); }
+            x.onclick = () => { closeSub(); drop.classList.remove('on'); p.fn(); };
+            drop2.appendChild(x);
+          });
+          drop2.classList.add('on');
+          document.body.appendChild(drop2);
+          let x2 = r.right + 4, y2 = r.top - 4;
+          if (x2 + 240 > window.innerWidth) x2 = r.left - 244;
+          drop2.style.left = x2 + 'px'; drop2.style.top = y2 + 'px';
+        });
+        d.onclick = ev => ev.stopPropagation();   // 不退主菜单
+      } else {
+        d.onclick = () => { drop.classList.remove('on'); it.fn(); };
+      }
       drop.appendChild(d);
     });
     drop.classList.add('on');
@@ -1467,7 +1541,7 @@ host('ready');
     if (x + 220 > window.innerWidth) x = Math.max(4, window.innerWidth - 220);
     drop.style.left = x + 'px'; drop.style.top = y + 'px';
   };
-  const closeMenu = () => drop.classList.remove('on');
+  const closeMenu = () => { drop.classList.remove('on'); closeSub(); };
   document.querySelectorAll('#menubar .mi').forEach(mi => {
     mi.onclick = e => {
       e.stopPropagation();
@@ -1475,7 +1549,7 @@ host('ready');
       else { drop.dataset.m = mi.dataset.m; openMenu(mi.dataset.m, mi); }
     };
   });
-  document.addEventListener('mousedown', ev => { if (!drop.contains(ev.target)) closeMenu(); });
+  document.addEventListener('mousedown', ev => { if (!drop.contains(ev.target) && !drop2.contains(ev.target)) closeMenu(); });
   document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeMenu(); });
   function edCmd(cmd){
     const ed = document.getElementById('edSrc'); if (!ed) return;
@@ -2092,6 +2166,70 @@ const EdMode = (function(){
   }
 
   refreshCard();
+})();
+</script>
+<script>
+/* ================= 追加：超链接点击开浏览器 + 可拖动分割条（5.8.0.2） ================= */
+(function(){
+  /* ---- 1) 超链接：任何渲染出的 <a href> 点击 → C# 默认浏览器打开 ---- */
+  document.addEventListener('click', ev => {
+    const a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    host('openLink|' + encodeURIComponent(href));
+  });
+  // 渲染模式（contenteditable）里点链接：拦截 mousedown，避免光标落入链接编辑
+  const richEl = () => document.getElementById('edRich');
+  if (richEl()){
+    richEl().addEventListener('mousedown', ev => {
+      const a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+      if (a){ ev.preventDefault(); ev.stopPropagation(); }
+    });
+  }
+
+  /* ---- 2) 可拖动分割条：左侧编辑区 / 右侧工作台宽度 ---- */
+  const ws = () => document.getElementById('ws');
+  const splitter = () => document.getElementById('splitter');
+  if (splitter() && ws()){
+    const MIN_W = 250, DEF_W = 540;
+    const MAX_W = () => Math.round(window.innerWidth * 0.7);
+    const getW = () => {
+      try { const v = localStorage.getItem('rtgWsW'); const n = parseInt(v, 10); if (n > 0) return n; } catch(e) {}
+      return DEF_W;
+    };
+    const setW = w => {
+      w = Math.max(MIN_W, Math.min(MAX_W(), w));
+      ws().style.flexBasis = w + 'px';
+      try { localStorage.setItem('rtgWsW', String(w)); } catch(e) {}
+    };
+    // 折叠态不恢复用户宽度（.cold 的 flex-basis 覆盖）
+    if (!ws().classList.contains('cold')) setW(getW());
+
+    let dragging = false, startX = 0, startW = 0;
+    splitter().addEventListener('mousedown', ev => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      dragging = true; startX = ev.clientX; startW = ws().offsetWidth;
+      ws().style.transition = 'none';
+      splitter().classList.add('dragging');
+    });
+    document.addEventListener('mousemove', ev => {
+      if (!dragging) return;
+      const dx = ev.clientX - startX;
+      // 分割条在右侧，拖右=增大工作台 → 宽度 = 初始宽 + dx
+      setW(startW + dx);
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      ws().style.transition = '';
+      splitter().classList.remove('dragging');
+    });
+    splitter().addEventListener('dblclick', () => { setW(DEF_W); });
+  }
 })();
 </script></body>
 </html>

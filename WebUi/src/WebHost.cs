@@ -10,14 +10,19 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Win32;
 
 namespace RichTextGen
 {
     internal static class Program
     {
+        /// <summary>命令行传入的待打开文件（Shell 右键「用彩色文本生成器打开」等）</summary>
+        public static string[] StartupFiles = new string[0];
+
         [STAThread]
-        private static void Main()
+        private static void Main(string[] args)
         {
+            if (args != null) StartupFiles = args;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             try { Application.Run(new MainForm()); }
@@ -43,6 +48,8 @@ namespace RichTextGen
         private HotkeyManager hotkeys;
         private NotifyIcon tray;                         // 托盘图标（Ctrl+F2 隐藏后的唤回入口）
         private bool trayTipShown;
+        private bool _allowClose;                        // true 才允许真正退出（仅托盘菜单「退出」置位）
+        private readonly List<string> _pendingOpen = new List<string>();   // 命令行/右键传入的待打开文件
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -104,6 +111,13 @@ namespace RichTextGen
 
             // 全局热键（Ctrl+F2 / Ctrl+Alt+O / Ctrl+Alt+G）：句柄创建后注册，见 OnHandleCreated
             hotkeys = new HotkeyManager(this, OnHotkey);
+
+            // 命令行/右键传人的待打开文件（界面 ready 后逐个打开）
+            foreach (string f in Program.StartupFiles)
+            {
+                string p = (f ?? "").Trim().Trim('"');
+                if (p.Length > 0) _pendingOpen.Add(p);
+            }
         }
 
         // ============================================================ 全局热键
@@ -246,6 +260,13 @@ namespace RichTextGen
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             SaveWindowState();
+            // 除托盘菜单「退出」明确置位外，任何关闭（✕/Alt+F4/菜单关闭）都改为缩到托盘后台
+            if (!_allowClose)
+            {
+                e.Cancel = true;
+                HideWindow();
+                return;
+            }
             base.OnFormClosing(e);
         }
 
@@ -276,7 +297,7 @@ namespace RichTextGen
                 try
                 {
                     tray.BalloonTipTitle = "彩色文本生成器仍在后台运行";
-                    tray.BalloonTipText = "双击托盘图标（或右键 →「显示窗口」）可唤回窗口。退出请用 ✕ 或托盘菜单「退出」。";
+                    tray.BalloonTipText = "单击托盘图标即可唤回窗口。退出请右键托盘图标 →「退出」。";
                     tray.ShowBalloonTip(4000);
                 }
                 catch { }
@@ -304,8 +325,12 @@ namespace RichTextGen
                 menu.Items.Add("显示窗口", null, delegate { RestoreWindow(); });
                 menu.Items.Add("立即检测更新", null, delegate { CheckUpdate(true); });
                 menu.Items.Add(new ToolStripSeparator());
-                menu.Items.Add("退出", null, delegate { Close(); });
+                menu.Items.Add("退出", null, delegate { _allowClose = true; Close(); });
                 tray.ContextMenuStrip = menu;
+                tray.MouseClick += delegate(object s, MouseEventArgs me)
+                {
+                    if (me.Button == MouseButtons.Left) RestoreWindow();   // 单击图标即展开
+                };
                 tray.DoubleClick += delegate { RestoreWindow(); };
                 tray.Visible = true;
             }
@@ -373,6 +398,7 @@ namespace RichTextGen
                     "\r\n\r\n请确认程序目录下这三个文件完整：\r\n  Microsoft.Web.WebView2.Core.dll\r\n  Microsoft.Web.WebView2.WinForms.dll\r\n  WebView2Loader.dll" +
                     "\r\n\r\n若仍失败，请安装「Microsoft Edge WebView2 运行时」后重试。",
                     "启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _allowClose = true;                      // 启动失败必须真退出，不能缩托盘
                 Close();
                 return;
             }
@@ -480,6 +506,14 @@ namespace RichTextGen
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
                     CallStr("hotkeyDefs", hotkeys != null ? hotkeys.HotkeysJson() : "[]");
                     CheckUpdate(false);
+                    // 打开命令行/右键传入的文件（多标签逐个打开）
+                    foreach (string p in _pendingOpen)
+                    {
+                        if (File.Exists(p)) OpenPath(p);
+                        else CallStr("status", "文件不存在：" + p);
+                    }
+                    _pendingOpen.Clear();
+                    CheckShellRegistration();   // 首次启动自动注册右键菜单（HKCU 免管理员）
                     break;
                 case "hotkeys":
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
@@ -521,7 +555,7 @@ namespace RichTextGen
                     break;
                 case "minimize": WindowState = FormWindowState.Minimized; break;
                 case "maximize": WindowState = (WindowState == FormWindowState.Maximized) ? FormWindowState.Normal : FormWindowState.Maximized; break;
-                case "close": Close(); break;
+                case "close": HideWindow(); break;   // 关闭 = 缩到托盘后台（退出走托盘菜单）
                 case "drag": DragWindow(); break;
                 case "theme": ApplyThemeColor(arg); break;   // 拖拽边跟随界面主题色
                 case "status": CallStr("status", arg); break;
@@ -534,6 +568,10 @@ namespace RichTextGen
                 case "checkUpdate": CheckUpdate(true); break;
                 case "doUpdate": DoUpdate(); break;
                 case "openUrl": OpenUrl(arg); break;
+                case "openLink": OpenBrowser(Un(arg)); break;   // 超链接点击 → 默认浏览器（Edge/Chrome）
+                case "openDoc": OpenDoc(arg); break;            // 在线文档联动
+                case "registerShell": RegisterShell(); CallStr("status", "已添加到右键菜单"); break;
+                case "unregisterShell": UnregisterShell(); CallStr("status", "已从右键菜单移除"); break;
                 case "colorLib": FetchColorLibrary(); break;
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
@@ -572,13 +610,119 @@ namespace RichTextGen
             });
         }
 
-        /// <summary>用浏览器打开链接；失败时给出提示而不是静默无反应</summary>
+        /// <summary>打开链接（在线文档/超链接共用）：优先系统默认浏览器，失败再探测 Edge/Chrome，全无则提示</summary>
         private void OpenUrl(string url)
         {
             url = (url ?? "").Trim().Trim('"');
             if (url.Length == 0) { CallStr("status", "链接为空"); return; }
-            try { System.Diagnostics.Process.Start(url); CallStr("status", "已在浏览器打开"); }
-            catch (Exception ex) { CallStr("status", "打开链接失败：" + ex.Message); }
+            try { System.Diagnostics.Process.Start(url); CallStr("status", "已在浏览器打开"); return; }
+            catch { }
+            string exe = FindBrowser();
+            if (exe != null)
+            {
+                try { System.Diagnostics.Process.Start(exe, EscapeArg(url)); CallStr("status", "已在浏览器打开"); return; }
+                catch { }
+            }
+            CallStr("status", "未检测到可用的浏览器，请安装 Edge 或 Chrome");
+        }
+        private void OpenBrowser(string url) { OpenUrl(url); }
+
+        /// <summary>探测 Edge / Chrome 可执行文件；找不到返回 null</summary>
+        private static string FindBrowser()
+        {
+            string[] roots = Environment.Is64BitOperatingSystem
+                ? new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                          Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) }
+                : new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) };
+            foreach (string root in roots)
+            {
+                if (string.IsNullOrEmpty(root)) continue;
+                string[] cands =
+                {
+                    Path.Combine(root, "Microsoft", "Edge", "Application", "msedge.exe"),
+                    Path.Combine(root, "Google", "Chrome", "Application", "chrome.exe")
+                };
+                foreach (string c in cands) { if (File.Exists(c)) return c; }
+            }
+            return null;
+        }
+        /// <summary>给进程参数加引号（防空格路径/参数注入）</summary>
+        private static string EscapeArg(string s)
+        {
+            bool needs = s.IndexOfAny(new[] { ' ', '"', '\t' }) >= 0;
+            return needs ? "\"" + s.Replace("\"", "\\\"") + "\"" : s;
+        }
+
+        // ============================================================ 在线文档联动（5.8.0.2）
+        /// <summary>平台键 → (新建文档 URL, 是否免费；受限平台直接跳浏览器并提示)</summary>
+        private static readonly Dictionary<string, Tuple<string, bool>> DocPlatforms =
+            new Dictionary<string, Tuple<string, bool>>
+            {
+                { "qq",     Tuple.Create("https://docs.qq.com/desktop", true) },
+                { "kdocs",  Tuple.Create("https://www.kdocs.cn/create", true) },
+                { "gdocs",  Tuple.Create("https://docs.google.com/document/create", true) },
+                { "shimo",  Tuple.Create("https://shimo.im/desktop/new", true) },
+                { "feishu", Tuple.Create("https://www.feishu.cn/docx/create", true) },
+                { "yuque",  Tuple.Create("https://www.yuque.com/newword", true) },
+                { "notion", Tuple.Create("https://www.notion.so/", false) },
+                { "office", Tuple.Create("https://www.office.com/launch/word", false) }
+            };
+
+        private void OpenDoc(string arg)
+        {
+            // arg = "key|encodeURIComponent(text)"
+            int sep = arg.IndexOf('|');
+            string key = sep < 0 ? arg : arg.Substring(0, sep);
+            string text = sep < 0 ? "" : Un(arg.Substring(sep + 1));
+            Tuple<string, bool> p;
+            if (!DocPlatforms.TryGetValue(key, out p)) { CallStr("status", "未知的文档平台"); return; }
+            if (text.Length > 0) { try { Clipboard.SetText(text); } catch { } }
+            OpenUrl(p.Item1);
+            CallStr("status", p.Item2
+                ? "已复制文档内容，到浏览器新建文档后 Ctrl+V 粘贴"
+                : "该平台部分功能需登录/付费，已在浏览器打开");
+        }
+
+        // ============================================================ 系统右键集成（Shell，HKCU 免管理员，5.8.0.2）
+        private const string ShellKey = @"Software\Classes\*\shell\RichTextGenApp";
+
+        [DllImport("shell32.dll")]
+        private static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+        private static void ShellNotifyChanged()
+        {
+            try { SHChangeNotify(0x08000000 /*SHCNE_ASSOCCHANGED*/, 0x0000, IntPtr.Zero, IntPtr.Zero); } catch { }
+        }
+
+        private void RegisterShell()
+        {
+            try
+            {
+                string exe = Application.ExecutablePath;
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey)) { k.SetValue("", "用彩色文本生成器打开"); }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey + "\\command")) { k.SetValue("", "\"" + exe + "\" \"%1\""); }
+                // 图标用系统记事本图标（不自定义，避免显得突兀）
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey + "\\DefaultIcon")) { k.SetValue("", "%SystemRoot%\\System32\\notepad.exe"); }
+                ShellNotifyChanged();
+            }
+            catch { }
+        }
+        private void UnregisterShell()
+        {
+            try { Registry.CurrentUser.DeleteSubKeyTree(ShellKey, false); ShellNotifyChanged(); } catch { }
+        }
+        /// <summary>启动时检测：未注册则自动注册（幂等）</summary>
+        private void CheckShellRegistration()
+        {
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(ShellKey + "\\command"))
+                {
+                    if (k != null) return;
+                }
+                RegisterShell();
+            }
+            catch { }
         }
 
         /// <summary>JS 侧对含中文/换行的载荷统一做了 encodeURIComponent，这里还原</summary>
@@ -906,6 +1050,23 @@ namespace RichTextGen
             }
             catch (Exception ex) { CallStr("status", "导入失败：" + ex.Message); }
         }
+        /// <summary>按路径打开文件为记事本新标签（Shell 右键/命令行；无对话框）</summary>
+        private void OpenPath(string path)
+        {
+            path = (path ?? "").Trim().Trim('"');
+            if (path.Length == 0) return;
+            if (!File.Exists(path)) { CallStr("status", "文件不存在：" + path); return; }
+            try
+            {
+                string txt = ReadText(path);
+                Call("fileOpened",
+                    "{\"ok\":true,\"path\":" + Quote(path) +
+                    ",\"name\":" + Quote(Path.GetFileName(path)) +
+                    ",\"text\":" + Quote(txt) + "}");
+                CallStr("status", "已打开 " + Path.GetFileName(path) + "（" + txt.Length + " 字符）");
+            }
+            catch (Exception ex) { CallStr("status", "打开失败：" + ex.Message); }
+        }
         private static string ReadText(string path)
         {
             byte[] b = File.ReadAllBytes(path);
@@ -1008,7 +1169,7 @@ namespace RichTextGen
                     catch { }
                     CallStr("status", "下载完成，正在启动安装程序…");
                     try { System.Diagnostics.Process.Start(path); } catch { }
-                    try { BeginInvoke((Action)delegate { Close(); }); } catch { }
+                    try { BeginInvoke((Action)delegate { _allowClose = true; Close(); }); } catch { }
                 }
                 catch (Exception ex) { CallStr("status", "更新失败：" + ex.Message); }
             });
@@ -1117,6 +1278,7 @@ namespace RichTextGen
             if (r != DialogResult.Yes) { CallStr("status", "已取消卸载"); return; }
             try
             {
+                UnregisterShell();   // 卸载前清理右键菜单注册
                 string dir = Path.GetDirectoryName(Application.ExecutablePath);
                 string setup = Path.Combine(dir, "RichTextGen-Setup.exe");
                 string un = Path.Combine(dir, "Uninstall.exe");
@@ -1125,7 +1287,8 @@ namespace RichTextGen
                 {
                     try { System.Diagnostics.Process.Start(exe, "/uninstall"); } catch { }
                 }
-                Close();   // 卸载器会 KillRunningApp 兜底，这里先自己优雅退出
+                _allowClose = true;   // 卸载器会 KillRunningApp 兜底，这里先自己优雅退出
+                Close();
             }
             catch { CallStr("status", "卸载启动失败"); }
         }

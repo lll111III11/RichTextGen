@@ -2,14 +2,14 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.8.0.1",
+  "version": "5.8.0.2",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
-  "type": "fix",
+  "type": "feature",
   "downloads": {
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.8.0.1 功能性修复：\n· 修复选中文字时浮出的工具条遮挡正文的问题，移除该浮条；改为右侧工作台的颜色/样式控件实时套用到编辑区选中的文字\n· 修复渲染模式下反复修改颜色会层层嵌套的问题，同一项重复修改现在为替换而非叠加\n· 修复仅设置粗体等单项样式时误加默认白色、导致文字在白底上看不清的问题，改为按控件分别套用\n· 无选区时工作台的整段生成、复制代码与导出 HTML 保持原样"
+  "notes": "v5.8.0.2 功能更新：\n· 关闭即驻留托盘：任何关闭方式（✕/Alt+F4）都缩到后台，单击托盘图标即可唤回，右键菜单「退出」才真正退出\n· 超链接支持：渲染出的链接点击自动用默认浏览器（Edge/Chrome）打开，无浏览器会提示\n· 编辑区与工作台之间新增可拖动分割条，左右宽度随意调节（双击还原，自动记忆）\n· 在线文档联动：文件菜单「在线文档」内置腾讯文档/金山文档/Google Docs/石墨/飞书/语雀，一键复制当前文本并在浏览器新建文档；受限平台（Notion/Office 网页版）直接跳转并提示\n· 系统右键集成：任意文件右键「用彩色文本生成器打开」（系统记事本图标、当前用户注册免管理员，设置页可开关，卸载自动清理）；也支持命令行直接打开文件"
 }
