@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>彩色文本生成器</title>
+<style>
+  :root{
+    --bg:#f3f3f3; --card:#ffffff; --text:#1b1b1b; --sub:#5d5d5d; --line:#e2e2e2;
+    --accent:#0067c0; --accent2:#0f7b3f; --chip:#eef2f7; --r8:10px; --r4:6px;
+    --pad:10px;
+  }
+  body.dark{
+    --bg:#202020; --card:#2b2b2b; --text:#ffffff; --sub:#c5c5c5; --line:#3a3a3a;
+    --accent:#4cc2ff; --accent2:#37c46c; --chip:#333333;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{
+    background:var(--bg); color:var(--text); display:flex; flex-direction:column;
+    font:14px/1.45 "Microsoft YaHei UI","Noto Sans SC",system-ui,sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header{display:flex;align-items:center;gap:8px;padding:8px var(--pad);flex:0 0 auto}
+  header .t{font-weight:700;font-size:15px}
+  header .v{color:var(--sub);font-size:11.5px}
+  header .sp{flex:1}
+  .iconbtn{background:var(--chip);border:1px solid var(--line);color:var(--text);border-radius:var(--r4);
+    min-width:38px;height:34px;font-size:15px;display:flex;align-items:center;justify-content:center;padding:0 8px}
+  .scroll{overflow:auto;-webkit-overflow-scrolling:touch}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);padding:8px}
+  .lbl{font-size:11.5px;color:var(--sub);margin:0 0 5px}
+  .row{display:flex;gap:8px;align-items:center}
+  .grow{flex:1;min-width:0}
+  input[type=text],input[type=number],textarea,select{
+    width:100%;background:var(--card);color:var(--text);border:1px solid var(--line);
+    border-radius:var(--r4);padding:9px 10px;font:inherit;min-width:0;outline:none}
+  textarea{resize:none;height:100%;min-height:110px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;background:var(--chip);border:1px solid var(--line);color:var(--text);
+    border-radius:999px;padding:7px 12px;font-size:13px;min-height:34px}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .swatches{display:flex;gap:6px;flex-wrap:wrap}
+  .sw{width:30px;height:30px;border-radius:var(--r4);border:1px solid rgba(0,0,0,.18);flex:0 0 auto}
+  .sw.on{outline:3px solid var(--accent);outline-offset:1px}
+  #preview{background:#000;color:#f0f0f0;border-radius:var(--r8);padding:10px 12px;min-height:46px;
+    word-break:break-word;overflow:auto}
+  #preview sub,#preview sup{font-size:.72em}
+  #out{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:pre-wrap;word-break:break-all;
+    overflow:auto;margin:0}
+  .actions{display:flex;gap:8px;padding:8px var(--pad);flex:0 0 auto;
+    background:var(--bg);border-top:1px solid var(--line)}
+  .btn{flex:1 1 0;min-width:0;border:0;border-radius:var(--r8);min-height:46px;font-size:15px;font-weight:600;color:#fff;background:var(--accent)}
+  .btn.alt{background:var(--accent2)}
+  .btn.ghost{background:var(--chip);color:var(--text);border:1px solid var(--line);flex:0 0 66px;padding:0}
+  .meta{display:flex;justify-content:space-between;gap:8px;color:var(--sub);font-size:11.5px;
+    padding:0 var(--pad) 6px;white-space:nowrap;overflow:hidden}
+  .pop{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:rgba(0,0,0,.82);color:#fff;
+    padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s}
+  .pop.on{opacity:1}
+
+  /* ---------------- 竖屏：功能精简（无文本编辑区，整列可滚动） ---------------- */
+  @media (orientation:portrait){
+    .only-landscape{display:none !important}
+    main{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:var(--pad);padding:0 var(--pad)}
+    #pOut{max-height:112px}
+  }
+  /* ---------------- 横屏：功能更多（左右两列各自滚动，内容永不丢） ---------------- */
+  @media (orientation:landscape){
+    .only-portrait{display:none !important}
+    main{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:var(--pad);padding:0 var(--pad)}
+    .col{display:flex;flex-direction:column;gap:var(--pad);min-height:0;overflow-y:auto}
+    #pEdit{flex:0 0 auto}
+    #pEdit textarea{height:92px;min-height:92px}
+    #pOut{max-height:150px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="t">彩色文本生成器</span>
+  <span class="v" id="ver">v1.0.0</span>
+  <span class="sp"></span>
+  <button class="iconbtn" id="themeBtn" title="切换主题">◐</button>
+</header>
+
+<main>
+  <!-- ================= 左列（横屏才有编辑区；竖屏只有一行输入） ================= -->
+  <div class="col">
+    <!-- 竖屏：单行输入，不留大文本区 -->
+    <div class="card only-portrait">
+      <div class="lbl">文字</div>
+      <input type="text" id="in1" placeholder="输入要变色的文字…">
+    </div>
+
+    <!-- 横屏：多行编辑区 -->
+    <div class="card only-landscape" id="pEdit">
+      <div class="lbl">文本编辑区（可多行）</div>
+      <textarea id="in2" placeholder="输入文字，支持多行…"></textarea>
+    </div>
+
+    <!-- 样式（竖屏只给最常用的几个） -->
+    <div class="card">
+      <div class="lbl">样式</div>
+      <div class="chips" id="styleChips">
+        <button class="chip" data-st="b"><b>B</b></button>
+        <button class="chip" data-st="i"><i>I</i></button>
+        <button class="chip" data-st="u"><u>U</u></button>
+        <button class="chip" data-st="s"><s>S</s></button>
+        <button class="chip only-landscape" data-st="sub">下标</button>
+        <button class="chip only-landscape" data-st="sup">上标</button>
+      </div>
+      <div class="row only-landscape" style="margin-top:8px">
+        <span class="lbl" style="margin:0">字号</span>
+        <input type="range" class="grow" id="size" min="10" max="100" value="36">
+        <span class="v" id="sizeV" style="color:var(--sub);width:28px;text-align:right">36</span>
+      </div>
+      <div class="chips only-landscape" id="alignChips" style="margin-top:6px">
+        <button class="chip on" data-al="">默认对齐</button>
+        <button class="chip" data-al="left">居中/左</button>
+        <button class="chip" data-al="center">居中</button>
+        <button class="chip" data-al="right">居右</button>
+      </div>
+    </div>
+
+    <!-- 渐变（横屏专属） -->
+    <div class="card only-landscape">
+      <div class="row">
+        <button class="chip" id="gradOn">渐变：关</button>
+        <input type="color" id="c2" value="#00c8ff" style="width:42px;height:34px;padding:0;border:1px solid var(--line);border-radius:6px;background:none">
+        <span class="lbl" style="margin:0">第二颜色</span>
+      </div>
+      <div class="chips" id="gradModes" style="margin-top:8px">
+        <button class="chip on" data-gm="linear">线性 A→B</button>
+        <button class="chip" data-gm="axis">轴对称 A→B→A</button>
+        <button class="chip" data-gm="loop">循环</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 右列（颜色 + 预览 + 输出） ================= -->
+  <div class="col">
+    <div class="card">
+      <div class="row">
+        <span class="lbl" style="margin:0">颜色</span>
+        <input type="color" id="cpick" value="#ff8800" style="width:42px;height:34px;padding:0;border:1px solid var(--line);border-radius:6px;background:none">
+        <input type="text" id="hex" class="grow" value="#ff8800" spellcheck="false">
+      </div>
+      <div class="row only-landscape" style="margin-top:8px">
+        <span class="lbl" style="margin:0">R</span><input type="number" id="r" min="0" max="255" value="255" style="width:66px">
+        <span class="lbl" style="margin:0">G</span><input type="number" id="g" min="0" max="255" value="136" style="width:66px">
+        <span class="lbl" style="margin:0">B</span><input type="number" id="b" min="0" max="255" value="0" style="width:66px">
+      </div>
+      <div class="row only-landscape" style="margin-top:8px">
+        <span class="lbl" style="margin:0">色名</span>
+        <select id="names"></select>
+        <span class="lbl" style="margin:0">透明度</span>
+        <input type="range" id="alpha" min="0" max="255" value="255" style="width:88px">
+      </div>
+      <div class="swatches" id="sw" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">预览（游戏内观感）</div>
+      <div id="preview"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">生成代码</div>
+      <pre id="out"></pre>
+    </div>
+  </div>
+</main>
+
+<div class="meta"><span id="stat">就绪</span><span id="count"></span></div>
+
+<div class="actions">
+  <button class="btn alt" id="copyBtn">复制</button>
+  <button class="btn" id="shareBtn" style="background:var(--accent)">分享</button>
+  <button class="btn ghost" id="clearBtn">清空</button>
+</div>
+
+<div class="pop" id="pop"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   彩色文本生成器 · 安卓版（精简）
+   竖屏：只做最常用的事（单行文字 + 样式 + 常用色 → 预览 → 复制/分享）
+   横屏：多行编辑 + 完整颜色系统（hex/RGB/色名/取色器/透明度）+ 渐变 + 对齐
+   标签按 Unity/TextMeshPro 规则生成；预览把标签映射成 HTML 显示。
+   ============================================================ */
+
+var APP_VERSION = "1.0.0";
+var MIN = 30;                                  // TMP 默认字号基准，用于预览换算
+
+/* ---------- 原生桥（浏览器里打开时自动降级） ---------- */
+var RTG = window.RTG || null;
+function bridge(name, arg) {
+  try { if (RTG && typeof RTG[name] === "function") { RTG[name](arg); return true; } } catch (e) {}
+  return false;
+}
+function pop(msg) {
+  var el = document.getElementById("pop");
+  el.textContent = msg; el.classList.add("on");
+  clearTimeout(pop._t);
+  pop._t = setTimeout(function () { el.classList.remove("on"); }, 1400);
+}
+function stat(s) { document.getElementById("stat").textContent = s; }
+
+/* ---------- 状态 ---------- */
+var S = {
+  text: "", color: "#ff8800", color2: "#00c8ff", grad: false, gradMode: "linear",
+  size: 36, alpha: 255, align: "", st: {}, theme: "light"
+};
+var SWATCH = ["#ff4c4c","#ff7a45","#ffa940","#ffd666","#ffec3d","#d3f261","#85e043","#52c41a",
+              "#36cfc9","#13c2c2","#40a9ff","#1890ff","#2f54eb","#722ed1","#eb2f96","#ff85c0",
+              "#ffffff","#d9d9d9","#8c8c8c","#595959","#262626","#000000"];
+var NAMES = { "红":"#ff0000","橙":"#ffa500","黄":"#ffff00","绿":"#008000","青":"#00ffff","蓝":"#0000ff",
+              "紫":"#800080","粉":"#ffc0cb","白":"#ffffff","灰":"#808080","黑":"#000000","棕":"#a52a2a",
+              "red":"#ff0000","orange":"#ff7f00","yellow":"#ffff00","green":"#00ff00","cyan":"#00ffff",
+              "blue":"#0000ff","purple":"#800080","pink":"#ffc0cb","white":"#ffffff","gray":"#808080","black":"#000000" };
+
+/* ---------- 工具 ---------- */
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function hex2rgb(h) {
+  h = String(h).replace("#", "").trim();
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  var n = parseInt(h, 16);
+  if (isNaN(n)) n = 0;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgb2hex(r, g, b) {
+  function f(v) { v = Math.max(0, Math.min(255, Math.round(v))); return (v < 16 ? "0" : "") + v.toString(16); }
+  return "#" + f(r) + f(g) + f(b);
+}
+function mix(a, b, t) { return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t }; }
+/* 关键：关闭标签只写标签名 —— TMP 规范是 </color>，不是 </color=#RRGGBB> */
+function tag(name, inner) { return "<" + name + ">" + inner + "</" + String(name).split("=")[0] + ">"; }
+
+/* ---------- 生成 TMP 富文本 ---------- */
+function gradientText(text) {
+  var A = hex2rgb(S.color), B = hex2rgb(S.color2);
+  var chars = Array.from(text);
+  var n = chars.length, cycles = 1;
+  if (S.gradMode === "loop") cycles = Math.max(1, Math.min(8, Math.round(n / 8)));
+  var out = "";
+  for (var i = 0; i < n; i++) {
+    var t = n <= 1 ? 0 : i / (n - 1);
+    if (S.gradMode === "axis") t = 1 - Math.abs(2 * t - 1);                 // A→B→A
+    else if (S.gradMode === "loop") { var f = t * cycles; t = 1 - Math.abs(2 * (f - Math.floor(f)) - 1); }
+    var c = mix(A, B, t);
+    out += tag("color=#" + rgb2hex(c.r, c.g, c.b).slice(1), esc(chars[i]));
+  }
+  return out;
+}
+function build() {
+  var inner = esc(S.text);
+  if (!S.text) return "";
+  if (S.grad) inner = gradientText(S.text);
+  else if (S.color) inner = tag("color=" + S.color, inner);
+  ["sub", "sup", "s", "u", "i", "b"].forEach(function (k) { if (S.st[k]) inner = tag(k, inner); });
+  if (S.alpha < 255) inner = tag("alpha=#" + ("0" + S.alpha.toString(16).toUpperCase()).slice(-2), inner);
+  if (S.size && Math.abs(S.size - 36) > 0.5) inner = tag("size=" + S.size, inner);
+  if (S.align) inner = tag("align=" + S.align, inner);
+  return inner;
+}
+
+/* ---------- 预览：TMP 标签 → HTML ---------- */
+var TAGRE = /<(\/?)(b|i|u|s|sub|sup|color|mark|size|alpha|align|link|voffset|cspace)(=[^>]*)?>/gi;
+function mapTag(close, name, val) {
+  name = name.toLowerCase();
+  if (close) {
+    if (name === "color" || name === "mark" || name === "size" || name === "alpha" ||
+        name === "voffset" || name === "cspace") return "</span>";
+    if (name === "align") return "</div>";
+    if (name === "link") return "</a>";
+    return "</" + name + ">";
+  }
+  val = (val || "").replace(/^=/, "");
+  switch (name) {
+    case "color": return '<span style="color:' + esc(val) + '">';
+    case "mark":
+      var m = hex2rgb(val); var a = 0.5;
+      if (val.length >= 8) { a = parseInt(val.slice(6, 8), 16) / 255; }
+      return '<span style="background:rgba(' + m.r + ',' + m.g + ',' + m.b + ',' + a.toFixed(2) + ')">';
+    case "size": { var pct = Math.max(30, Math.min(400, Math.round(parseFloat(val) / MIN * 100))); return '<span style="font-size:' + pct + '%">'; }
+    case "alpha": { var av = Math.max(0, Math.min(255, parseInt(val.replace("#", ""), 16) || 0)); return '<span style="opacity:' + (av / 255).toFixed(2) + '">'; }
+    case "align": return '<div style="text-align:' + esc(val) + '">';
+    case "voffset": return '<span style="position:relative;top:-' + esc(val) + '">';
+    case "cspace": return '<span style="letter-spacing:' + esc(val) + 'px">';
+    case "link": return val ? '<a href="' + esc(val) + '" style="color:#4cc2ff">' : "<span>";
+    default: return "<" + name + ">";
+  }
+}
+function toHtml(src) {
+  var out = "", last = 0, m;
+  TAGRE.lastIndex = 0;
+  while ((m = TAGRE.exec(src)) !== null) {
+    out += esc(src.slice(last, m.index));
+    out += mapTag(m[1] === "/", m[2], m[3]);
+    last = TAGRE.lastIndex;
+  }
+  out += esc(src.slice(last));
+  return out.replace(/\n/g, "<br>");
+}
+
+/* ---------- 刷新 ---------- */
+function refresh() {
+  var code = build();
+  $("out").textContent = code;
+  $("preview").innerHTML = code ? toHtml(code) : '<span style="color:#666">（预览）</span>';
+  var chars = Array.from(S.text).length;
+  var tags = code ? (code.match(/<[^>]+>/g) || []).length : 0;
+  $("count").textContent = chars ? chars + " 字 · " + tags + " 标签" : "";
+}
+function syncColorInputs() {
+  $("hex").value = S.color;
+  $("cpick").value = /^#[0-9a-f]{6}$/i.test(S.color) ? S.color : "#ff8800";
+  var c = hex2rgb(S.color);
+  $("r").value = c.r; $("g").value = c.g; $("b").value = c.b;
+  Array.prototype.forEach.call(document.querySelectorAll(".sw"), function (el) {
+    el.classList.toggle("on", el.dataset.c.toLowerCase() === S.color.toLowerCase());
+  });
+}
+
+/* ---------- 事件绑定 ---------- */
+function setText(v) { S.text = v; $("in1").value = v; $("in2").value = v; refresh(); }
+$("in1").addEventListener("input", function () { S.text = this.value; $("in2").value = this.value; refresh(); });
+$("in2").addEventListener("input", function () { S.text = this.value; $("in1").value = this.value; refresh(); });
+
+Array.prototype.forEach.call(document.querySelectorAll("#styleChips .chip"), function (el) {
+  el.addEventListener("click", function () {
+    var k = el.dataset.st; S.st[k] = !S.st[k];
+    el.classList.toggle("on", !!S.st[k]); refresh();
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll("#alignChips .chip"), function (el) {
+  el.addEventListener("click", function () {
+    S.align = el.dataset.al;
+    Array.prototype.forEach.call(document.querySelectorAll("#alignChips .chip"), function (o) { o.classList.remove("on"); });
+    el.classList.add("on"); refresh();
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll("#gradModes .chip"), function (el) {
+  el.addEventListener("click", function () {
+    S.gradMode = el.dataset.gm;
+    Array.prototype.forEach.call(document.querySelectorAll("#gradModes .chip"), function (o) { o.classList.remove("on"); });
+    el.classList.add("on"); refresh();
+  });
+});
+$("gradOn").addEventListener("click", function () {
+  S.grad = !S.grad;
+  this.textContent = "渐变：" + (S.grad ? "开" : "关");
+  this.classList.toggle("on", S.grad); refresh();
+});
+$("size").addEventListener("input", function () { S.size = parseInt(this.value, 10); $("sizeV").textContent = this.value; refresh(); });
+$("alpha").addEventListener("input", function () { S.alpha = parseInt(this.value, 10); refresh(); });
+$("c2").addEventListener("input", function () { S.color2 = this.value; refresh(); });
+
+function applyHex(v, silent) {
+  v = String(v).trim();
+  if (/^[0-9a-f]{6}$/i.test(v)) v = "#" + v;
+  if (/^[0-9a-f]{3}$/i.test(v)) v = "#" + v;
+  if (!/^#[0-9a-f]{6}$/i.test(v)) { if (!silent) pop("颜色要写成 #RRGGBB"); return; }
+  S.color = v.toLowerCase(); syncColorInputs(); refresh();
+}
+$("hex").addEventListener("change", function () { applyHex(this.value); });
+$("cpick").addEventListener("input", function () { applyHex(this.value); });
+["r", "g", "b"].forEach(function (k) {
+  $(k).addEventListener("change", function () {
+    applyHex(rgb2hex(parseInt($("r").value, 10) || 0, parseInt($("g").value, 10) || 0, parseInt($("b").value, 10) || 0));
+  });
+});
+(function buildSwatches() {
+  var box = $("sw");
+  SWATCH.forEach(function (c) {
+    var d = document.createElement("div");
+    d.className = "sw"; d.dataset.c = c; d.style.background = c;
+    d.addEventListener("click", function () { applyHex(c); });
+    box.appendChild(d);
+  });
+})();
+(function buildNames() {
+  var sel = $("names");
+  Object.keys(NAMES).forEach(function (n) {
+    var o = document.createElement("option"); o.value = NAMES[n]; o.textContent = n; sel.appendChild(o);
+  });
+  sel.addEventListener("change", function () { applyHex(this.value); });
+})();
+
+$("copyBtn").addEventListener("click", function () {
+  var code = $("out").textContent;
+  if (!code) { pop("先生成内容"); return; }
+  if (bridge("copy", code)) return;
+  try {
+    navigator.clipboard.writeText(code).then(function () { pop("已复制"); }, function () { pop("复制失败"); });
+  } catch (e) { pop("复制失败"); }
+});
+$("shareBtn").addEventListener("click", function () {
+  var code = $("out").textContent;
+  if (!code) { pop("先生成内容"); return; }
+  if (!bridge("share", code)) pop("分享只在手机上可用");
+});
+$("clearBtn").addEventListener("click", function () { setText(""); stat("已清空"); });
+
+/* ---------- 主题 ---------- */
+$("themeBtn").addEventListener("click", function () { setTheme(S.theme === "dark" ? "light" : "dark"); });
+function setTheme(v) {
+  S.theme = v === "dark" ? "dark" : "light";
+  document.body.classList.toggle("dark", S.theme === "dark");
+  try { localStorage.setItem("rtgTheme", S.theme); } catch (e) {}
+  try { if (RTG && RTG.theme) RTG.theme(S.theme); } catch (e) {}
+  try { if (window.chrome && chrome.webview) chrome.webview.postMessage("theme|" + S.theme); } catch (e) {}
+}
+
+/* ---------- 启动 ---------- */
+(function init() {
+  try { S.theme = localStorage.getItem("rtgTheme") === "dark" ? "dark" : "light"; } catch (e) {}
+  setTheme(S.theme);
+  var ver = APP_VERSION;
+  try { if (RTG && RTG.version) ver = RTG.version(); } catch (e) {}
+  $("ver").textContent = "v" + ver;
+  syncColorInputs();
+  refresh();
+  var o = "竖屏精简版";
+  if (window.innerWidth > window.innerHeight) o = "横屏完整版";
+  stat(o + " · " + (RTG ? "已连接宿主" : "浏览器预览"));
+})();
+window.addEventListener("resize", function () {
+  stat(window.innerWidth > window.innerHeight ? "横屏完整版" : "竖屏精简版");
+});
+</script>
+</body>
+</html>

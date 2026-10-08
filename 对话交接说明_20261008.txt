@@ -1,0 +1,89 @@
+彩色文本生成器 · 对话交接说明
+=====================================================================
+写于 2026-10-08 傍晚（这一轮对话结束时）
+给下一位接手的人 / AI 读：先看这份，再动代码。
+
+■ 本轮做了什么
+  1) 桌面版：主窗口（无边框 WebView2 外壳）加「鼠标拖拽缩放」+「位置大小记忆」
+  2) 原生 C++ 安装器：改为可拖拽缩放（流式布局，默认外观与原来逐像素一致）
+  3) 新增安卓版 APK：竖屏精简（无文本编辑区）/ 横屏功能更多
+  4) 发布 v5.8.0.0 到 GitHub（安装包 + 便携包 + APK）
+
+---------------------------------------------------------------------
+一、桌面版窗口拖拽缩放（本轮新功能，别删）
+  文件：工作区\WebUi\src\WebHost.cs
+  · WM_NCHITTEST 命中测试：HitTestEdge() 在客户区四边/四角 resizeBand 内返回
+    HTLEFT / HTRIGHT / HTTOP / HTBOTTOM / 四角 → 由系统完成缩放（含最小尺寸约束、Aero 贴靠）
+  · 为什么要留一圈「边」：WebView2 铺满客户区时，窗口自己收不到子窗口覆盖区域的命中测试，
+    所以窗体 Padding = resizeBand 让 WebView2 内缩，那圈留白归窗口做缩放命中。
+    → 改 UI 时不要给 WebView2 设 Dock=Fill 之外的铺满方式，也不要清掉 Padding
+  · resizeBand = 6 逻辑像素 × DPI/96（OnDpiChanged 重算）；最大化时 Padding=0（铺满，不留边）
+  · 位置/大小记忆：%APPDATA%\RichTextGen\window.json（left/top/width/height/maximized）
+    载入时用 IsOnScreen() 校验（避免拔掉显示器后窗口跑到屏幕外）；
+    OnResizeEnd（拖完即存）与 OnFormClosing（退出时存）写盘
+  · 主题联动：assets 侧 index.html 的 setTheme() 发 host('theme|dark|light')，
+    宿主把拖拽边底色改成 #202020 / #f3f3f3 —— 否则深色主题下会露一圈浅色边
+  · 标题栏拖动仍是 JS host('drag') → WM_NCLBUTTONDOWN(HTCAPTION)，双击最大化也照旧
+  构建：工作区\installer\build.bat（一条命令：编 app → 刷 payload_web → 编原生安装器）
+
+二、原生安装器可拖拽缩放
+  文件：工作区\installer\Setup.cpp
+  · 窗口样式加 WS_THICKFRAME | WS_MAXIMIZEBOX
+  · 新增 WM_GETMINMAXINFO：最小 S(620)xS(400)，用 AdjustWindowRectEx 把客户区换算成窗口尺寸；
+    同时设最大化尺寸/位置，避免盖住任务栏
+  · 新增 WM_SIZE → LayoutControls()（SIZE_MINIMIZED 时跳过）+ InvalidateRect
+  · LayoutControls() 已从「固定 720x500 坐标表」改成流式公式：
+      - 客户区正好 720x500 时，算出的坐标与旧固定布局逐像素一致（licY/licH/gapSB 那组公式就是为此）
+      - 拉高：多出的高度优先给许可框（licH），封顶后再给「状态→按钮」的间距
+      - 压矮：先压间距（最低 S(24)），再压许可框（最低 S(70)）
+      - 横向：安装路径框伸缩、浏览按钮钉右、三个勾选宽窗口保持原坐标/窄窗口等分压缩、按钮钉右下角
+  · 首次显示用 AdjustWindowRectEx 由 720x500 反推窗口大小，保证默认外观不变
+
+---------------------------------------------------------------------
+三、安卓版（本轮新增，纯离线 APK）
+  目录：工作区\android\
+  · AndroidManifest.xml —— package com.richtextgen.android，minSdk 24 / targetSdk 30，
+    **不申请任何权限**；configChanges 含 orientation|screenSize… → 旋转不重建 Activity，
+    由 CSS 媒体查询切换布局
+  · src\MainActivity.java —— WebView 外壳 + JS 桥（window.RTG.copy / share / toast / version / platform）；
+    返回键两秒内按两次退出（防止误触丢文本）
+  · assets\index.html —— 唯一界面，@media (orientation:portrait|landscape) 两套布局：
+      - 竖屏（功能精简，**没有大文本编辑区**）：单行文字输入 + B/I/U/S + 颜色/常用色块
+        + 实时预览 + 生成代码 + 复制/分享/清空
+      - 横屏（功能更多）：多行编辑区 + 下标/上标/字号/对齐 + 渐变（关/线性/轴对称/循环 + 第二颜色）
+        + 完整颜色系统（系统取色器 + #RRGGBB + RGB + 色名 + 透明度 + 22 色块）+ 预览 + 生成代码
+  · res\mipmap-{m,h,xh,xxh,xxxh}dpi\ic_launcher.png —— 从 installer\app.ico 的 256 帧缩放而来
+  · build_apk.bat → apkout\RichTextGen.apk（约 50 KB，v2+v3 签名、zipalign 4 字节对齐）
+  构建链（无 Gradle）：aapt2 compile/link → javac(Java 8) → d8(JDK 17) → 塞 classes.dex
+                        → zipalign → apksigner 签名并自检
+  工具位置：SDK=E:\Android\android-sdk（build-tools 30.0.2 / platforms\android-30\android.jar）
+            JDK17=C:\tools\jdk17\jdk-17.0.20.1+1\bin\java.exe，Java 8 在 PATH（javac/keytool）
+  三个必须知道的坑：
+    1) 中文路径：aapt2 / javac 打不开含中文的目录（"failed to open directory", error 2）
+       → build_apk.bat 先把源码 stage 到 %TEMP%\rtg_apk_build 再编，产物拷回 apkout\
+    2) 签名密钥：rtg.keystore 必须留在 android\ 目录（脚本会复用并在构建后回拷）。
+       若丢失/更换，新 APK 无法覆盖安装旧版（签名不一致）——务必保留这个文件
+    3) d8.bat / apksigner.bat 依赖 SDK tools 包的 find_java.bat（本机未装）会**静默退出**，
+       所以脚本直接 java -cp lib\d8.jar / java -jar lib\apksigner.jar
+  本轮验证方式（可重跑）：node --check 校验内联 JS；Chrome headless 真实渲染：
+    Start-Process chrome --headless=new --dump-dom / --screenshot（注意：必须用 Start-Process
+    传参数组，直接用 & 调用取不到输出）。实测结果：竖屏 8 个「横屏专属」块全部隐藏、横屏全部显示；
+    无横向溢出（scrollWidth == innerWidth）；标签闭合正确（</color>，不是 </color=#RRGGBB>）
+
+---------------------------------------------------------------------
+四、发布状态
+  · GitHub Release v5.8.0.3 已发布，三个附件：
+      RichTextGen-Setup.exe（桌面安装包，原生 C++，内含 5.8.0.3）
+      RichTextGen-Portable.zip（桌面便携包，解压即用）
+      RichTextGen.apk（安卓版，本轮新增）
+  · version.json（main 分支）版本号 = 5.8.0.3，安装包/便携包直链都指向 releases/latest（无需改）
+  · 坑：GitHub 会把发布资源的非 ASCII 文件名截断（彩色文本生成器.exe → default.exe，
+    即使 URL 做了 percent-encoding），上传后必须 PATCH /releases/assets/{id} 改成 ASCII 名
+  · 源码仓库里新增了 工作区\android\（安卓工程）与 工作区\对话交接说明_*.txt（本文件）
+
+五、还没做 / 可以继续
+  · 安卓版可再补：在线取色、色名搜索、块图、导入导出 TXT、横竖屏各自的记忆
+  · 桌面版与安卓版是**两套独立实现**的同源规则：改 TMP 标签逻辑时两边都要改
+      桌面 → WebHost.cs（+ 原生线 src\*.cs 的逻辑模块）
+      安卓 → android\assets\index.html 里的 build() / mapTag() / toHTML
+  · 桌面端「发送到游戏」已在 5.8.0.0 取消（按需求），别再加回来

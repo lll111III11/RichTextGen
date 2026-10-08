@@ -9,3 +9,7 @@ installer/payload*/
 installer/embedded.h
 installer/*.res
 installer/*.exe
+# android (APK) build artifacts — the APK is attached to GitHub Releases instead
+android/apkout/
+# signing key: keep it local (losing it changes the signature and breaks in-place updates)
+android/rtg.keystore
