@@ -2,7 +2,7 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.8.0.3",
+  "version": "5.8.0.4",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
@@ -11,5 +11,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.8.0.3 功能更新：\n· 【开发计划宣告】即将启动 Android 版「彩色文本生成器」（APK）研发：把本工具的颜色系统、Unity/TMP 标签生成、实时预览与选区套样式等能力带到手机上\n· 桌面端保持稳定维护：本版本为计划宣告版本，功能与 v5.8.0.2 保持一致（托盘常驻、超链接开浏览器、可拖动分割条、在线文档联动、系统右键集成）\n· 后续桌面端将同步 APK 版的新功能与修复"
+  "notes": "v5.8.0.4 更新：\n· 【安卓版】手机版（APK）已研发完成，并随本版本提交到项目（android/RichTextGen.apk）\n· 【安装器】新增可选组件「MER 地图编辑器（Alpha）」：安装界面提供勾选项与「检测 / 安装状态」按钮，先检测本机是否已装，未装则随本程序一起装到 <安装目录>\\MER-MapEditor(Alpha)；该组件明确标注为 Alpha（开发中）\n· 【界面】设置页「开发计划」卡片更新为完成状态，并新增 MER 地图编辑器条目\n· 桌面端功能与 v5.8.0.3 一致"
 }
