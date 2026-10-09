@@ -50,6 +50,12 @@ namespace
     const wchar_t* const kVersion   = L"5.8.0.3";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
+    // ---- MER 地图编辑器（Alpha，可选组件）----
+    const wchar_t* const kMerName     = L"MER 地图编辑器（Alpha）";
+    const wchar_t* const kMerFolder   = L"MER-MapEditor(Alpha)";     // 装到 <本程序目录>\ 这个子目录
+    const wchar_t* const kMerSubExe   = L"SCPSL-MER.exe";
+    const wchar_t* const kMerRegKey   = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SCPSL-MER";
+
     // ---- 控件 ID ----
     enum
     {
@@ -65,6 +71,8 @@ namespace
         IDC_STATUS = 110,
         IDC_EDIT_LICENSE = 111,
         IDC_LBL_PATH = 112,
+        IDC_CHK_MER = 113,
+        IDC_BTN_MER = 114,
         IDC_ANIM = 1
     };
 
@@ -542,7 +550,9 @@ namespace
             { IDC_CHK_DESKTOP,  k1,       chk1Y,          w1,         S(22),   false },
             { IDC_CHK_START,    k2,       chk1Y,          w2,         S(22),   false },
             { IDC_CHK_RUN,      k3,       chk1Y,          w3,         S(22),   false },
-            { IDC_CHK_GLASS,    m,        chk2Y,          cw - m * 2, S(22),   false },
+            { IDC_CHK_GLASS,    k1,       chk2Y,          w1,         S(22),   false },
+            { IDC_CHK_MER,      k2,       chk2Y,          w2,         S(22),   false },
+            { IDC_BTN_MER,      k3,       chk2Y - S(2),    w3,         S(26),   false },
             { IDC_PROGRESS,     m,        progY,          cw - m * 2, S(14),   false },
             { IDC_STATUS,       m,        statusY,        cw - m * 2, S(20),   false },
             { IDC_BTN_INSTALL,  installX, btnY,           installW,   btnH,    true  },
@@ -577,6 +587,85 @@ namespace
         InvalidateRect(g_hwnd, NULL, TRUE);
     }
 
+    // ---- MER 地图编辑器（Alpha）：检测与协同安装 ----
+
+    // 已安装则返回它的目录（读 HKCU 卸载信息 + 校验主程序在不在），否则返回空
+    std::wstring MerInstalled()
+    {
+        HKEY k = NULL;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kMerRegKey, 0, KEY_READ, &k) != ERROR_SUCCESS) return L"";
+        wchar_t buf[MAX_PATH * 2] = { 0 };
+        DWORD sz = sizeof(buf), type = 0;
+        LONG r = RegQueryValueExW(k, L"InstallLocation", NULL, &type, (BYTE*)buf, &sz);
+        RegCloseKey(k);
+        if (r != ERROR_SUCCESS || buf[0] == 0) return L"";
+        std::wstring dir = buf;
+        if (GetFileAttributesW((dir + L"\\" + kMerSubExe).c_str()) == INVALID_FILE_ATTRIBUTES) return L"";
+        return dir;
+    }
+
+    // 「检测 / 安装状态」按钮：先探测；没装就自动勾选，并说明会随本程序一起装到哪
+    void OnMerEntry(HWND hwnd)
+    {
+        std::wstring dir = MerInstalled();
+        if (!dir.empty())
+        {
+            SetDlgItemTextW(hwnd, IDC_STATUS,
+                (std::wstring(L"检测到已安装 ") + kMerName + L"：\r\n" + dir + L"（无需重复安装）").c_str());
+            return;
+        }
+        Button_SetCheck(GetDlgItem(hwnd, IDC_CHK_MER), BST_CHECKED);
+        wchar_t buf[MAX_PATH * 2] = { 0 };
+        GetDlgItemTextW(hwnd, IDC_EDIT_PATH, buf, MAX_PATH * 2);
+        SetDlgItemTextW(hwnd, IDC_STATUS,
+            (std::wstring(L"未检测到 ") + kMerName + L"。\r\n已自动勾选：点「立即安装」会把它一并装到 " +
+             std::wstring(buf) + L"\\" + kMerFolder + L"\r\n注意：该组件目前处于 Alpha 版本（开发中），仅供测试。").c_str());
+    }
+
+    // 协同安装：把 RCDATA 里的 MER 安装器写到临时文件，静默装到 <baseDir>\MER-MapEditor(Alpha)
+    int InstallMer(const std::wstring& baseDir)
+    {
+        HRSRC hr = FindResourceW(NULL, L"MER_PAYLOAD", RT_RCDATA);
+        if (!hr) return -2;
+        HGLOBAL hg = LoadResource(NULL, hr);
+        if (!hg) return -2;
+        const unsigned char* pdata = (const unsigned char*)LockResource(hg);
+        DWORD psize = SizeofResource(NULL, hr);
+        if (!pdata || psize == 0) return -2;
+
+        std::wstring dir = baseDir + L"\\" + kMerFolder;
+        CreateDirectoryW(dir.c_str(), NULL);
+
+        wchar_t tmp[MAX_PATH] = { 0 };
+        GetTempPathW(MAX_PATH, tmp);
+        std::wstring exe = std::wstring(tmp) + L"MER-MapEditor-Alpha-Setup.exe";
+        HANDLE hf = CreateFileW(exe.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hf == INVALID_HANDLE_VALUE) return -3;
+        DWORD written = 0;
+        BOOL okw = WriteFile(hf, pdata, psize, &written, NULL);
+        CloseHandle(hf);
+        if (!okw || written != psize) { DeleteFileW(exe.c_str()); return -4; }
+
+        std::wstring cmd = L"\"" + exe + L"\" /silent \"" + dir + L"\"";
+        wchar_t cmdline[32768] = { 0 };
+        wcsncpy_s(cmdline, cmd.c_str(), _TRUNCATE);
+
+        STARTUPINFOW si = { 0 }; si.cb = sizeof(si);
+        PROCESS_INFORMATION pi = { 0 };
+        if (!CreateProcessW(NULL, cmdline, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+        {
+            DeleteFileW(exe.c_str());
+            return -5;
+        }
+        WaitForSingleObject(pi.hProcess, 180000);
+        DWORD rc = 1;
+        GetExitCodeProcess(pi.hProcess, &rc);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        DeleteFileW(exe.c_str());
+        return (int)rc;
+    }
+
     void DoInstall(HWND hwnd)
     {
         if (g_installing) return;
@@ -592,6 +681,7 @@ namespace
         bool desktop = Button_GetCheck(GetDlgItem(hwnd, IDC_CHK_DESKTOP)) == BST_CHECKED;
         bool startMenu = Button_GetCheck(GetDlgItem(hwnd, IDC_CHK_START)) == BST_CHECKED;
         bool run = Button_GetCheck(GetDlgItem(hwnd, IDC_CHK_RUN)) == BST_CHECKED;
+        bool withMer = Button_GetCheck(GetDlgItem(hwnd, IDC_CHK_MER)) == BST_CHECKED;
 
         g_installing = true;
         EnableWindow(GetDlgItem(hwnd, IDC_BTN_INSTALL), FALSE);
@@ -607,12 +697,31 @@ namespace
 
         if (ok)
         {
+            // ---- 可选组件：MER 地图编辑器（Alpha）----
+            std::wstring merLine;
+            if (withMer)
+            {
+                std::wstring already = MerInstalled();
+                if (!already.empty())
+                {
+                    merLine = std::wstring(L"\r\n\r\n") + kMerName + L"：已安装（" + already + L"），未重复安装";
+                }
+                else
+                {
+                    SetStatusText(hwnd, L"正在协同安装 MER 地图编辑器（Alpha）…", 96);
+                    PumpMessages();
+                    int rc = InstallMer(dir);
+                    if (rc == 0) merLine = std::wstring(L"\r\n\r\n") + kMerName + L"：已装到 " + dir + L"\\" + kMerFolder;
+                    else merLine = std::wstring(L"\r\n\r\n") + kMerName + L"：安装未成功（错误码 " + std::to_wstring(rc) + L"），可单独运行安装程序重试";
+                }
+            }
+
             std::wstring exe = PickMainExe(dir);
             SetStatusText(hwnd, (std::wstring(L"安装完成：") + dir).c_str(), 100);
             if (run) ShellExecuteW(hwnd, L"open", exe.c_str(), NULL, dir.c_str(), SW_SHOWNORMAL);
             MessageBoxW(hwnd,
                 (std::wstring(L"安装完成！\r\n\r\n位置：") + dir +
-                 (desktop ? L"\r\n桌面快捷方式已创建" : L"") +
+                 (desktop ? L"\r\n桌面快捷方式已创建" : L"") + merLine +
                  L"\r\n\r\n卸载：开始菜单搜索“彩色文本生成器”或运行安装目录下的 Uninstall.exe").c_str(),
                 L"完成", MB_OK | MB_ICONINFORMATION);
             PostMessageW(hwnd, WM_CLOSE, 0, 0);
@@ -672,6 +781,15 @@ namespace
             HWND chkGlass = CreateWindowExW(0, L"BUTTON", L"毛玻璃背景（Win11 22H2）",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
                 0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_GLASS, g_hInst, NULL);
+
+            // 可选组件：MER 地图编辑器（Alpha）
+            HWND chkMer = CreateWindowExW(0, L"BUTTON", L"同时安装 MER 地图编辑器（Alpha）",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_CHK_MER, g_hInst, NULL);
+
+            HWND btnMer = CreateWindowExW(0, L"BUTTON", L"检测 / 安装状态",
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                0, 0, 0, 0, hwnd, (HMENU)IDC_BTN_MER, g_hInst, NULL);
             if (!BackdropSupported()) EnableWindow(chkGlass, FALSE);
 
             HWND prog = CreateWindowExW(0, PROGRESS_CLASSW, L"", WS_CHILD | WS_VISIBLE,
@@ -760,6 +878,15 @@ namespace
             }
             case IDC_CHK_GLASS:
                 ApplyGlass(Button_GetCheck(GetDlgItem(hwnd, IDC_CHK_GLASS)) == BST_CHECKED);
+                return 0;
+            case IDC_BTN_MER:
+                OnMerEntry(hwnd);
+                return 0;
+            case IDC_CHK_MER:
+                if (Button_GetCheck(GetDlgItem(hwnd, IDC_CHK_MER)) == BST_CHECKED)
+                    SetDlgItemTextW(hwnd, IDC_STATUS, (std::wstring(L"将一并安装 ") + kMerName + L"（Alpha，开发中，仅供测试）").c_str());
+                else
+                    SetDlgItemTextW(hwnd, IDC_STATUS, L"已取消一并安装 MER 地图编辑器。");
                 return 0;
             case IDC_BTN_INSTALL:
                 DoInstall(hwnd);

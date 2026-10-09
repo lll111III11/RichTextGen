@@ -1,6 +1,9 @@
-// 安装程序资源：内嵌图标（由 rc.exe 编译为 .res 后链接进 exe）
+﻿// 安装程序资源：内嵌图标（由 rc.exe 编译为 .res 后链接进 exe）
 // IDI_ICON1 是 Windows 约定的小整数 ID，资源管理器/快捷方式会自动采用第 1 个图标
 IDI_ICON1 ICON "app.ico"
+
+// MER 地图编辑器（Alpha）可选载荷：以二进制资源（RCDATA）嵌入，避免生成巨型 C++ 源文件
+MER_PAYLOAD RCDATA "mer_payload.bin"
 
 // 版本信息（资源管理器「属性 → 详细信息」可见）
 1 VERSIONINFO
