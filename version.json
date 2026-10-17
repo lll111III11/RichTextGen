@@ -2,14 +2,14 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.9.0.0",
+  "version": "5.9.0.1",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
-  "type": "feature",
+  "type": "fix",
   "downloads": {
-    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.0/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.0/RichTextGen-Portable.zip"
+    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.1/RichTextGen-Setup.exe",
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.1/RichTextGen-Portable.zip"
   },
-  "notes": "v5.9.0.0 更新（AI 接入 Beta）：\n· 【AI 接入（Beta）】新增「AI 接入」页：支持 DeepSeek / OpenAI / 通义千问 / 智谱 GLM / Moonshot Kimi / 自定义 OpenAI 兼容接口，填入 API Key 即用\n· 【真实操作】AI 可直接修改工作台文本、颜色、颜色写法、粗体/斜体/下划线/删除线/上下标/高亮、字号、透明度、渐变、超链接，并在本地执行\n· 【端口服务】可开启本机端口（默认 18762，仅监听 127.0.0.1），提供 GET /state、POST /action、POST /chat，支持可选 Token 鉴权，方便外部 AI / 客户端接入\n· 【安装器】移除「MER 地图编辑器（Alpha）」组件\n· 【设置】AI 配置保存在 %APPDATA%\\RichTextGen\\ai.json，端口服务可随程序启动自动恢复\n· 该 AI 接入能力处于 Beta 阶段，接口与行为可能继续调整"
+  "notes": "v5.9.0.1 更新：\n· 【AI 接入（Beta）修复】不再把 AI 身份写死为「内置助手」；当被问及是什么模型、来自哪个平台时，会如实说明真实模型与提供方\n· 其余功能与 v5.9.0.0 一致：多厂商接入、真实编辑操作、本地端口服务；安装器已移除 MER 组件\n· AI 接入能力仍处于 Beta 阶段"
 }

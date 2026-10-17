@@ -220,12 +220,14 @@ namespace RichTextGen
                     string endpoint = AiConfig.Endpoint;
                     string key = AiConfig.Key;
                     string model = AiConfig.Model;
+                    string provider = AiConfig.Provider;
 
                     string tmp = Field(json, "endpoint"); if (tmp.Length > 0) endpoint = tmp;
                     tmp = Field(json, "key"); if (tmp.Length > 0) key = tmp;
                     tmp = Field(json, "model"); if (tmp.Length > 0) model = tmp;
+                    tmp = Field(json, "provider"); if (tmp.Length > 0) provider = tmp;
 
-                    AiSyncResult r = RequestAi(endpoint, key, model, message,
+                    AiSyncResult r = RequestAi(endpoint, key, model, provider, message,
                         string.IsNullOrEmpty(state) ? _aiState : state);
                     if (!r.Ok) { Call("aiReply", "{\"ok\":false,\"content\":" + Quote(r.Error) + "}"); return; }
                     Call("aiReply", "{\"ok\":true,\"content\":" + Quote(r.Content) + "}");
@@ -241,14 +243,19 @@ namespace RichTextGen
         /// <summary>端口服务调用：同步返回模型原始内容。</summary>
         internal AiSyncResult AiChatSync(string message)
         {
-            return RequestAi(AiConfig.Endpoint, AiConfig.Key, AiConfig.Model, message, _aiState);
+            return RequestAi(AiConfig.Endpoint, AiConfig.Key, AiConfig.Model, AiConfig.Provider, message, _aiState);
         }
 
         // ============================================================ 模型请求
-        private static string BuildSystemPrompt(string state)
+        private static string BuildSystemPrompt(string state, string provider, string model)
         {
+            string who = string.IsNullOrEmpty(provider) ? "你当前接入的 AI 服务商" : provider;
+            string mdl = string.IsNullOrEmpty(model) ? "" : "（模型：" + model + "）";
             return
-                "你是「彩色文本生成器」的内置 AI 助手（Beta），可以直接操作编辑器。\n" +
+                "你是一个通用 AI 助手" + mdl + "，由 " + who + " 提供。\n" +
+                "你现在运行在「彩色文本生成器」这个工具里，可以通过下面的 actions 直接操作编辑器。\n" +
+                "身份要求：当用户问你是谁、你是什么模型、来自哪个平台时，如实说明你的真实模型与提供方；" +
+                "不要自称是「彩色文本生成器」自研的模型，也不要把工具名当成你的身份。\n\n" +
                 "当前编辑器状态 JSON：\n" + (string.IsNullOrEmpty(state) ? "{}" : state) + "\n\n" +
                 "请只返回一个 JSON 对象，不要 Markdown 代码围栏，格式：\n" +
                 "{\"reply\":\"给用户的简短中文说明\",\"actions\":[...]}\n" +
@@ -266,7 +273,7 @@ namespace RichTextGen
                 "如果不需要修改编辑器，actions 返回空数组。不要输出 JSON 以外的任何内容。";
         }
 
-        private static AiSyncResult RequestAi(string endpoint, string key, string model, string message, string state)
+        private static AiSyncResult RequestAi(string endpoint, string key, string model, string provider, string message, string state)
         {
             AiSyncResult r = new AiSyncResult();
             if (string.IsNullOrEmpty((message ?? "").Trim()))
@@ -283,7 +290,7 @@ namespace RichTextGen
             if (string.IsNullOrEmpty((model ?? "").Trim())) model = "deepseek-chat";
             endpoint = NormalizeEndpoint(endpoint);
 
-            string sys = BuildSystemPrompt(state);
+            string sys = BuildSystemPrompt(state, provider, model);
             string messages = "[{\"role\":\"system\",\"content\":" + Quote(sys) +
                               "},{\"role\":\"user\",\"content\":" + Quote(message) + "}]";
             string body = "{\"model\":" + Quote(model) + ",\"messages\":" + messages +
