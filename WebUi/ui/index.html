@@ -149,6 +149,39 @@
   .c-bot{align-self:flex-start;background:var(--card);border:1px solid var(--line)}
   .c-err{border:1px solid #c42b1c;color:#c42b1c}
   .c-ok{border:1px solid #0d7a3e;color:#0d7a3e;background:rgba(13,122,62,.06)}
+  .c-think{border-left:3px solid #8a8a8a;color:#6b6b6b;background:transparent;font-style:italic;font-size:12px}
+  .c-step{border-left:3px solid #0d7a3e;color:#0d7a3e;background:rgba(13,122,62,.06);font-size:12px}
+  .undoInline{margin-top:7px;padding:2px 12px;border:1px solid var(--line);border-radius:6px;
+              background:transparent;color:var(--accent);cursor:pointer;font-size:12px;font-family:inherit}
+  .undoInline:hover{background:var(--hover)}
+
+  /* ===== 执行过程时间线（Trae 风格） ===== */
+  .agent-run{margin:4px 0 6px;border-left:1px solid var(--line);padding-left:10px;
+             max-width:92%;font-size:12px;align-self:flex-start;width:100%}
+  .ar-head{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
+           padding:3px 0;color:var(--muted)}
+  .ar-chev{font-size:10px;transition:transform .15s ease}
+  .agent-run.collapsed .ar-chev{transform:rotate(-90deg)}
+  .agent-run.collapsed .ar-body{display:none}
+  .ar-title{font-weight:600;color:var(--text);font-size:12px}
+  .ar-sub{color:var(--muted);font-size:11px}
+  .ar-item{display:flex;gap:8px;padding:4px 0;position:relative}
+  .ar-ico{width:16px;flex:0 0 16px;text-align:center;color:var(--muted);font-size:12px;line-height:18px}
+  .ar-content{flex:1;min-width:0}
+  .ar-line{color:var(--text);cursor:pointer;line-height:1.5}
+  .ar-think .ar-line{color:var(--muted)}
+  .ar-arrow{color:var(--muted);font-size:10px;margin-left:2px}
+  .ar-detail{display:none;margin-top:3px;padding:5px 8px;border-radius:5px;background:var(--hover);
+             color:var(--muted);white-space:pre-wrap;line-height:1.55;max-height:180px;overflow:auto}
+  .ar-item.open .ar-detail{display:block}
+
+  /* ===== AI 对话窗口折叠 ===== */
+  .mini{border:1px solid var(--inputLine);background:var(--input);color:var(--text);
+        border-radius:5px;font-size:11px;padding:1px 8px;cursor:pointer;margin-left:8px;font-family:inherit}
+  .mini:hover{background:var(--hover)}
+  #p-chat.chat-collapsed #chatBox,
+  #p-chat.chat-collapsed #chatInputRow,
+  #p-chat.chat-collapsed #chatHintRow{display:none}
   /* ===== Win11 记事本式容器（概念设计 M1） ===== */
   #menubar{flex:0 0 auto;height:33px;display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--bg)}
   #menubar .mi{padding:4px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer}
@@ -461,7 +494,7 @@
     <!-- AI 接入（Beta） -->
     <section class="page" id="p-chat">
       <div class="card"><h3>✦ AI 接入 <span class="badge" style="background:#8a5a00;color:#fff8e0">Beta</span></h3>
-        <p class="hint">选择厂商并填入你自己的 API Key。AI 不只是聊天，它会直接修改工作台的文本、颜色、样式、渐变等。</p>
+        <p class="hint">选择厂商并填入你自己的 API Key。AI 不只是聊天，它会直接改写主编辑区正文、标签标题、颜色与样式。</p>
         <div class="row">
           <label class="f">厂商</label>
           <select id="aiProvider" onchange="aiProviderChange()" style="width:200px">
@@ -487,6 +520,50 @@
         </div>
       </div>
 
+      <div class="card"><h3>联网搜索系统</h3>
+        <p class="hint">开启后允许 AI 调用 <span class="mono">web_search</span> 工具联网搜索（Bing / DuckDuckGo，无需额外密钥）。</p>
+        <div class="row">
+          <button id="aiWebBtn" class="b" onclick="aiWebToggle()">🌐 联网搜索系统：已关闭</button>
+          <span class="hint" id="aiWebTip">点击开启后，AI 在需要资料时会先搜索再回答</span>
+        </div>
+      </div>
+
+      <div class="card"><h3>🧠 AI 大脑设置</h3>
+        <p class="hint">控制模型的思考深度与上下文长度。思考越深越聪明、但更慢更费 token；上下文条数越多越记得住前文，但请求更慢更贵。</p>
+        <div class="row">
+          <label class="f">思考强度</label>
+          <select id="aiReasoning" onchange="aiSave()" style="width:150px">
+            <option value="off">关闭（最快）</option>
+            <option value="low">低</option>
+            <option value="medium">中</option>
+            <option value="high" selected>高（推荐）</option>
+            <option value="max">最高（最慢）</option>
+          </select>
+          <label class="f">上下文条数</label>
+          <input type="text" id="aiCtxTurns" value="20" style="width:70px" onchange="aiSave()">
+          <label class="f">最大输出</label>
+          <input type="text" id="aiMaxTokens" value="8192" style="width:90px" onchange="aiSave()">
+        </div>
+        <div class="hint" id="aiBrainTip" style="margin-top:6px;line-height:1.7">
+          DeepSeek → <span class="mono">thinking</span> + <span class="mono">reasoning_effort</span>；通义千问 → <span class="mono">enable_thinking</span> + <span class="mono">thinking_budget</span>；Kimi → <span class="mono">reasoning_effort</span> / <span class="mono">thinking.keep</span>；智谱 GLM → <span class="mono">thinking.type</span> + <span class="mono">reasoning_effort</span>；OpenAI → <span class="mono">reasoning_effort</span>。关闭思考时自动退回普通温度采样。
+        </div>
+      </div>
+
+      <div class="card"><h3>🗂 AI 长期记忆 <span class="badge" id="aiMemCount">0 条</span></h3>
+        <p class="hint">记忆保存在 <span class="mono">%APPDATA%\RichTextGen\ai-memory.json</span>，每次对话自动加载。AI 会主动记住你的偏好与项目约定（<span class="mono">remember</span> 工具），你也可以手动增删。</p>
+        <div class="row">
+          <label><input type="checkbox" id="aiMemoryOn" checked onchange="aiMemoryToggle()"> 启用长期记忆</label>
+          <button class="b" onclick="aiMemoryReload()">刷新</button>
+          <button class="b" onclick="aiMemoryClear()">清空全部</button>
+          <span class="hint" id="aiMemoryTip"></span>
+        </div>
+        <div class="row">
+          <input type="text" id="aiMemoryInput" placeholder="手动添加，例如：正文默认使用 #E8E8E8" style="flex:1;min-width:220px">
+          <button class="b p" onclick="aiMemoryAdd()">添加记忆</button>
+        </div>
+        <div id="aiMemoryList" style="max-height:220px;overflow:auto;margin-top:8px"></div>
+      </div>
+
       <div class="card"><h3>端口服务 · 外部 AI / 客户端接入</h3>
         <p class="hint">开启后在本机 127.0.0.1 上监听，外部程序可通过 HTTP 调用本工具：GET /state、POST /action、POST /chat。</p>
         <div class="row">
@@ -501,13 +578,18 @@
         </div>
       </div>
 
-      <div class="card"><h3>AI 对话 / 操作</h3>
+      <div class="card"><h3>AI 对话 / 操作 <button class="mini" id="chatFoldBtn" onclick="toggleChatFold()">折叠</button></h3>
+        <div class="row" style="margin-bottom:8px">
+          <label><input type="checkbox" id="aiShowThink" checked onchange="aiThinkToggle()"> 显示思考与执行过程</label>
+          <label style="margin-left:14px"><input type="checkbox" id="aiNotifyDone" checked onchange="aiNotifyToggle()"> 完成后系统通知</label>
+          <span class="hint">会展示 reasoning_content 与每轮工具调用；想看到模型思考可把模型改为 deepseek-reasoner（若账号支持）</span>
+        </div>
         <div id="chatBox"></div>
-        <div class="row" style="margin-top:10px">
+        <div class="row" id="chatInputRow" style="margin-top:10px">
           <textarea id="chatInput" placeholder="例如：把工作台文字改成蓝色渐变、加粗，并套上 size=48" style="flex:1;min-height:64px;user-select:text"></textarea>
           <button class="b p" onclick="chatSend()">发送</button>
           <button class="b" onclick="chatClear()">清空</button></div>
-        <div class="row"><span class="hint">AI 会返回可执行操作并在本地应用；执行明细会显示在对话里。Enter 发送、Shift+Enter 换行。</span></div>
+        <div class="row" id="chatHintRow"><span class="hint">AI 会返回可执行操作并在本地应用；执行明细会显示在对话里。Enter 发送、Shift+Enter 换行。</span></div>
       </div>
     </section>
 
@@ -750,8 +832,8 @@ const AI_PROVIDERS = {
   deepseek:  { endpoint:'https://api.deepseek.com', model:'deepseek-chat' },
   openai:    { endpoint:'https://api.openai.com/v1', model:'gpt-4o-mini' },
   dashscope: { endpoint:'https://dashscope.aliyuncs.com/compatible-mode/v1', model:'qwen-plus' },
-  zhipu:     { endpoint:'https://open.bigmodel.cn/api/paas/v4', model:'glm-4-flash' },
-  moonshot:  { endpoint:'https://api.moonshot.cn/v1', model:'moonshot-v1-8k' },
+  zhipu:     { endpoint:'https://open.bigmodel.cn/api/paas/v4', model:'glm-4.6' },
+  moonshot:  { endpoint:'https://api.moonshot.cn/v1', model:'kimi-k2.6' },
   custom:    { endpoint:'', model:'' }
 };
 let chatHist = [];
@@ -763,11 +845,131 @@ function aiProviderChange(){
   if(p.endpoint) $('aiEndpoint').value = p.endpoint;
   if(p.model) $('aiModel').value = p.model;
 }
-function aiSave(){
-  host('aiSave|' + JSON.stringify({
+function aiNum(id, def, min, max){
+  try {
+    let n = parseInt($(id).value, 10);
+    if(isNaN(n)) n = def;
+    return Math.max(min, Math.min(max, n));
+  } catch(e){ return def; }
+}
+function aiCfgFromUi(){
+  return {
     provider:$('aiProvider').value, endpoint:$('aiEndpoint').value,
-    model:$('aiModel').value, key:$('aiKey').value
-  }));
+    model:$('aiModel').value, key:$('aiKey').value,
+    notifyDone: $('aiNotifyDone').checked,
+    webSearch: aiWebEnabled,
+    reasoningEffort: $('aiReasoning') ? $('aiReasoning').value : 'high',
+    contextTurns: aiNum('aiCtxTurns', 20, 0, 200),
+    maxTokens: aiNum('aiMaxTokens', 8192, 512, 65536),
+    memoryEnabled: $('aiMemoryOn') ? $('aiMemoryOn').checked : true
+  };
+}
+function aiSave(){ host('aiSave|' + JSON.stringify(aiCfgFromUi())); }
+function aiNotifyToggle(){ aiSave(); }
+
+/* ---------- 长期记忆管理 ---------- */
+let aiMemoryItems = [];
+function aiMemoryReload(){ host('aiMemoryLoad'); }
+function aiMemoryToggle(){ aiSave(); }
+function aiMemoryAdd(){
+  const el = $('aiMemoryInput'); if(!el) return;
+  const t = (el.value || '').trim();
+  if(!t){ status('先输入要记住的内容'); return; }
+  el.value = '';
+  host('aiMemoryAdd|' + JSON.stringify({ text: t }));
+}
+function aiMemoryRemove(id){ host('aiMemoryRemove|' + id); }
+function aiMemoryClear(){
+  if(!confirm('确定清空全部 AI 长期记忆？该操作不可恢复。')) return;
+  host('aiMemoryClear|');
+}
+function memRow(it){
+  const d = document.createElement('div');
+  d.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid rgba(128,128,128,.15)';
+  const s = document.createElement('span');
+  s.className = 'hint';
+  s.style.cssText = 'flex:1;user-select:text;white-space:pre-wrap;word-break:break-word';
+  s.textContent = it.text + (it.at ? '  (' + it.at + ')' : '');
+  const b = document.createElement('button');
+  b.className = 'mini'; b.textContent = '删除'; b.style.flex = '0 0 auto';
+  b.onclick = function(){ aiMemoryRemove(it.id); };
+  d.appendChild(s); d.appendChild(b);
+  return d;
+}
+function renderMemory(){
+  const box = $('aiMemoryList'); if(!box) return;
+  box.innerHTML = '';
+  const notes = [], tasks = [];
+  aiMemoryItems.forEach(function(it){ (it.kind === 'task' ? tasks : notes).push(it); });
+  const c = $('aiMemCount'); if(c) c.textContent = notes.length + ' 条';
+  if(!notes.length && !tasks.length){
+    const e = document.createElement('div');
+    e.className = 'hint';
+    e.textContent = '还没有记忆。对 AI 说「记住：正文默认用 #E8E8E8」即可自动记录。';
+    box.appendChild(e);
+    return;
+  }
+  // 记忆条目按新→旧
+  notes.slice().reverse().forEach(function(it){ box.appendChild(memRow(it)); });
+  if(tasks.length){
+    const det = document.createElement('details');
+    det.style.marginTop = '6px';
+    const sum = document.createElement('summary');
+    sum.className = 'hint';
+    sum.style.cssText = 'cursor:pointer;user-select:none';
+    sum.textContent = '最近任务日志（' + tasks.length + ' 条）';
+    det.appendChild(sum);
+    tasks.slice().reverse().forEach(function(it){ det.appendChild(memRow(it)); });
+    box.appendChild(det);
+  }
+}
+window.ui.aiMemory = function(json){
+  try {
+    const o = JSON.parse(json);
+    aiMemoryItems = Array.isArray(o.items) ? o.items : [];
+    if(o.enabled !== undefined && $('aiMemoryOn')) $('aiMemoryOn').checked = !!o.enabled;
+    renderMemory();
+    const tip = $('aiMemoryTip');
+    if(tip) tip.textContent = '共 ' + aiMemoryItems.length + ' 条';
+  } catch(e){}
+};
+window.ui.aiSaved = function(msg){ $('aiSaveTip').textContent = msg || '已保存'; };
+window.ui.aiSettings = function(json){
+  try {
+    const o = JSON.parse(json);
+    if(o.provider) $('aiProvider').value = o.provider;
+    if(o.endpoint) $('aiEndpoint').value = o.endpoint;
+    if(o.model) $('aiModel').value = o.model;
+    if(o.key) $('aiKey').value = o.key;
+    if(o.port) $('aiPort').value = o.port;
+    if(o.token) $('aiToken').value = o.token;
+    $('aiServerOn').checked = !!o.serverEnabled;
+    if (o.notifyDone !== undefined) $('aiNotifyDone').checked = !!o.notifyDone;
+    if (o.reasoningEffort && $('aiReasoning')) $('aiReasoning').value = o.reasoningEffort;
+    if (o.contextTurns !== undefined && $('aiCtxTurns')) $('aiCtxTurns').value = o.contextTurns;
+    if (o.maxTokens && $('aiMaxTokens')) $('aiMaxTokens').value = o.maxTokens;
+    if (o.memoryEnabled !== undefined && $('aiMemoryOn')) $('aiMemoryOn').checked = !!o.memoryEnabled;
+    aiWebEnabled = !!o.webSearch;
+    updateWebBtn();
+    aiMemoryReload();
+  } catch(e){}
+};
+
+/* 联网搜索系统开关 */
+let aiWebEnabled = false;
+function updateWebBtn(){
+  const b = $('aiWebBtn'); if(!b) return;
+  b.textContent = aiWebEnabled ? '🌐 联网搜索系统：已开启' : '🌐 联网搜索系统：已关闭';
+  b.style.background = aiWebEnabled ? '#0d7a3e' : '';
+  b.style.borderColor = aiWebEnabled ? '#0d7a3e' : '';
+  const t = $('aiWebTip');
+  if(t) t.textContent = aiWebEnabled ? 'AI 可在需要时调用 web_search 联网搜索' : '点击开启后，AI 在需要资料时会先搜索再回答';
+}
+function aiWebToggle(){
+  aiWebEnabled = !aiWebEnabled;
+  updateWebBtn();
+  aiSave();
+  status(aiWebEnabled ? '已开启联网搜索' : '已关闭联网搜索');
 }
 window.ui.aiSaved = function(msg){ $('aiSaveTip').textContent = msg || '已保存'; };
 window.ui.aiSettings = function(json){
@@ -780,6 +982,9 @@ window.ui.aiSettings = function(json){
     if(o.port) $('aiPort').value = o.port;
     if(o.token) $('aiToken').value = o.token;
     $('aiServerOn').checked = !!o.serverEnabled;
+    if (o.notifyDone !== undefined) $('aiNotifyDone').checked = !!o.notifyDone;
+    aiWebEnabled = !!o.webSearch;
+    updateWebBtn();
   } catch(e){}
 };
 function aiServerApply(){
@@ -794,25 +999,133 @@ window.ui.aiServerStatus = function(s){
   $('aiServerStatus').style.color = (s && s.indexOf('运行中') >= 0) ? '#0d7a3e' : '';
 };
 
+/* 思考 / 执行过程显示 */
+function aiShowProcess(){ return !$('aiShowThink') || $('aiShowThink').checked; }
+function aiThinkToggle(){
+  try { localStorage.setItem('rtgShowThink', $('aiShowThink').checked ? '1' : '0'); } catch(e){}
+}
+(function(){
+  try { if (localStorage.getItem('rtgShowThink') === '0') $('aiShowThink').checked = false; } catch(e){}
+})();
+
+/* 对话窗口折叠 */
+function toggleChatFold(){
+  const p = $('p-chat'); if(!p) return;
+  const c = p.classList.toggle('chat-collapsed');
+  const b = $('chatFoldBtn'); if(b) b.textContent = c ? '展开' : '折叠';
+  try { localStorage.setItem('rtgChatFold', c ? '1' : '0'); } catch(e){}
+}
+(function(){
+  try {
+    if (localStorage.getItem('rtgChatFold') === '1'){
+      const p = $('p-chat'); if(p) p.classList.add('chat-collapsed');
+      const b = $('chatFoldBtn'); if(b) b.textContent = '展开';
+    }
+  } catch(e){}
+})();
+
+/* 执行过程时间线（Trae 风格） */
+let currentRun = null;
+let runStats = { steps: 0, searches: 0, edits: 0 };
+
+function beginRun(){
+  if(!aiShowProcess()){ currentRun = null; return; }
+  runStats = { steps: 0, searches: 0, edits: 0 };
+  const el = document.createElement('div');
+  el.className = 'agent-run';
+  el.innerHTML =
+    '<div class="ar-head"><span class="ar-chev">▾</span>' +
+    '<span class="ar-title">执行过程</span><span class="ar-sub"></span></div>' +
+    '<div class="ar-body"></div>';
+  el.querySelector('.ar-head').onclick = function(){ el.classList.toggle('collapsed'); };
+  chatBox.appendChild(el);
+  currentRun = el;
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+function ensureRun(){ if(!currentRun) beginRun(); return currentRun; }
+function updateRunHead(){
+  if(!currentRun) return;
+  const title = currentRun.querySelector('.ar-title');
+  const sub = currentRun.querySelector('.ar-sub');
+  if(title) title.textContent = '执行过程 · ' + runStats.steps + ' 步';
+  if(sub){
+    const parts = [];
+    if(runStats.searches) parts.push('搜索 ' + runStats.searches + ' 次');
+    if(runStats.edits) parts.push('修改 ' + runStats.edits + ' 项');
+    sub.textContent = parts.join(' · ');
+  }
+}
+function runAddThink(text, round){
+  if(!aiShowProcess()) return;
+  const run = ensureRun(); if(!run) return;
+  const item = document.createElement('div');
+  item.className = 'ar-item ar-think';
+  item.innerHTML = '<span class="ar-ico">◐</span><div class="ar-content">' +
+    '<div class="ar-line">思考 · 第 ' + (round || '?') + ' 轮 <span class="ar-arrow">›</span></div>' +
+    '<div class="ar-detail"></div></div>';
+  item.querySelector('.ar-detail').textContent = text;
+  item.querySelector('.ar-line').onclick = function(){ item.classList.toggle('open'); };
+  run.querySelector('.ar-body').appendChild(item);
+  runStats.steps++;
+  updateRunHead();
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+function runAddStep(o){
+  if(!aiShowProcess()) return;
+  const run = ensureRun(); if(!run) return;
+  const types = (o && o.types && o.types.length) ? o.types : [];
+  const isSearch = types.indexOf('web_search') >= 0;
+  const isMem = types.indexOf('remember') >= 0;
+  if(isSearch) runStats.searches++;
+  else if(!isMem) runStats.edits += Math.max(1, types.length);
+
+  const item = document.createElement('div');
+  item.className = 'ar-item ar-step';
+  item.innerHTML = '<span class="ar-ico">' + (isSearch ? '⌕' : (isMem ? '🗂' : '✎')) + '</span>' +
+    '<div class="ar-content"><div class="ar-line"></div><div class="ar-detail"></div></div>';
+  item.querySelector('.ar-line').textContent = (o && o.text) ? o.text : '执行工具调用';
+  const detail = (types.length ? ('工具：' + types.join('、')) : '') +
+                 (o && o.applied ? ((types.length ? '\n' : '') + '结果：' + o.applied) : '');
+  item.querySelector('.ar-detail').textContent = detail;
+  item.querySelector('.ar-line').onclick = function(){ item.classList.toggle('open'); };
+  run.querySelector('.ar-body').appendChild(item);
+  runStats.steps++;
+  updateRunHead();
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+window.ui.aiThink = function(o){
+  if(!o || !o.text) return;
+  runAddThink(o.text, o.round);
+};
+window.ui.aiStep = function(o){
+  runAddStep(o);
+};
+
 function cMsg(role, text, cls){
   const d = document.createElement('div');
-  d.className = 'c-msg ' + (role === 'user' ? 'c-user' : 'c-bot') + (cls || '');
+  d.className = 'c-msg ' + (role === 'user' ? 'c-user' : 'c-bot') + (cls ? ' ' + cls : '');
   d.textContent = text;
   chatBox.appendChild(d); chatBox.scrollTop = chatBox.scrollHeight;
   return d;
 }
-function chatClear(){ chatHist = []; chatBox.innerHTML = ''; status('对话已清空'); }
+function chatClear(){ chatHist = []; chatBox.innerHTML = ''; currentRun = null; status('对话已清空'); }
 let chatThinkEl = null;
 function chatSend(){
   const q = chatInput.value.trim();
   if(!q){ status('先输入内容再发送'); return; }
   chatInput.value = '';
   cMsg('user', q);
+  const ctxTurns = aiNum('aiCtxTurns', 20, 0, 200);   // 可配置的历史条数
+  const hist = ctxTurns > 0 ? chatHist.slice(-ctxTurns) : [];   // 发送前的历史（不含本轮）
   chatHist.push({ role:'user', content:q });
-  chatThinkEl = cMsg('bot', '（AI 正在思考并准备操作…）');
+  aiCaptureSnapshot();                              // 记录任务前状态，供「撤回」使用
+  beginRun();                                       // 新建一条执行过程时间线
+  chatThinkEl = cMsg('bot', '（AI 正在思考，可能会连续调用工具…）');
   host('aiChat|' + JSON.stringify({
     message: q,
     state: JSON.stringify(aiState()),
+    history: JSON.stringify(hist),
     provider: $('aiProvider').value,
     endpoint: $('aiEndpoint').value,
     key: $('aiKey').value,
@@ -826,6 +1139,9 @@ chatInput.addEventListener('keydown', e => {
 /* 当前编辑器状态：既给界面内 AI，也给端口服务 */
 function aiState(){
   return {
+    documentTitle: (typeof DocM !== 'undefined' && DocM.activeName) ? DocM.activeName() : '',
+    documentText: (typeof DocM !== 'undefined' && DocM.activeText) ? DocM.activeText() : '',
+    tabs: (typeof DocM !== 'undefined' && DocM.tabNames) ? DocM.tabNames() : [],
     text: txt.value,
     mode: $('mode').value, color: $('color').value, size: $('size').value,
     bold: $('bold').checked, italic: $('italic').checked, underline: $('underline').checked,
@@ -834,29 +1150,201 @@ function aiState(){
     gradient: $('grad').checked, axial: $('axial').checked, loop: $('loop').checked,
     gradStart: $('gradStart').value, gradEnd: $('gradEnd').value,
     link: $('link').value, linkText: $('linkText').value,
+    selection: (function(){
+      try {
+        const el = document.getElementById('edSrc');
+        const s = el.selectionStart || 0, e = el.selectionEnd || 0;
+        return { start: s, end: e, text: (el.value || '').slice(s, e) };
+      } catch(err){ return { start: 0, end: 0, text: '' }; }
+    })(),
     output: out.value
   };
 }
 function aiPushState(){ try{ host('aiState|' + JSON.stringify(aiState())); }catch(e){} }
 
+/* 任务开始前保存快照，通知卡片上的「撤销」用它恢复 */
+let aiSnapshot = null;
+function aiCaptureSnapshot(){
+  try {
+    aiSnapshot = {
+      title: (typeof DocM !== 'undefined' && DocM.activeName) ? DocM.activeName() : '',
+      text: (typeof DocM !== 'undefined' && DocM.activeText) ? DocM.activeText() : txt.value,
+      workbench: txt.value,
+      state: aiState(),
+      theme: document.body.classList.contains('dark') ? 'dark' : 'light'
+    };
+  } catch(e){ aiSnapshot = null; }
+}
+window.ui.aiCaptureSnapshot = aiCaptureSnapshot;
+
+window.ui.aiUndo = function(){
+  if(!aiSnapshot){ status('没有可撤销的 AI 操作'); return false; }
+  const s = aiSnapshot;
+  try {
+    if (s.title && typeof DocM !== 'undefined' && DocM.activeName && DocM.activeName() !== s.title && DocM.switchByName){
+      DocM.switchByName(s.title);
+    }
+    if (typeof DocM !== 'undefined' && DocM.setActiveText) DocM.setActiveText(s.text || '');
+    else txt.value = s.text || '';
+    if (s.title && typeof DocM !== 'undefined' && DocM.setActiveName) DocM.setActiveName(s.title);
+    txt.value = (s.workbench != null) ? s.workbench : (s.text || '');
+
+    const st = s.state || {};
+    if (st.mode) $('mode').value = st.mode;
+    if (st.color != null) $('color').value = st.color;
+    if (st.size != null) $('size').value = st.size;
+    if (st.alpha != null) $('alpha').value = st.alpha;
+    ['bold','italic','underline','strike','sub','sup','mark'].forEach(function(k){
+      if (typeof st[k] === 'boolean') $(k).checked = st[k];
+    });
+    if (typeof st.gradient === 'boolean') $('grad').checked = st.gradient;
+    if (typeof st.axial === 'boolean') $('axial').checked = st.axial;
+    if (typeof st.loop === 'boolean') $('loop').checked = st.loop;
+    if (st.gradStart) $('gradStart').value = st.gradStart;
+    if (st.gradEnd) $('gradEnd').value = st.gradEnd;
+    if (st.link != null) $('link').value = st.link;
+    if (st.linkText != null) $('linkText').value = st.linkText;
+    if (s.theme && typeof setTheme === 'function') setTheme(s.theme);
+
+    gen(); updateColorInfo(); aiPushState();
+    aiSnapshot = null;
+    try { host('aiUndone'); } catch(e){}
+    status('已撤回本次 AI 操作');
+    return true;
+  } catch(e){
+    status('撤销失败：' + e.message);
+    return false;
+  }
+};
+
+/* 把正文写入当前文档（主编辑区 + 工作台同步） */
+function aiSetDocumentText(v){
+  v = v || '';
+  if (typeof DocM !== 'undefined' && DocM.setActiveText) DocM.setActiveText(v);
+  txt.value = v;
+}
+function aiCurrentText(){
+  return (typeof DocM !== 'undefined' && DocM.activeText) ? DocM.activeText() : txt.value;
+}
+function aiSyncEditorText(v){
+  v = v || '';
+  const el = document.getElementById('edSrc');
+  if (el) el.value = v;
+  if (typeof EdMode !== 'undefined' && EdMode && EdMode.current() === 'rich'){
+    const r = document.getElementById('edRich');
+    if (r) r.innerHTML = EdMode.toHtml(v);
+  }
+  if (typeof DocM !== 'undefined' && DocM.setActiveBuffer) DocM.setActiveBuffer(v);
+  txt.value = v;
+}
+
+/* 整段包裹 / 去掉 TMP 标签（AI 直接改样式时用，避免只改了工作台控件却没写进正文） */
+function aiWrapWhole(open, close, tag){
+  const v = aiCurrentText() || '';
+  if (!v) return false;
+  const re = new RegExp('^<' + tag + '(?:=[^>]*)?>([\\s\\S]*)</' + tag + '>$');
+  const m = v.match(re);
+  aiSetDocumentText(open + (m ? m[1] : v) + close);
+  return true;
+}
+function aiUnwrapWhole(tag){
+  const v = aiCurrentText() || '';
+  const re = new RegExp('^<' + tag + '(?:=[^>]*)?>([\\s\\S]*)</' + tag + '>$');
+  const m = v.match(re);
+  if (m) aiSetDocumentText(m[1]);
+}
+
 /* 执行 AI 返回的操作 */
 function applyAiActions(actions){
   const log = [];
+  let needGen = true;   // 纯样式类操作已直接写入正文时，不再重复生成一遍
   if(!actions || !actions.length) return log;
   for(let i=0;i<actions.length;i++){
     const a = actions[i]; if(!a || !a.type) continue;
     switch(a.type){
-      case 'setText': txt.value = a.text || ''; log.push('设置文本'); break;
-      case 'appendText': txt.value += (a.text || ''); log.push('追加文本'); break;
-      case 'clearText': txt.value = ''; log.push('清空文本'); break;
-      case 'setColor': $('color').value = a.color || ''; log.push('颜色 ' + (a.color || '')); break;
+      case 'setText': aiSetDocumentText(a.text || ''); log.push('写入正文'); break;
+      case 'appendText': aiSetDocumentText(aiCurrentText() + (a.text || '')); log.push('追加正文'); break;
+      case 'clearText': aiSetDocumentText(''); log.push('清空正文'); break;
+      case 'insertAtCursor': {
+        const el = document.getElementById('edSrc');
+        const s = el.selectionStart || 0;
+        const cur = el.value || '', ins = a.text || '';
+        el.value = cur.slice(0, s) + ins + cur.slice(s);   // 纯插入，不删除选区
+        el.selectionStart = el.selectionEnd = s + ins.length;
+        aiSyncEditorText(el.value);
+        log.push('光标插入'); break;
+      }
+      case 'replaceSelection': {
+        const el = document.getElementById('edSrc');
+        const s = el.selectionStart || 0, e2 = el.selectionEnd || 0;
+        const cur = el.value || '', ins = a.text || '';
+        el.value = cur.slice(0, s) + ins + cur.slice(e2);
+        el.selectionStart = el.selectionEnd = s + ins.length;
+        aiSyncEditorText(el.value);
+        log.push('替换选区'); break;
+      }
+      case 'selectAll': {
+        const el = document.getElementById('edSrc');
+        el.focus(); el.select();
+        log.push('全选正文'); break;
+      }
+      case 'setSelection': {
+        const el = document.getElementById('edSrc');
+        const s = Math.max(0, parseInt(a.from, 10) || 0);
+        const e2 = Math.max(s, parseInt(a.to, 10) || s);
+        el.focus();
+        el.selectionStart = s;
+        el.selectionEnd = e2;
+        log.push('选中 ' + s + '-' + e2); break;
+      }
+      case 'setTitle': if(typeof DocM !== 'undefined' && DocM.setActiveName) DocM.setActiveName(a.title || '无标题'); log.push('标题「' + (a.title || '') + '」'); break;
+      case 'newTab':
+        if (typeof DocM !== 'undefined'){
+          DocM.newTab();
+          if (a.title) DocM.setActiveName(a.title);
+          if (a.text) aiSetDocumentText(a.text);
+        }
+        log.push('新建标签'); break;
+      case 'switchTab':
+        if (typeof DocM !== 'undefined' && DocM.switchByName){
+          log.push(DocM.switchByName(a.name || a.title || '') ? '切换标签' : '未找到标签');
+        }
+        break;
+      case 'closeTab':
+        if (typeof DocM !== 'undefined' && DocM.closeActive){ DocM.closeActive(); log.push('关闭标签'); }
+        break;
+      case 'save': if (typeof DocM !== 'undefined' && DocM.save){ DocM.save(); log.push('保存'); } break;
+      case 'saveAs': if (typeof DocM !== 'undefined' && DocM.saveAs){ DocM.saveAs(); log.push('另存为'); } break;
+      case 'exportTxt': host('exportTxt|' + encodeURIComponent(aiCurrentText())); log.push('导出文本'); break;
+      case 'exportHtml': host('exportHtml|' + encodeURIComponent(out.value)); log.push('导出 HTML'); break;
+      case 'copyText': host('copy|' + aiCurrentText()); log.push('复制正文'); break;
+      case 'copyOutput': host('copy|' + out.value); log.push('复制代码'); break;
+      case 'setColor':
+        $('color').value = a.color || '';
+        if (a.color) aiWrapWhole('<color=' + a.color + '>', '</color>', 'color');
+        needGen = false;
+        log.push('颜色 ' + (a.color || '')); break;
       case 'setMode': $('mode').value = a.mode || 'hex'; break;
       case 'setStyle':
         ['bold','italic','underline','strike','sub','sup','mark'].forEach(function(k){
           if(typeof a[k] === 'boolean') $(k).checked = a[k];
         });
+        (function(){
+          const map = [['bold','b'],['italic','i'],['underline','u'],['strike','s'],['sub','sub'],['sup','sup'],['mark','mark']];
+          map.forEach(function(p){
+            if (typeof a[p[0]] !== 'boolean') return;
+            if (a[p[0]]) aiWrapWhole('<' + p[1] + '>', '</' + p[1] + '>', p[1]);
+            else aiUnwrapWhole(p[1]);
+          });
+        })();
+        needGen = false;
         log.push('样式'); break;
-      case 'setSize': $('size').value = (a.size == null ? '' : a.size); log.push('字号'); break;
+      case 'setSize':
+        $('size').value = (a.size == null ? '' : a.size);
+        if (a.size != null && String(a.size).length > 0)
+          aiWrapWhole('<size=' + a.size + '>', '</size>', 'size');
+        needGen = false;
+        log.push('字号'); break;
       case 'setAlpha': $('alpha').value = (a.alpha == null ? '' : a.alpha); log.push('透明度'); break;
       case 'setGradient':
         if(typeof a.enabled === 'boolean') $('grad').checked = a.enabled;
@@ -869,9 +1357,21 @@ function applyAiActions(actions){
         if(a.url) $('link').value = a.url;
         if(a.text) $('linkText').value = a.text;
         log.push('链接'); break;
+      case 'setTheme':
+        if (typeof setTheme === 'function'){
+          const th = (a.theme === 'light') ? 'light' : 'dark';
+          setTheme(th);
+          const t = $('theme'); if (t) t.value = th;
+          log.push('主题 ' + th);
+        }
+        break;
+      case 'openUrl': if (a.url){ host('openUrl|' + a.url); log.push('打开链接'); } break;
+      case 'goPage': if (typeof go === 'function'){ go(a.page || 'work'); log.push('切换页面'); } break;
+      case 'openFile': host('openFile'); log.push('打开文件'); break;
     }
   }
-  gen(); updateColorInfo(); aiPushState();
+  if (needGen) gen();
+  updateColorInfo(); aiPushState();
   setTimeout(aiPushState, 150);   // 等生成结果回填后再同步一次
   return log;
 }
@@ -886,6 +1386,50 @@ function stripFences(s){
   return s.trim();
 }
 
+/* 即使模型在 JSON 前后夹了说明文字，也尽量把第一个完整 JSON 对象抠出来 */
+function extractJsonObject(s){
+  s = stripFences(s || '');
+  try { return JSON.parse(s); } catch(e){}
+  const start = s.indexOf('{');
+  if(start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for(let i=start;i<s.length;i++){
+    const ch = s[i];
+    if(inStr){
+      if(esc) esc = false;
+      else if(ch === '\\') esc = true;
+      else if(ch === '"') inStr = false;
+      continue;
+    }
+    if(ch === '"'){ inStr = true; continue; }
+    if(ch === '{') depth++;
+    else if(ch === '}'){
+      depth--;
+      if(depth === 0){
+        try { return JSON.parse(s.slice(start, i + 1)); } catch(e){ return null; }
+      }
+    }
+  }
+  return null;
+}
+
+/* 对话流里的「撤回」按钮：确认后恢复任务前状态 */
+function addUndoButton(el){
+  if(!el || !aiSnapshot) return;
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = '7px';
+  const btn = document.createElement('button');
+  btn.className = 'undoInline';
+  btn.textContent = '撤回';
+  btn.onclick = function(){
+    if(!confirm('确定撤回本次 AI 操作吗？将恢复到任务开始前的状态。')) return;
+    const ok = window.ui.aiUndo();
+    if(ok){ btn.disabled = true; btn.textContent = '已撤回'; }
+  };
+  wrap.appendChild(btn);
+  el.appendChild(wrap);
+}
+
 window.ui.aiReply = function(r){
   const bubble = chatThinkEl; chatThinkEl = null;
   if(!r || !r.ok){
@@ -896,20 +1440,28 @@ window.ui.aiReply = function(r){
     return;
   }
   let content = stripFences(r.content);
-  let obj = null;
-  try { obj = JSON.parse(content); } catch(e){}
+  let obj = extractJsonObject(content);
   let reply = (obj && obj.reply) ? obj.reply : content;
   let actions = (obj && obj.actions) ? obj.actions : [];
 
-  if(bubble){ bubble.textContent = reply; bubble.className = 'c-msg c-bot'; }
-  else cMsg('bot', reply);
+  let target = bubble;
+  if(target){ target.textContent = reply; target.className = 'c-msg c-bot'; }
+  else target = cMsg('bot', reply);
 
+  let didActions = false;
   if(actions.length){
     const applied = applyAiActions(actions);
     cMsg('bot', '已执行 ' + applied.length + ' 项操作：' + applied.join('、'), 'c-ok');
+    didActions = true;
     status('AI 已修改编辑器');
   } else {
     status('AI 已回复');
+  }
+  if(didActions || (r.steps && r.steps.length)) addUndoButton(target);
+
+  if(currentRun){
+    if(runStats.steps === 0 && currentRun.parentNode) currentRun.parentNode.removeChild(currentRun);
+    currentRun = null;
   }
   chatHist.push({ role:'assistant', content:reply });
 };
@@ -1892,8 +2444,42 @@ const DocM = (function(){
   });
 
   document.getElementById('newTab').onclick = newTab;
+
+  /* 供 AI / 端口服务读写当前文档 */
+  function activeText(){
+    const a = byId(activeId); if (!a) return '';
+    a.buffer = getActiveText();
+    return a.buffer;
+  }
+  function activeName(){ const a = byId(activeId); return a ? a.name : ''; }
+  function setActiveText(v){
+    v = v || '';
+    const a = byId(activeId);
+    if (a){ a.buffer = v; if (!a.dirty){ a.dirty = true; render(); } }
+    edSrc().value = v;
+    if (typeof EdMode !== 'undefined' && EdMode && EdMode.current() === 'rich'){
+      const r = document.getElementById('edRich');
+      if (r) r.innerHTML = EdMode.toHtml(v);
+    }
+  }
+  function setActiveName(n){
+    const a = byId(activeId); if (!a) return;
+    a.name = (n && n.trim()) ? n.trim() : '无标题';
+    a.dirty = true; render();
+  }
+  function switchByName(n){
+    if (!n) return false;
+    const d = docs.find(x => x.name === n) || docs.find(x => x.name.indexOf(n) >= 0);
+    if (d) { switchTab(d.id); return true; }
+    return false;
+  }
+  function closeActive(){ if (activeId) closeTab(activeId); }
+  function tabNames(){ return docs.map(d => d.name); }
+
   return { newTab, switchTab, closeTab, save, saveAs, addDoc, openFromHost, saved, markDirty,
-           setActiveBuffer, setViewHook: f => { viewHook = f; } };
+           setActiveBuffer, setViewHook: f => { viewHook = f; },
+           activeText, activeName, setActiveText, setActiveName,
+           switchByName, closeActive, tabNames };
 })();
 /* 启动：创建第一个「无标题」标签 */
 DocM.addDoc('无标题', '', '', true);
@@ -2412,8 +2998,8 @@ const EdMode = (function(){
     document.addEventListener('mousemove', ev => {
       if (!dragging) return;
       const dx = ev.clientX - startX;
-      // 分割条在右侧，拖右=增大工作台 → 宽度 = 初始宽 + dx
-      setW(startW + dx);
+      // 分割条在右侧：向右拖 → 编辑区变宽、工作台变窄，所以宽度 = 初始宽 - dx
+      setW(startW - dx);
     });
     document.addEventListener('mouseup', () => {
       if (!dragging) return;

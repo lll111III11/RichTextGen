@@ -591,6 +591,11 @@ namespace RichTextGen
                 case "aiServerStatus": CallStr("aiServerStatus", AiServerStatus()); break;
                 case "aiState": SetAiState(arg); break;
                 case "aiActionResult": OnAiActionResult(arg); break;
+                case "aiMemoryLoad": CallStr("aiMemory", AiMemoryLoad()); break;
+                case "aiMemoryAdd": CallStr("aiMemory", AiMemoryAdd(arg)); break;
+                case "aiMemoryRemove": CallStr("aiMemory", AiMemoryRemove(arg)); break;
+                case "aiMemoryClear": CallStr("aiMemory", AiMemoryClear()); break;
+                case "aiUndone": NotifyToast("已撤回", "已恢复本次 AI 修改前的状态。"); break;
                 case "easterEgg": PlayNetSound(); break;
                 case "uninstall": UninstallApp(); break;
                 case "exportHtml": ExportHtml(Un(arg)); break;
@@ -1529,6 +1534,14 @@ namespace RichTextGen
         /// <summary>POST JSON（用于 DeepSeek 等 OpenAI 兼容接口）</summary>
         private static string HttpPost(string url, string bearer, string jsonBody, int ms)
         {
+            string err;
+            return HttpPostEx(url, bearer, jsonBody, ms, out err);
+        }
+
+        /// <summary>同 HttpPost，但把 HTTP 状态码与响应体带回 error，便于提示「哪家平台哪个参数不认」。</summary>
+        private static string HttpPostEx(string url, string bearer, string jsonBody, int ms, out string error)
+        {
+            error = "";
             try
             {
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
@@ -1545,7 +1558,27 @@ namespace RichTextGen
                 using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
                     return sr.ReadToEnd();
             }
-            catch { return ""; }
+            catch (WebException we)
+            {
+                try
+                {
+                    HttpWebResponse hr = we.Response as HttpWebResponse;
+                    if (hr != null)
+                    {
+                        using (Stream s = hr.GetResponseStream())
+                        using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
+                        {
+                            string b = sr.ReadToEnd();
+                            error = "HTTP " + (int)hr.StatusCode + " " + b;
+                        }
+                    }
+                    else error = we.Message;
+                }
+                catch { error = we.Message; }
+                if (error.Length > 400) error = error.Substring(0, 400) + "…";
+                return "";
+            }
+            catch (Exception ex) { error = ex.Message; return ""; }
         }
 
         // ============================================================ 图片色块图

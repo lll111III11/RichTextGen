@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Windows.Forms;
 
 namespace RichTextGen
 {
@@ -19,6 +21,18 @@ namespace RichTextGen
         public static bool ServerEnabled = false;
         public static int Port = 18762;
         public static string Token = "";
+        public static bool NotifyDone = true;
+        public static bool WebSearchEnabled = false;
+
+        // ---- 思考能力 / 上下文 / 记忆 ----
+        /// <summary>思考强度：off（关闭思考）/ low / medium / high / max。</summary>
+        public static string ReasoningEffort = "high";
+        /// <summary>随请求携带的历史消息条数（不含本轮），0 表示不带上文。</summary>
+        public static int ContextTurns = 20;
+        /// <summary>单次回复最大输出 token。</summary>
+        public static int MaxTokens = 8192;
+        /// <summary>是否启用长期记忆。</summary>
+        public static bool MemoryEnabled = true;
 
         public static string Dir
         {
@@ -49,6 +63,12 @@ namespace RichTextGen
                 sb.Append(",\"serverEnabled\":").Append(ServerEnabled ? "true" : "false");
                 sb.Append(",\"port\":").Append(Port);
                 sb.Append(",\"token\":").Append(J(Token));
+                sb.Append(",\"notifyDone\":").Append(NotifyDone ? "true" : "false");
+                sb.Append(",\"webSearch\":").Append(WebSearchEnabled ? "true" : "false");
+                sb.Append(",\"reasoningEffort\":").Append(J(ReasoningEffort));
+                sb.Append(",\"contextTurns\":").Append(ContextTurns);
+                sb.Append(",\"maxTokens\":").Append(MaxTokens);
+                sb.Append(",\"memoryEnabled\":").Append(MemoryEnabled ? "true" : "false");
                 sb.Append('}');
                 File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
             }
@@ -65,6 +85,12 @@ namespace RichTextGen
             sb.Append(",\"serverEnabled\":").Append(ServerEnabled ? "true" : "false");
             sb.Append(",\"port\":").Append(Port);
             sb.Append(",\"token\":").Append(J(Token));
+            sb.Append(",\"notifyDone\":").Append(NotifyDone ? "true" : "false");
+            sb.Append(",\"webSearch\":").Append(WebSearchEnabled ? "true" : "false");
+            sb.Append(",\"reasoningEffort\":").Append(J(ReasoningEffort));
+            sb.Append(",\"contextTurns\":").Append(ContextTurns);
+            sb.Append(",\"maxTokens\":").Append(MaxTokens);
+            sb.Append(",\"memoryEnabled\":").Append(MemoryEnabled ? "true" : "false");
             sb.Append('}');
             return sb.ToString();
         }
@@ -79,8 +105,19 @@ namespace RichTextGen
             v = JStr(json, "token"); if (v != null) Token = v;
             bool b;
             if (JBool(json, "serverEnabled", out b)) ServerEnabled = b;
+            if (JBool(json, "notifyDone", out b)) NotifyDone = b;
+            if (JBool(json, "webSearch", out b)) WebSearchEnabled = b;
+            if (JBool(json, "memoryEnabled", out b)) MemoryEnabled = b;
             int n;
             if (JInt(json, "port", out n) && n > 0 && n < 65536) Port = n;
+            if (JInt(json, "contextTurns", out n) && n >= 0 && n <= 200) ContextTurns = n;
+            if (JInt(json, "maxTokens", out n) && n >= 512 && n <= 65536) MaxTokens = n;
+            v = JStr(json, "reasoningEffort");
+            if (v != null)
+            {
+                v = v.Trim().ToLowerInvariant();
+                if (v == "off" || v == "low" || v == "medium" || v == "high" || v == "max") ReasoningEffort = v;
+            }
         }
 
         // ---------------- 极简 JSON 读取 ----------------
@@ -167,11 +204,235 @@ namespace RichTextGen
         }
     }
 
-    internal class AiSyncResult
+    /// <summary>
+    /// AI 长期记忆（保存在 %APPDATA%\RichTextGen\ai-memory.json）。
+    /// note = AI 主动记住的偏好/约定/事实（也会在下次会话注入 system prompt）；
+    /// task = 每次任务完成后自动追加的简短日志（仅本地留档，注入时只取最近几条）。
+    /// </summary>
+    internal static class AiMemory
+    {
+        internal class Item
+        {
+            public string Id = "";
+            public string Kind = "note";
+            public string Text = "";
+            public string At = "";
+        }
+
+        private static readonly List<Item> _items = new List<Item>();
+        private static readonly object _lock = new object();
+        private static bool _loaded;
+        private const int MaxNotes = 80;
+        private const int MaxTasks = 20;
+
+        public static string FilePath
+        {
+            get { return Path.Combine(AiConfig.Dir, "ai-memory.json"); }
+        }
+
+        public static void Load()
+        {
+            lock (_lock)
+            {
+                _items.Clear();
+                _loaded = true;
+                try
+                {
+                    if (!File.Exists(FilePath)) return;
+                    string json = File.ReadAllText(FilePath, Encoding.UTF8);
+                    string arr = AiConfig.JRaw(json, "items");
+                    foreach (string obj in MainForm.SplitTopLevelObjects(arr))
+                    {
+                        Item it = new Item();
+                        it.Id = AiConfig.JStr(obj, "id") ?? "";
+                        it.Kind = AiConfig.JStr(obj, "kind") ?? "note";
+                        it.Text = AiConfig.JStr(obj, "text") ?? "";
+                        it.At = AiConfig.JStr(obj, "at") ?? "";
+                        if (it.Text.Length == 0) continue;
+                        if (it.Id.Length == 0) it.Id = Guid.NewGuid().ToString("N");
+                        _items.Add(it);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static void Ensure()
+        {
+            if (!_loaded) Load();
+        }
+
+        public static int Count
+        {
+            get { lock (_lock) { Ensure(); return _items.Count; } }
+        }
+
+        public static void Save()
+        {
+            lock (_lock)
+            {
+                try
+                {
+                    Directory.CreateDirectory(AiConfig.Dir);
+                    StringBuilder sb = new StringBuilder();
+                    sb.Append("{\"items\":[");
+                    for (int i = 0; i < _items.Count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        sb.Append("{\"id\":").Append(AiConfig.J(_items[i].Id));
+                        sb.Append(",\"kind\":").Append(AiConfig.J(_items[i].Kind));
+                        sb.Append(",\"text\":").Append(AiConfig.J(_items[i].Text));
+                        sb.Append(",\"at\":").Append(AiConfig.J(_items[i].At)).Append('}');
+                    }
+                    sb.Append("]}");
+                    File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>新增一条记忆（完全重复的会被忽略）。</summary>
+        public static void Add(string text, string kind)
+        {
+            lock (_lock)
+            {
+                Ensure();
+                text = (text ?? "").Trim();
+                if (text.Length == 0) return;
+                if (text.Length > 1000) text = text.Substring(0, 1000);
+                foreach (Item it in _items)
+                    if (string.Equals(it.Text, text, StringComparison.Ordinal)) return;
+                _items.Add(new Item
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Kind = kind == "task" ? "task" : "note",
+                    Text = text,
+                    At = DateTime.Now.ToString("yyyy-MM-dd HH:mm")
+                });
+                Trim();
+                Save();
+            }
+        }
+
+        private static void Trim()
+        {
+            int notes = 0, tasks = 0;
+            for (int i = _items.Count - 1; i >= 0; i--)
+            {
+                if (_items[i].Kind == "task")
+                {
+                    tasks++;
+                    if (tasks > MaxTasks) _items.RemoveAt(i);
+                }
+                else
+                {
+                    notes++;
+                    if (notes > MaxNotes) _items.RemoveAt(i);
+                }
+            }
+        }
+
+        public static bool Remove(string id)
+        {
+            lock (_lock)
+            {
+                Ensure();
+                id = (id ?? "").Trim();
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    if (_items[i].Id == id) { _items.RemoveAt(i); Save(); return true; }
+                }
+                return false;
+            }
+        }
+
+        public static void Clear()
+        {
+            lock (_lock)
+            {
+                _items.Clear();
+                _loaded = true;
+                Save();
+            }
+        }
+
+        public static string ToJson()
+        {
+            lock (_lock)
+            {
+                Ensure();
+                StringBuilder sb = new StringBuilder();
+                sb.Append("{\"ok\":true,\"enabled\":").Append(AiConfig.MemoryEnabled ? "true" : "false");
+                sb.Append(",\"items\":[");
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.Append("{\"id\":").Append(AiConfig.J(_items[i].Id));
+                    sb.Append(",\"kind\":").Append(AiConfig.J(_items[i].Kind));
+                    sb.Append(",\"text\":").Append(AiConfig.J(_items[i].Text));
+                    sb.Append(",\"at\":").Append(AiConfig.J(_items[i].At)).Append('}');
+                }
+                sb.Append("]}");
+                return sb.ToString();
+            }
+        }
+
+        /// <summary>拼进 system prompt 的记忆段落；没有记忆时返回空串。</summary>
+        public static string PromptText()
+        {
+            lock (_lock)
+            {
+                Ensure();
+                if (_items.Count == 0) return "";
+                StringBuilder notes = new StringBuilder();
+                StringBuilder tasks = new StringBuilder();
+                int nc = 0;
+                foreach (Item it in _items)
+                {
+                    if (it.Kind == "task") continue;
+                    if (nc >= 40) break;
+                    nc++;
+                    string t = it.Text.Length > 300 ? it.Text.Substring(0, 300) + "…" : it.Text;
+                    notes.Append("- ").Append(t).Append('\n');
+                }
+                int tc = 0;
+                for (int i = _items.Count - 1; i >= 0 && tc < 5; i--)
+                {
+                    if (_items[i].Kind != "task") continue;
+                    tc++;
+                    tasks.Append("- [").Append(_items[i].At).Append("] ").Append(_items[i].Text).Append('\n');
+                }
+                if (notes.Length == 0 && tasks.Length == 0) return "";
+                StringBuilder sb = new StringBuilder();
+                if (notes.Length > 0)
+                    sb.Append("【长期记忆】以下是用户要求你长期记住的偏好、约定与事实，回答和操作时必须遵守；")
+                      .Append("不要向用户复述这些条目，也不要说“根据我的记忆”。\n").Append(notes);
+                if (tasks.Length > 0)
+                    sb.Append("\n【最近任务】以下是你最近完成过的任务，可作为上下文参考：\n").Append(tasks);
+                return sb.ToString();
+            }
+        }
+
+        /// <summary>任务结束后自动留一条简短日志（不消耗模型调用）。</summary>
+        public static void LogTask(string user, string result)
+        {
+            if (!AiConfig.MemoryEnabled) return;
+            string u = (user ?? "").Trim().Replace("\r", " ").Replace("\n", " ");
+            string r = (result ?? "").Trim().Replace("\r", " ").Replace("\n", " ");
+            if (u.Length > 60) u = u.Substring(0, 60) + "…";
+            if (r.Length > 120) r = r.Substring(0, 120) + "…";
+            if (u.Length == 0) return;
+            Add("用户要求：" + u + (r.Length > 0 ? " → 已处理：" + r : ""), "task");
+        }
+    }
+
+    internal class AgentResult
     {
         public bool Ok;
         public string Content = "";
         public string Error = "";
+        public string StepsJson = "[]";
+        public int StepCount;
     }
 
     /// <summary>
@@ -199,6 +460,35 @@ namespace RichTextGen
             CallStr("aiSaved", "AI 设置已保存");
         }
 
+        // ============================================================ 长期记忆
+        public string AiMemoryLoad()
+        {
+            AiMemory.Load();
+            return AiMemory.ToJson();
+        }
+
+        /// <summary>界面手动添加（json 形如 {"text":"..."}）。</summary>
+        public string AiMemoryAdd(string json)
+        {
+            AiMemory.Load();
+            string text = AiConfig.JStr(json ?? "", "text");
+            if (string.IsNullOrEmpty(text)) text = (json ?? "").Trim();
+            AiMemory.Add(text, "note");
+            return AiMemory.ToJson();
+        }
+
+        public string AiMemoryRemove(string id)
+        {
+            AiMemory.Remove(id);
+            return AiMemory.ToJson();
+        }
+
+        public string AiMemoryClear()
+        {
+            AiMemory.Clear();
+            return AiMemory.ToJson();
+        }
+
         // ============================================================ 状态同步
         public string GetAiState() { return string.IsNullOrEmpty(_aiState) ? "{}" : _aiState; }
 
@@ -207,8 +497,8 @@ namespace RichTextGen
             if (!string.IsNullOrEmpty(json) && json.TrimStart().StartsWith("{")) _aiState = json;
         }
 
-        // ============================================================ 界面聊天（异步）
-        /// <summary>JS 发起：把状态 + 用户要求发给模型，结果回调 ui.aiReply。</summary>
+        // ============================================================ 界面聊天（异步，多轮 Agent）
+        /// <summary>JS 发起：带历史上下文的多轮对话 + 连续工具调用，最终回调 ui.aiReply。</summary>
         public void AiChat(string json)
         {
             ThreadPool.QueueUserWorkItem(delegate
@@ -217,6 +507,7 @@ namespace RichTextGen
                 {
                     string message = Field(json, "message");
                     string state = Field(json, "state");
+                    string history = Field(json, "history");
                     string endpoint = AiConfig.Endpoint;
                     string key = AiConfig.Key;
                     string model = AiConfig.Model;
@@ -227,11 +518,19 @@ namespace RichTextGen
                     tmp = Field(json, "model"); if (tmp.Length > 0) model = tmp;
                     tmp = Field(json, "provider"); if (tmp.Length > 0) provider = tmp;
 
-                    AiSyncResult r = RequestAi(endpoint, key, model, provider, message,
-                        string.IsNullOrEmpty(state) ? _aiState : state);
+                    AgentResult r = RunAgent(endpoint, key, model, provider, message,
+                        string.IsNullOrEmpty(state) ? _aiState : state, history);
                     if (!r.Ok) { Call("aiReply", "{\"ok\":false,\"content\":" + Quote(r.Error) + "}"); return; }
-                    Call("aiReply", "{\"ok\":true,\"content\":" + Quote(r.Content) + "}");
-                    CallStr("status", "AI 已回复（Beta）");
+                    Call("aiReply", "{\"ok\":true,\"content\":" + Quote(r.Content) + ",\"steps\":" + r.StepsJson + "}");
+                    CallStr("status", "AI 已完成（Beta）");
+
+                    int doneSteps = r.StepCount;
+                    string doneText = r.Content;
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        System.Threading.Thread.Sleep(600);   // 先让对话渲染完，再弹窗
+                        NotifyAiDone(doneText, doneSteps);
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -240,42 +539,109 @@ namespace RichTextGen
             });
         }
 
-        /// <summary>端口服务调用：同步返回模型原始内容。</summary>
-        internal AiSyncResult AiChatSync(string message)
+        /// <summary>端口服务调用：同步跑完整 Agent 循环（含多轮工具执行与可选历史）。</summary>
+        internal AgentResult AiChatSync(string message, string history)
         {
-            return RequestAi(AiConfig.Endpoint, AiConfig.Key, AiConfig.Model, AiConfig.Provider, message, _aiState);
+            AgentResult r = RunAgent(AiConfig.Endpoint, AiConfig.Key, AiConfig.Model, AiConfig.Provider,
+                message, _aiState, history ?? "");
+            if (r.Ok) NotifyAiDone(r.Content, r.StepCount);
+            return r;
         }
 
         // ============================================================ 模型请求
-        private static string BuildSystemPrompt(string state, string provider, string model)
+        private static string BuildSystemPrompt(string state, string provider, string model, bool webSearch, string memory)
         {
             string who = string.IsNullOrEmpty(provider) ? "你当前接入的 AI 服务商" : provider;
             string mdl = string.IsNullOrEmpty(model) ? "" : "（模型：" + model + "）";
             return
                 "你是一个通用 AI 助手" + mdl + "，由 " + who + " 提供。\n" +
-                "你现在运行在「彩色文本生成器」这个工具里，可以通过下面的 actions 直接操作编辑器。\n" +
+                "你现在运行在「彩色文本生成器」这个工具里，可以通过 apply_editor_actions 直接操作编辑器。\n" +
                 "身份要求：当用户问你是谁、你是什么模型、来自哪个平台时，如实说明你的真实模型与提供方；" +
-                "不要自称是「彩色文本生成器」自研的模型，也不要把工具名当成你的身份。\n\n" +
+                "不要自称是「彩色文本生成器」自研的模型，也不要把工具名当成你的身份。\n" +
+                "工作方式：\n" +
+                (webSearch ? "0. 需要最新信息、资料、事实核查或用户明确要求搜索时，先调用 web_search 联网搜索，再基于搜索结果回答或操作。\n" : "") +
+                "1. 你可以连续多轮调用工具（最多 20 轮）；一次没做完就继续调用，直到任务完成。\n" +
+                "2. actions 数组一次可以放任意多个操作（几十个也可以），不要一次只放一个、更不要一段一段挤。\n" +
+                "3. 写长文/整首诗/整段代码时，直接一次 setText 写完整；确实超出输出长度时再用 appendText 续写。\n" +
+                "4. 多轮修改后想确认结果，调用 read_state 读取最新状态，不要靠猜。\n" +
+                "5. 最终回复要一次性写完整，不要半截、不要省略正文。\n" +
+                "6. 用户要求写文章/诗/短句时，必须把完整内容放进 actions 的 setText；只在 reply 里说“已写入”是无效的。\n" +
+                "7. 用户要求改标题时用 setTitle。\n" +
+                "8. 当用户表达长期偏好、项目约定、固定习惯，或明确说“记住”时，调用 remember 写入长期记忆；" +
+                "只记稳定、可复用的事实，不要记录一次性的临时内容。\n\n" +
+                (string.IsNullOrEmpty(memory) ? "" : memory + "\n") +
                 "当前编辑器状态 JSON：\n" + (string.IsNullOrEmpty(state) ? "{}" : state) + "\n\n" +
-                "请只返回一个 JSON 对象，不要 Markdown 代码围栏，格式：\n" +
-                "{\"reply\":\"给用户的简短中文说明\",\"actions\":[...]}\n" +
+                "如果接口不支持函数调用，请把操作写在 <actions> 与 </actions> 之间（或者只返回一个 JSON 对象，不要 Markdown 围栏）：\n" +
+                "<actions>[{\"type\":\"setText\",\"text\":\"...\"}]</actions>\n" +
+                "或 {\"reply\":\"给用户的简短说明\",\"actions\":[...]}\n" +
                 "可用 actions：\n" +
-                "- {\"type\":\"setText\",\"text\":\"...\"} 替换工作台文本\n" +
-                "- {\"type\":\"appendText\",\"text\":\"...\"} 追加文本\n" +
-                "- {\"type\":\"clearText\"} 清空文本\n" +
-                "- {\"type\":\"setColor\",\"color\":\"#FF0000\"} 设置颜色（支持 #RRGGBB / rgb(255,0,0) / red）\n" +
-                "- {\"type\":\"setMode\",\"mode\":\"hex|rgb|name\"} 切换颜色写法\n" +
-                "- {\"type\":\"setStyle\",\"bold\":true,\"italic\":false,\"underline\":false,\"strike\":false,\"sub\":false,\"sup\":false,\"mark\":false}\n" +
-                "- {\"type\":\"setSize\",\"size\":\"40\"} 字号\n" +
-                "- {\"type\":\"setAlpha\",\"alpha\":\"FF\"} 透明度\n" +
-                "- {\"type\":\"setGradient\",\"enabled\":true,\"axial\":false,\"loop\":false,\"start\":\"#FF0000\",\"end\":\"#0000FF\"}\n" +
-                "- {\"type\":\"setLink\",\"url\":\"https://...\",\"text\":\"链接文字\"}\n" +
-                "如果不需要修改编辑器，actions 返回空数组。不要输出 JSON 以外的任何内容。";
+                "- 文本：{\"type\":\"setText\",\"text\":\"...\"} / appendText / insertAtCursor / replaceSelection / clearText / selectAll / setSelection（from、to）\n" +
+                "- 文档：{\"type\":\"setTitle\",\"title\":\"...\"} / newTab（可带 title、text）/ switchTab（name）/ closeTab（name）/ save / saveAs\n" +
+                "- 导出：exportTxt / exportHtml / copyText / copyOutput\n" +
+                "- 样式：setColor（color）/ setMode（mode）/ setStyle（bold 等）/ setSize（size）/ setAlpha（alpha）/ setGradient / setLink\n" +
+                "- 其他：setTheme（dark|light）/ openUrl（url）/ goPage（work|chat|img|trans|set）/ openFile\n" +
+                "另外 actions 里也可以放：{\"type\":\"remember\",\"text\":\"要记住的事\"}、" +
+                "{\"type\":\"read_state\"}、{\"type\":\"web_search\",\"query\":\"关键词\"}\n" +
+                "不需要修改时 actions 返回空数组。";
         }
 
-        private static AiSyncResult RequestAi(string endpoint, string key, string model, string provider, string message, string state)
+        private const int MaxAgentRounds = 20;
+
+        private static string ToolsJson(bool webSearch)
         {
-            AiSyncResult r = new AiSyncResult();
+            string editor =
+                "{\"type\":\"function\",\"function\":{\"name\":\"apply_editor_actions\"," +
+                "\"description\":\"操作彩色文本生成器。actions 是一个数组，可以一次放任意多个操作（几十个也可以），不要一次只放一个；需要写长文时直接一次 setText 写完整。\"," +
+                "\"parameters\":{\"type\":\"object\",\"properties\":{" +
+                "\"reply\":{\"type\":\"string\",\"description\":\"给用户的简短说明\"}," +
+                "\"actions\":{\"type\":\"array\",\"description\":\"操作列表，可一次放多个\",\"items\":{\"type\":\"object\",\"properties\":{" +
+                "\"type\":{\"type\":\"string\",\"enum\":[" +
+                "\"setText\",\"appendText\",\"insertAtCursor\",\"replaceSelection\",\"clearText\",\"selectAll\",\"setSelection\"," +
+                "\"setTitle\",\"newTab\",\"switchTab\",\"closeTab\",\"save\",\"saveAs\"," +
+                "\"exportTxt\",\"exportHtml\",\"copyText\",\"copyOutput\"," +
+                "\"setColor\",\"setMode\",\"setStyle\",\"setSize\",\"setAlpha\",\"setGradient\",\"setLink\"," +
+                "\"setTheme\",\"openUrl\",\"goPage\",\"openFile\"]}," +
+                "\"text\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"}," +
+                "\"from\":{\"type\":\"integer\"},\"to\":{\"type\":\"integer\"}," +
+                "\"color\":{\"type\":\"string\"},\"mode\":{\"type\":\"string\"},\"size\":{\"type\":\"string\"}," +
+                "\"alpha\":{\"type\":\"string\"},\"url\":{\"type\":\"string\"},\"page\":{\"type\":\"string\"}," +
+                "\"theme\":{\"type\":\"string\"}," +
+                "\"bold\":{\"type\":\"boolean\"},\"italic\":{\"type\":\"boolean\"},\"underline\":{\"type\":\"boolean\"}," +
+                "\"strike\":{\"type\":\"boolean\"},\"sub\":{\"type\":\"boolean\"},\"sup\":{\"type\":\"boolean\"}," +
+                "\"mark\":{\"type\":\"boolean\"},\"enabled\":{\"type\":\"boolean\"},\"axial\":{\"type\":\"boolean\"}," +
+                "\"loop\":{\"type\":\"boolean\"},\"start\":{\"type\":\"string\"},\"end\":{\"type\":\"string\"}" +
+                "},\"required\":[\"type\"]}}},\"required\":[\"reply\",\"actions\"]}}}";
+
+            string stateTool =
+                "{\"type\":\"function\",\"function\":{\"name\":\"read_state\"," +
+                "\"description\":\"读取编辑器当前最新状态（正文、标题、颜色、样式、标签列表、选区）。多轮修改后需要确认结果时调用。\"," +
+                "\"parameters\":{\"type\":\"object\",\"properties\":{}}}";
+
+            string search =
+                "{\"type\":\"function\",\"function\":{\"name\":\"web_search\"," +
+                "\"description\":\"联网搜索网页，返回标题、URL 与摘要。需要最新信息、资料或事实核查时调用。\"," +
+                "\"parameters\":{\"type\":\"object\",\"properties\":{" +
+                "\"query\":{\"type\":\"string\",\"description\":\"搜索关键词\"}," +
+                "\"count\":{\"type\":\"integer\",\"description\":\"返回条数，1-8，默认 5\"}" +
+                "},\"required\":[\"query\"]}}}";
+
+            string memory =
+                "{\"type\":\"function\",\"function\":{\"name\":\"remember\"," +
+                "\"description\":\"把用户明确要求记住的、或长期稳定的偏好/项目约定/重要事实写入长期记忆，下次会话会自动加载。" +
+                "只记稳定可复用的事实，不要记一次性任务内容。\"," +
+                "\"parameters\":{\"type\":\"object\",\"properties\":{" +
+                "\"text\":{\"type\":\"string\",\"description\":\"要记住的内容，一句话讲清楚\"}" +
+                "},\"required\":[\"text\"]}}}";
+
+            return ",\"tools\":[" + editor + "," + stateTool + "," + memory +
+                   (webSearch ? "," + search : "") + "],\"tool_choice\":\"auto\"";
+        }
+
+        /// <summary>多轮 Agent：模型可连续调用工具，执行结果回传后继续思考，直到给出最终回复。</summary>
+        private AgentResult RunAgent(string endpoint, string key, string model, string provider,
+                                     string message, string state, string history)
+        {
+            AgentResult r = new AgentResult();
             if (string.IsNullOrEmpty((message ?? "").Trim()))
             {
                 r.Error = "请先输入内容";
@@ -290,30 +656,701 @@ namespace RichTextGen
             if (string.IsNullOrEmpty((model ?? "").Trim())) model = "deepseek-chat";
             endpoint = NormalizeEndpoint(endpoint);
 
-            string sys = BuildSystemPrompt(state, provider, model);
-            string messages = "[{\"role\":\"system\",\"content\":" + Quote(sys) +
-                              "},{\"role\":\"user\",\"content\":" + Quote(message) + "}]";
-            string body = "{\"model\":" + Quote(model) + ",\"messages\":" + messages +
-                          ",\"temperature\":0.3,\"max_tokens\":2048}";
-
-            string resp = HttpPost(endpoint, key.Trim(), body, 60000);
-            if (resp.Length == 0)
+            // system + 历史上下文 + 本轮 user
+            string memoryText = AiConfig.MemoryEnabled ? AiMemory.PromptText() : "";
+            string messages = "[{\"role\":\"system\",\"content\":" +
+                              Quote(BuildSystemPrompt(state, provider, model, AiConfig.WebSearchEnabled, memoryText)) + "}";
+            if (AiConfig.ContextTurns > 0 && !string.IsNullOrEmpty(history))
             {
-                r.Error = "网络不可达或接口无响应，请检查网络、Endpoint 与密钥";
-                return r;
+                string h = history.Trim();
+                if (h.StartsWith("[") && h.EndsWith("]"))
+                {
+                    string inner = h.Substring(1, h.Length - 2).Trim();
+                    if (inner.Length > 0) messages += "," + inner;
+                }
+            }
+            messages += ",{\"role\":\"user\",\"content\":" + Quote(message) + "}]";
+
+            // 任务开始前让前端保存一份快照，供通知卡片上的「撤销」使用
+            Call("aiCaptureSnapshot", "{}");
+
+            string tools = ToolsJson(AiConfig.WebSearchEnabled);
+            bool toolsAvailable = true;
+            bool thinkingOn = !string.IsNullOrEmpty(AiConfig.ReasoningEffort) &&
+                              AiConfig.ReasoningEffort != "off";
+            int maxTokens = AiConfig.MaxTokens;
+            if (maxTokens < 512) maxTokens = 512;
+            // Kimi 思考模型官方建议 max_tokens ≥ 16000，否则 reasoning_content 会被截断
+            if (thinkingOn && model.IndexOf("kimi", StringComparison.OrdinalIgnoreCase) >= 0 && maxTokens < 16000)
+                maxTokens = 16000;
+            string lastContent = "";
+            string postErr = "";
+            int textActionRounds = 0;   // 纯文本 actions 的兜底执行轮数上限
+            int selfCorrects = 0;       // 模型"只说不做"时的纠正次数上限
+            List<string> steps = new List<string>();
+
+            for (int round = 0; round < MaxAgentRounds; round++)
+            {
+                string body = "{\"model\":" + Quote(model) + ",\"messages\":" + messages +
+                              ",\"max_tokens\":" + maxTokens +
+                              ExtraParams(provider, model, thinkingOn) +
+                              (toolsAvailable ? tools : "") + "}";
+                string resp = HttpPostEx(endpoint, key.Trim(), body, 180000, out postErr);
+
+                if (resp.Length == 0 && thinkingOn)
+                {
+                    thinkingOn = false;       // 接口不认思考参数 → 关掉重试
+                    continue;
+                }
+                if (resp.Length == 0 && toolsAvailable)
+                {
+                    toolsAvailable = false;   // 接口不支持 tools → 退回纯 JSON 指令
+                    continue;
+                }
+                if (resp.Length == 0 && maxTokens > 4096)
+                {
+                    maxTokens = 4096;         // 部分模型不支持大输出，降档重试
+                    continue;
+                }
+                if (resp.Length == 0)
+                {
+                    r.Error = postErr.Length > 0
+                        ? "接口返回错误：" + postErr
+                        : "网络不可达或接口无响应，请检查网络、Endpoint 与密钥";
+                    return r;
+                }
+
+                // 思考过程（DeepSeek / 通义 / 智谱 / Kimi 会返回 reasoning_content）
+                string reasoningFull = ExtractReasoning(resp);
+                string reasoning = reasoningFull;
+                if (reasoning.Length > 0)
+                {
+                    if (reasoning.Length > 1500) reasoning = reasoning.Substring(0, 1500) + "…";
+                    Call("aiThink", "{\"round\":" + (round + 1) + ",\"text\":" + Quote(reasoning) + "}");
+                }
+
+                string toolCalls = ExtractToolCallsArray(resp);
+                if (toolCalls.Length == 0)
+                {
+                    lastContent = ExtractContent(resp).Trim();
+                    if (lastContent.Length == 0)
+                    {
+                        string err = Regex.Match(resp, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
+                        if (err.Length > 0) err = Unescape(err);
+                        else err = "空响应（原始返回 " + resp.Length + " 字节）：" +
+                                  (resp.Length > 240 ? resp.Substring(0, 240) + "…" : resp);
+                        r.Error = "接口返回异常：" + err;
+                        return r;
+                    }
+
+                    // 接口不支持原生 function calling 时，模型常把操作写在正文里
+                    // （<actions>[…]</actions> 或 {"reply":…,"actions":[…]}）；这里兜底解析并执行
+                    string textReply;
+                    string textActions = ExtractTextActions(lastContent, out textReply);
+                    if (textActions.Length > 0 && textActionRounds < 3)
+                    {
+                        textActionRounds++;
+                        string result = ExecuteTextActions(textActions);
+                        string tTypes = ExtractActionTypes(textActions);
+                        string tApplied = ExtractAppliedSummary(result);
+
+                        messages = AppendJsonElement(messages,
+                            "{\"role\":\"assistant\",\"content\":" + Quote(lastContent) + "}");
+                        messages = AppendJsonElement(messages,
+                            "{\"role\":\"user\",\"content\":" +
+                            Quote("【系统】上面的 actions 已执行，执行结果：" + result +
+                                  "。如果任务还没完成，继续输出 <actions>…</actions>；已经完成就直接给出最终回复。") + "}");
+
+                        string tStep = "第 " + (round + 1) + " 轮：" + (tApplied.Length > 0 ? tApplied : "执行文本指令");
+                        steps.Add(tStep);
+                        Call("aiStep", "{\"round\":" + (round + 1) + ",\"types\":" + tTypes +
+                            ",\"applied\":" + Quote(tApplied) + ",\"text\":" + Quote(tStep) + "}");
+                        continue;
+                    }
+
+                    // 模型声称已完成、但整轮没有任何 actions 被执行 → 让它重新输出 actions（最多 2 次）
+                    if (textActions.Length == 0 && steps.Count == 0 && selfCorrects < 2 && ClaimsDone(textReply))
+                    {
+                        selfCorrects++;
+                        messages = AppendJsonElement(messages,
+                            "{\"role\":\"assistant\",\"content\":" + Quote(lastContent) + "}");
+                        messages = AppendJsonElement(messages,
+                            "{\"role\":\"user\",\"content\":" +
+                            Quote("【系统】你刚才只回复了文字，没有任何 actions 被执行，界面不会有任何变化。"
+                                + "请把要做的操作完整放进 <actions>[…]</actions>，不要只在文字里说“已完成”。") + "}");
+                        continue;
+                    }
+
+                    r.Ok = true;
+                    r.Content = textReply.Length > 0 ? textReply : lastContent;
+                    r.StepsJson = StepsToJson(steps);
+                    r.StepCount = steps.Count;
+                    AiMemory.LogTask(message, r.Content);
+                    return r;
+                }
+                // assistant(tool_calls) → 上下文
+                // 注意：DeepSeek 思考模式下带 tools 的请求，后续轮次必须把 reasoning_content 原样回传
+                messages = AppendJsonElement(messages,
+                    "{\"role\":\"assistant\",\"content\":null" +
+                    (reasoningFull.Length > 0 ? ",\"reasoning_content\":" + Quote(reasoningFull) : "") +
+                    ",\"tool_calls\":" + toolCalls + "}");
+
+                List<ToolCall> calls = ParseToolCalls(toolCalls);
+                if (calls.Count == 0)
+                {
+                    r.Error = "模型返回了无法解析的工具调用";
+                    return r;
+                }
+
+                foreach (ToolCall c in calls)
+                {
+                    string result, types, applied;
+
+                    if (string.Equals(c.Name, "read_state", StringComparison.OrdinalIgnoreCase))
+                    {
+                        result = GetAiState();
+                        types = "[\"read_state\"]";
+                        applied = "读取编辑器最新状态";
+                    }
+                    else if (string.Equals(c.Name, "web_search", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string query = AiConfig.JStr(c.Arguments, "query") ?? "";
+                        int count = 5, n;
+                        if (AiConfig.JInt(c.Arguments, "count", out n)) count = Math.Max(1, Math.Min(8, n));
+                        result = WebSearch(query, count);
+                        types = "[\"web_search\"]";
+                        applied = "联网搜索「" + query + "」";
+                    }
+                    else if (string.Equals(c.Name, "remember", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string text = AiConfig.JStr(c.Arguments, "text") ?? "";
+                        if (!AiConfig.MemoryEnabled)
+                        {
+                            result = "{\"ok\":false,\"error\":\"用户已关闭长期记忆\"}";
+                            applied = "长期记忆已关闭，未写入";
+                        }
+                        else
+                        {
+                            AiMemory.Add(text, "note");
+                            result = "{\"ok\":true,\"saved\":true,\"total\":" + AiMemory.Count + "}";
+                            applied = "写入长期记忆";
+                        }
+                        types = "[\"remember\"]";
+                    }
+                    else
+                    {
+                        string actions = AiConfig.JRaw(c.Arguments, "actions");
+                        result = actions.Length > 0
+                            ? ExecuteAiActions(actions)
+                            : "{\"ok\":false,\"error\":\"参数中没有 actions\"}";
+                        types = ExtractActionTypes(actions);
+                        applied = ExtractAppliedSummary(result);
+                    }
+
+                    messages = AppendJsonElement(messages,
+                        "{\"role\":\"tool\",\"tool_call_id\":" + Quote(c.Id) +
+                        ",\"content\":" + Quote(result) + "}");
+
+                    string step = "第 " + (round + 1) + " 轮：" + (applied.Length > 0 ? applied : "执行工具调用");
+                    steps.Add(step);
+                    Call("aiStep", "{\"round\":" + (round + 1) + ",\"types\":" + types +
+                        ",\"applied\":" + Quote(applied) + ",\"text\":" + Quote(step) + "}");
+                }
             }
 
-            string content = ExtractContent(resp);
-            if (content.Length == 0)
-            {
-                string err = Regex.Match(resp, "\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").Groups[1].Value;
-                if (err.Length == 0) err = resp.Length > 240 ? resp.Substring(0, 240) + "…" : resp;
-                r.Error = "接口返回异常：" + Unescape(err);
-                return r;
-            }
             r.Ok = true;
-            r.Content = content;
+            r.Content = lastContent.Length > 0 ? lastContent : "已完成多轮操作，但模型没有给出最终说明。";
+            r.StepsJson = StepsToJson(steps);
+            r.StepCount = steps.Count;
+            AiMemory.LogTask(message, lastContent);
             return r;
+        }
+
+        /// <summary>各厂商的思考/推理参数（对外层 body 追加）。thinkingOn=false 时退回普通温度采样。</summary>
+        private static string ExtraParams(string provider, string model, bool thinkingOn)
+        {
+            string p = (provider ?? "").Trim().ToLowerInvariant();
+            string m = (model ?? "").Trim().ToLowerInvariant();
+            string effort = (AiConfig.ReasoningEffort ?? "off").Trim().ToLowerInvariant();
+            // 统一映射成各厂商可接受的三档
+            string level = effort == "low" ? "low" : (effort == "max" ? "max" : (effort == "medium" ? "medium" : "high"));
+            StringBuilder sb = new StringBuilder();
+
+            if (p == "deepseek")
+            {
+                // 思考模式：thinking 开关 + reasoning_effort（仅 high/max，low/medium 会被映射为 high）
+                // 思考模式不支持 temperature，只有关闭时才传
+                if (thinkingOn)
+                {
+                    sb.Append(",\"thinking\":{\"type\":\"enabled\"}");
+                    sb.Append(",\"reasoning_effort\":").Append(Quote(level == "max" ? "max" : "high"));
+                }
+                else
+                {
+                    sb.Append(",\"thinking\":{\"type\":\"disabled\"},\"temperature\":0.3");
+                }
+            }
+            else if (p == "dashscope")
+            {
+                // 通义千问：enable_thinking 开关 + thinking_budget 限制思考 token
+                if (thinkingOn)
+                {
+                    sb.Append(",\"enable_thinking\":true");
+                    sb.Append(",\"thinking_budget\":").Append(ThinkingBudget(effort));
+                }
+                else
+                {
+                    sb.Append(",\"enable_thinking\":false,\"temperature\":0.3");
+                }
+            }
+            else if (p == "moonshot")
+            {
+                // Kimi：k3 用顶层 reasoning_effort；k2.6/k2.7 用 thinking.type（k2.6 可再开 keep=all）
+                if (m.IndexOf("k3", StringComparison.Ordinal) >= 0)
+                {
+                    if (thinkingOn) sb.Append(",\"reasoning_effort\":").Append(Quote(level));
+                }
+                else if (m.IndexOf("k2.7", StringComparison.Ordinal) >= 0)
+                {
+                    sb.Append(",\"thinking\":{\"type\":\"enabled\"}");
+                }
+                else if (m.IndexOf("k2.6", StringComparison.Ordinal) >= 0 ||
+                         m.IndexOf("k2-", StringComparison.Ordinal) >= 0)
+                {
+                    sb.Append(",\"thinking\":{\"type\":\"").Append(thinkingOn ? "enabled" : "disabled").Append('"');
+                    if (thinkingOn) sb.Append(",\"keep\":\"all\"");
+                    sb.Append('}');
+                    if (!thinkingOn) sb.Append(",\"temperature\":0.3");
+                }
+                else if (thinkingOn)
+                {
+                    sb.Append(",\"thinking\":{\"type\":\"enabled\"}");
+                }
+                else
+                {
+                    sb.Append(",\"temperature\":0.3");
+                }
+            }
+            else if (p == "zhipu")
+            {
+                // 智谱 GLM：thinking.type 开关；GLM-5.2+ 支持 reasoning_effort
+                sb.Append(",\"thinking\":{\"type\":\"").Append(thinkingOn ? "enabled" : "disabled").Append("\"}");
+                if (thinkingOn)
+                    sb.Append(",\"reasoning_effort\":").Append(Quote(level == "max" ? "max" : "high"));
+                else
+                    sb.Append(",\"temperature\":0.3");
+            }
+            else if (p == "openai")
+            {
+                // OpenAI：o 系列 / gpt-5 支持 reasoning_effort，且不接受 temperature
+                if (thinkingOn) sb.Append(",\"reasoning_effort\":").Append(Quote(level));
+                else sb.Append(",\"temperature\":0.3");
+            }
+            else
+            {
+                // 自定义 OpenAI 兼容：只发最通用的 reasoning_effort
+                if (thinkingOn) sb.Append(",\"reasoning_effort\":").Append(Quote(level));
+                else sb.Append(",\"temperature\":0.3");
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>思考强度 → 通义 thinking_budget（思考 token 上限）。</summary>
+        private static int ThinkingBudget(string effort)
+        {
+            switch ((effort ?? "").Trim().ToLowerInvariant())
+            {
+                case "low": return 1024;
+                case "medium": return 4096;
+                case "max": return 32768;
+                default: return 8192;
+            }
+        }
+
+        /// <summary>工作结束后在右下角弹出 Windows 通知风格卡片（可在 AI 页关闭）。</summary>
+        private ToastForm _toast;
+
+        private void NotifyAiDone(string content, int stepCount)
+        {
+            if (!AiConfig.NotifyDone) return;
+            string summary = (content ?? "").Trim();
+            if (summary.Length > 80) summary = summary.Substring(0, 80) + "…";
+            if (summary.Length == 0) summary = "已完成。";
+            string message = summary + (stepCount > 0 ? "\n共执行 " + stepCount + " 轮操作。" : "");
+            NotifyToast("AI 已完成", message);
+        }
+
+        /// <summary>通用通知卡片。subtitle 例如「AI 已完成」「已撤回」。</summary>
+        private void NotifyToast(string subtitle, string message)
+        {
+            try
+            {
+                BeginInvoke(new Action(delegate
+                {
+                    try
+                    {
+                        if (_toast != null) { try { _toast.Close(); } catch { } }
+                        _toast = new ToastForm("彩色文本生成器", subtitle, message, delegate
+                        {
+                            try
+                            {
+                                if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+                                Activate();
+                            }
+                            catch { }
+                        });
+                        _toast.Show();
+                    }
+                    catch { }
+                }));
+            }
+            catch { }
+        }
+
+        private static string AppendJsonElement(string arr, string element)
+        {
+            arr = (arr ?? "").TrimEnd();
+            if (!arr.EndsWith("]")) return arr;
+            string head = arr.Substring(0, arr.Length - 1).TrimEnd();
+            return head + (head.Length > 1 ? "," : "") + element + "]";
+        }
+
+        private static string ExtractToolCallsArray(string resp)
+        {
+            string arr = AiConfig.JRaw(resp ?? "", "tool_calls");
+            if (arr.Length == 0 || !arr.StartsWith("[") || arr.IndexOf('{') < 0) return "";
+            return arr;
+        }
+
+        /// <summary>思考内容（reasoning_content）。</summary>
+        private static string ExtractReasoning(string resp)
+        {
+            Match m = Regex.Match(resp ?? "", "\"reasoning_content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            return m.Success ? Unescape(m.Groups[1].Value) : "";
+        }
+
+        /// <summary>
+        /// 从纯文本回复里提取 actions（接口不支持原生 function calling 时的兜底）：
+        /// 1) &lt;actions&gt;[…]&lt;/actions&gt; 标签；2) {"reply":"…","actions":[…]} 整段 JSON。
+        /// 返回 actions 数组原文；没有则返回空串，reply 为去掉标签后的正文。
+        /// </summary>
+        private static string ExtractTextActions(string content, out string reply)
+        {
+            reply = (content ?? "").Trim();
+            if (reply.Length == 0) return "";
+
+            Match m = Regex.Match(reply, "<actions>([\\s\\S]*?)</actions>", RegexOptions.IgnoreCase);
+            while (m.Success)
+            {
+                string arr = NormalizeActions(m.Groups[1].Value);
+                if (arr.Length > 0)
+                {
+                    reply = reply.Substring(0, m.Index).Trim();
+                    return arr;
+                }
+                m = m.NextMatch();
+            }
+
+            string s = reply;
+            if (s.StartsWith("```"))
+            {
+                int nl = s.IndexOf('\n');
+                if (nl > 0) s = s.Substring(nl + 1);
+                int end = s.LastIndexOf("```", StringComparison.Ordinal);
+                if (end >= 0) s = s.Substring(0, end);
+                s = s.Trim();
+            }
+            if (s.StartsWith("{"))
+            {
+                string arr = AiConfig.JRaw(s, "actions");
+                if (arr.Length > 0 && arr.StartsWith("["))
+                {
+                    string r = AiConfig.JStr(s, "reply");
+                    reply = string.IsNullOrEmpty(r) ? "" : r;
+                    return arr;
+                }
+            }
+            return "";
+        }
+
+        private static string NormalizeActions(string raw)
+        {
+            string s = (raw ?? "").Trim();
+            if (s.StartsWith("[")) return s;
+            if (s.StartsWith("{"))
+            {
+                string arr = AiConfig.JRaw(s, "actions");
+                if (arr.Length > 0 && arr.StartsWith("[")) return arr;
+            }
+            return "";
+        }
+
+        /// <summary>
+        /// 执行纯文本形式的 actions。
+        /// remember / read_state / web_search 由服务端直接处理（前端不认识），其余交给前端执行。
+        /// </summary>
+        private string ExecuteTextActions(string actionsJson)
+        {
+            List<string> keep = new List<string>();
+            List<string> done = new List<string>();
+            StringBuilder extra = new StringBuilder();
+
+            foreach (string obj in SplitTopLevelObjects(actionsJson))
+            {
+                string type = AiConfig.JStr(obj, "type") ?? "";
+                if (string.Equals(type, "remember", StringComparison.OrdinalIgnoreCase))
+                {
+                    string text = AiConfig.JStr(obj, "text") ?? "";
+                    if (string.IsNullOrEmpty(text)) text = AiConfig.JStr(obj, "content") ?? "";
+                    if (!AiConfig.MemoryEnabled) { done.Add("长期记忆已关闭，未写入"); continue; }
+                    AiMemory.Add(text, "note");
+                    done.Add("写入长期记忆");
+                    continue;
+                }
+                if (string.Equals(type, "read_state", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(type, "readState", StringComparison.OrdinalIgnoreCase))
+                {
+                    done.Add("读取编辑器状态");
+                    extra.Append("当前编辑器状态：").Append(GetAiState()).Append('\n');
+                    continue;
+                }
+                if (string.Equals(type, "web_search", StringComparison.OrdinalIgnoreCase))
+                {
+                    string q = AiConfig.JStr(obj, "query") ?? "";
+                    int n = 5, tmp;
+                    if (AiConfig.JInt(obj, "count", out tmp)) n = Math.Max(1, Math.Min(8, tmp));
+                    done.Add("联网搜索「" + q + "」");
+                    extra.Append(WebSearch(q, n)).Append('\n');
+                    continue;
+                }
+                keep.Add(obj);
+            }
+
+            string front = keep.Count > 0
+                ? ExecuteAiActions("[" + string.Join(",", keep.ToArray()) + "]")
+                : "{\"ok\":true,\"applied\":[]}";
+
+            StringBuilder server = new StringBuilder();
+            if (done.Count > 0) server.Append(string.Join("、", done.ToArray()));
+            if (extra.Length > 0)
+            {
+                if (server.Length > 0) server.Append("：");
+                server.Append(extra);
+            }
+            if (server.Length > 0)
+            {
+                string tail = front.TrimEnd();
+                if (tail.EndsWith("}"))
+                    front = tail.Substring(0, tail.Length - 1) + ",\"server\":" + Quote(server.ToString()) + "}";
+            }
+            return front;
+        }
+
+        /// <summary>回复里是否声称已经完成了某种修改（用于识别“只说不做”）。</summary>
+        private static bool ClaimsDone(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            return Regex.IsMatch(text, "已(经)?(写入|追加|修改|改为|设置|完成|删除|清空|生成|切换)");
+        }
+
+        /// <summary>本轮 actions 的类型列表（用于界面展示执行过程）。</summary>
+        private static string ExtractActionTypes(string actions)
+        {
+            MatchCollection ms = Regex.Matches(actions ?? "", "\"type\"\\s*:\\s*\"([^\"]+)\"");
+            List<string> list = new List<string>();
+            foreach (Match m in ms)
+            {
+                string t = m.Groups[1].Value;
+                if (!list.Contains(t)) list.Add(t);
+            }
+            StringBuilder sb = new StringBuilder("[");
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(Quote(list[i]));
+            }
+            sb.Append(']');
+            return sb.ToString();
+        }
+
+        private sealed class ToolCall
+        {
+            public string Id = "";
+            public string Name = "";
+            public string Arguments = "";
+        }
+
+        private static List<ToolCall> ParseToolCalls(string arr)
+        {
+            List<ToolCall> list = new List<ToolCall>();
+            foreach (string obj in SplitTopLevelObjects(arr))
+            {
+                string id = AiConfig.JStr(obj, "id") ?? "";
+                string name = AiConfig.JStr(obj, "name") ?? "";
+                string args = AiConfig.JStr(obj, "arguments") ?? "";
+                if (args.Length == 0) continue;
+                list.Add(new ToolCall { Id = id, Name = name, Arguments = args });
+            }
+            return list;
+        }
+
+        internal static List<string> SplitTopLevelObjects(string arr)
+        {
+            List<string> list = new List<string>();
+            int depth = 0, start = -1;
+            bool inStr = false, esc = false;
+            for (int i = 0; i < arr.Length; i++)
+            {
+                char ch = arr[i];
+                if (inStr)
+                {
+                    if (esc) esc = false;
+                    else if (ch == '\\') esc = true;
+                    else if (ch == '"') inStr = false;
+                    continue;
+                }
+                if (ch == '"') { inStr = true; continue; }
+                if (ch == '{') { if (depth == 0) start = i; depth++; }
+                else if (ch == '}')
+                {
+                    depth--;
+                    if (depth == 0 && start >= 0) { list.Add(arr.Substring(start, i - start + 1)); start = -1; }
+                }
+            }
+            return list;
+        }
+
+        private static string ExtractAppliedSummary(string result)
+        {
+            try
+            {
+                string arr = AiConfig.JRaw(result ?? "", "applied");
+                if (arr.Length == 0) return "";
+                MatchCollection ms = Regex.Matches(arr, "\"((?:[^\"\\\\]|\\\\.)*)\"");
+                List<string> items = new List<string>();
+                foreach (Match m in ms) items.Add(Unescape(m.Groups[1].Value));
+                return string.Join("、", items.ToArray());
+            }
+            catch { return ""; }
+        }
+
+        // ============================================================ 联网搜索（Bing / DuckDuckGo，免密钥）
+        private static string HttpGetHtml(string url, int ms)
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.Timeout = ms;
+                req.ReadWriteTimeout = ms;
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
+                req.Accept = "text/html,application/xhtml+xml";
+                req.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                using (WebResponse resp = req.GetResponse())
+                using (Stream s = resp.GetResponseStream())
+                using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
+                    return sr.ReadToEnd();
+            }
+            catch { return ""; }
+        }
+
+        private static string StripHtml(string s)
+        {
+            s = Regex.Replace(s ?? "", "<script[\\s\\S]*?</script>", " ", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, "<[^>]+>", " ");
+            s = WebUtility.HtmlDecode(s);
+            s = Regex.Replace(s, "\\s+", " ").Trim();
+            return s;
+        }
+
+        private static string WebSearch(string query, int count)
+        {
+            query = (query ?? "").Trim();
+            if (query.Length == 0) return "{\"ok\":false,\"error\":\"query 为空\"}";
+
+            List<string[]> results = ParseBing(
+                HttpGetHtml("https://cn.bing.com/search?q=" + Uri.EscapeDataString(query) + "&setlang=zh-CN", 12000), count);
+
+            if (results.Count == 0)
+            {
+                results = ParseDdg(
+                    HttpGetHtml("https://html.duckduckgo.com/html/?q=" + Uri.EscapeDataString(query), 12000), count);
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"ok\":").Append(results.Count > 0 ? "true" : "false");
+            sb.Append(",\"query\":").Append(Quote(query));
+            sb.Append(",\"results\":[");
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append("{\"title\":").Append(Quote(results[i][0]));
+                sb.Append(",\"url\":").Append(Quote(results[i][1]));
+                sb.Append(",\"snippet\":").Append(Quote(results[i][2])).Append('}');
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
+        private static List<string[]> ParseBing(string html, int count)
+        {
+            List<string[]> list = new List<string[]>();
+            if (string.IsNullOrEmpty(html)) return list;
+            string[] blocks = Regex.Split(html, "<li class=\"b_algo\"", RegexOptions.IgnoreCase);
+            for (int i = 1; i < blocks.Length && list.Count < count; i++)
+            {
+                string b = blocks[i];
+                Match href = Regex.Match(b, "<h2[^>]*>\\s*<a[^>]*href=\"(https?://[^\"]+)\"", RegexOptions.IgnoreCase);
+                if (!href.Success) href = Regex.Match(b, "href=\"(https?://[^\"]+)\"", RegexOptions.IgnoreCase);
+                if (!href.Success) continue;
+                string url = WebUtility.HtmlDecode(href.Groups[1].Value);
+                if (url.IndexOf("bing.com", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                string title = StripHtml(Regex.Match(b, "<h2[^>]*>([\\s\\S]*?)</h2>", RegexOptions.IgnoreCase).Groups[1].Value);
+                string snippet = StripHtml(Regex.Match(b, "<p[^>]*>([\\s\\S]*?)</p>", RegexOptions.IgnoreCase).Groups[1].Value);
+                if (title.Length == 0) continue;
+                list.Add(new string[] { title, url, snippet });
+            }
+            return list;
+        }
+
+        private static List<string[]> ParseDdg(string html, int count)
+        {
+            List<string[]> list = new List<string[]>();
+            if (string.IsNullOrEmpty(html)) return list;
+            MatchCollection links = Regex.Matches(html,
+                "<a[^>]*class=\"result__a\"[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>", RegexOptions.IgnoreCase);
+            MatchCollection snips = Regex.Matches(html,
+                "<a[^>]*class=\"result__snippet\"[^>]*>([\\s\\S]*?)</a>", RegexOptions.IgnoreCase);
+            for (int i = 0; i < links.Count && list.Count < count; i++)
+            {
+                string url = WebUtility.HtmlDecode(links[i].Groups[1].Value);
+                int u = url.IndexOf("uddg=", StringComparison.OrdinalIgnoreCase);
+                if (u >= 0)
+                {
+                    string enc = url.Substring(u + 5);
+                    int amp = enc.IndexOf('&');
+                    if (amp >= 0) enc = enc.Substring(0, amp);
+                    try { url = Uri.UnescapeDataString(enc); } catch { }
+                }
+                string title = StripHtml(links[i].Groups[2].Value);
+                string snippet = i < snips.Count ? StripHtml(snips[i].Groups[1].Value) : "";
+                if (title.Length == 0) continue;
+                list.Add(new string[] { title, url, snippet });
+            }
+            return list;
+        }
+
+        private static string StepsToJson(List<string> steps)
+        {
+            StringBuilder sb = new StringBuilder("[");
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(Quote(steps[i]));
+            }
+            sb.Append(']');
+            return sb.ToString();
         }
 
         private static string NormalizeEndpoint(string ep)
@@ -332,6 +1369,14 @@ namespace RichTextGen
             return Unescape(ms[ms.Count - 1].Groups[1].Value);
         }
 
+        /// <summary>取 function calling 的 arguments（JSON 字符串）。</summary>
+        private static string ExtractToolArguments(string resp)
+        {
+            Match m = Regex.Match(resp ?? "", "\"arguments\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            if (!m.Success) return "";
+            return Unescape(m.Groups[1].Value);
+        }
+
         // ============================================================ 操作回桥
         /// <summary>服务线程调用：把 actions 交给前端执行并等待结果。</summary>
         public string ExecuteAiActions(string actionsJson)
@@ -343,7 +1388,7 @@ namespace RichTextGen
 
             Call("aiApplyActions", "{\"id\":\"" + id + "\",\"actions\":" + actionsJson + "}");
 
-            bool signaled = ev.Wait(8000);
+            bool signaled = ev.Wait(20000);
             string result = null;
             lock (_aiWaiters)
             {
@@ -533,19 +1578,11 @@ namespace RichTextGen
             {
                 string message = AiConfig.JStr(body, "message");
                 if (string.IsNullOrEmpty(message)) { WriteJson(ns, 400, "{\"ok\":false,\"error\":\"缺少 message\"}"); return; }
-                AiSyncResult r = _form != null ? _form.AiChatSync(message) : new AiSyncResult { Error = "no ui" };
+                string history = AiConfig.JRaw(body, "history");   // 可选：[{role,content},...]
+                AgentResult r = _form != null ? _form.AiChatSync(message, history) : new AgentResult { Error = "no ui" };
                 if (!r.Ok) { WriteJson(ns, 200, "{\"ok\":false,\"error\":" + AiConfig.J(r.Error) + "}"); return; }
-
-                string content = StripFences(r.Content);
-                string actions = AiConfig.JRaw(content, "actions");
-                string reply = AiConfig.JStr(content, "reply");
-                if (string.IsNullOrEmpty(reply)) reply = content;
-                string applied = actions.Length > 0 && _form != null
-                    ? _form.ExecuteAiActions(actions)
-                    : "{\"ok\":true,\"applied\":[]}";
-                WriteJson(ns, 200, "{\"ok\":true,\"reply\":" + AiConfig.J(reply) +
-                    ",\"actions\":" + (actions.Length > 0 ? actions : "[]") +
-                    ",\"applied\":" + applied + ",\"raw\":" + AiConfig.J(r.Content) + "}");
+                WriteJson(ns, 200, "{\"ok\":true,\"reply\":" + AiConfig.J(r.Content) +
+                    ",\"steps\":" + r.StepsJson + "}");
                 return;
             }
 
@@ -561,8 +1598,8 @@ namespace RichTextGen
                 "{\"id\":\"deepseek\",\"name\":\"DeepSeek\",\"endpoint\":\"https://api.deepseek.com\",\"model\":\"deepseek-chat\"}," +
                 "{\"id\":\"openai\",\"name\":\"OpenAI\",\"endpoint\":\"https://api.openai.com/v1\",\"model\":\"gpt-4o-mini\"}," +
                 "{\"id\":\"dashscope\",\"name\":\"通义千问（阿里云）\",\"endpoint\":\"https://dashscope.aliyuncs.com/compatible-mode/v1\",\"model\":\"qwen-plus\"}," +
-                "{\"id\":\"zhipu\",\"name\":\"智谱 GLM\",\"endpoint\":\"https://open.bigmodel.cn/api/paas/v4\",\"model\":\"glm-4-flash\"}," +
-                "{\"id\":\"moonshot\",\"name\":\"Moonshot Kimi\",\"endpoint\":\"https://api.moonshot.cn/v1\",\"model\":\"moonshot-v1-8k\"}," +
+                "{\"id\":\"zhipu\",\"name\":\"智谱 GLM\",\"endpoint\":\"https://open.bigmodel.cn/api/paas/v4\",\"model\":\"glm-4.6\"}," +
+                "{\"id\":\"moonshot\",\"name\":\"Moonshot Kimi\",\"endpoint\":\"https://api.moonshot.cn/v1\",\"model\":\"kimi-k2.6\"}," +
                 "{\"id\":\"custom\",\"name\":\"自定义（OpenAI 兼容）\",\"endpoint\":\"\",\"model\":\"\"}" +
                 "]}";
         }
