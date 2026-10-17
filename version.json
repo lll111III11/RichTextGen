@@ -1,15 +1,15 @@
-{
+﻿{
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.9.0.3",
+  "version": "5.9.0.4",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
   "type": "chore",
   "downloads": {
-    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.3/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.3/RichTextGen-Portable.zip"
+    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.4/RichTextGen-Setup.exe",
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.4/RichTextGen-Portable.zip"
   },
-  "notes": "v5.9.0.3 维护更新：\n· 本次更新未包含功能改动，请直接覆盖安装或解压替换即可\n· 建议所有用户更新到本版本\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
+  "notes": "v5.9.0.4 维护更新：\n· 本次更新未包含功能改动，请直接覆盖安装或解压替换即可\n· 建议所有用户更新到本版本\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
 }

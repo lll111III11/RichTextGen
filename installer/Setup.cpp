@@ -1,4 +1,4 @@
-// 彩色文本生成器 安装程序（原生 C++ / 零依赖）
+﻿// 彩色文本生成器 安装程序（原生 C++ / 零依赖）
 // ---------------------------------------------------------------------------
 // 特性
 //   · 纯 Win32 原生程序：不依赖 .NET Framework、不依赖 WebView2 运行时，
@@ -49,7 +49,7 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.9.0.3";
+    const wchar_t* const kVersion   = L"5.9.0.4";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
@@ -360,42 +360,8 @@ namespace
         return ctx.ok;
     }
 
-    /// 卸载时按 SHA1 指纹把该证书从三个受信任存储里移除，避免留下无主的受信任根。
-    struct DelCertCtx { CRYPT_HASH_BLOB blob; };
-
-    void DelCertFromStore(HCERTSTORE st, void* p)
-    {
-        DelCertCtx* c = (DelCertCtx*)p;
-        for (;;)
-        {
-            PCCERT_CONTEXT found = CertFindCertificateInStore(
-                st, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0,
-                CERT_FIND_SHA1_HASH, &c->blob, NULL);
-            if (found == NULL) break;
-            CertDeleteCertificateFromStore(found);   // 该 API 会自行释放上下文
-        }
-    }
-
-    void RemoveCertificate(const std::wstring& cerPath)
-    {
-        std::vector<BYTE> data;
-        if (!ReadFileBytes(cerPath, data)) return;
-
-        PCCERT_CONTEXT proto = CertCreateCertificateContext(
-            X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, &data[0], (DWORD)data.size());
-        if (proto == NULL) return;
-
-        BYTE hash[20] = { 0 };
-        DWORD hashLen = sizeof(hash);
-        BOOL ok = CertGetCertificateContextProperty(proto, CERT_SHA1_HASH_PROP_ID, hash, &hashLen);
-        CertFreeCertificateContext(proto);
-        if (!ok) return;
-
-        DelCertCtx ctx;
-        ctx.blob.cbData = hashLen;
-        ctx.blob.pbData = hash;
-        ForEachTrustedStore(DelCertFromStore, &ctx);
-    }
+    // 注意：本程序的"卸载"刻意保留代码签名证书（保持本机始终有证书的状态），
+    // 只有独立发布的「彻底卸载」工具（RichTextGen-FullUninstall.exe）才会移除它。
 
     // 安装主体。progress 可空（静默模式）。任何一步失败都返回 false，避免「半成品却提示完成」。
     bool Install(const std::wstring& target, bool desktop, bool startMenu,
@@ -522,9 +488,6 @@ namespace
         DeleteFileW((std::wstring(menu) + L"\\" + kAppName + L".lnk").c_str());
 
         SHDeleteKeyW(HKEY_CURRENT_USER, kRegKey);
-
-        // 卸载前先把受信任存储里的证书摘掉（需要 .cer 还在安装目录里，故放在删文件之前）
-        RemoveCertificate(dir + L"\\" + kCertFile);
 
         std::wstring self = SelfPath();
         DeleteTreeExcept(dir, self);
