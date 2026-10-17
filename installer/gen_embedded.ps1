@@ -29,6 +29,10 @@ foreach ($dllName in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2
         if ($f.Name -eq $dllName) { $ordered += $f }
     }
 }
+# 4) code signing certificate (public part only) -> installer imports it into the machine stores
+foreach ($f in $all) {
+    if ($f.Extension -eq '.cer') { $ordered += $f }
+}
 
 if ($ordered.Count -eq 0) { throw "no payload files found in $PayloadDir" }
 

