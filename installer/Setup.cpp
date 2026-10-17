@@ -308,39 +308,93 @@ namespace
     // 代码签名证书的内包文件名（由 build.bat 复制进 payload_web 并随载荷内嵌）
     const wchar_t* const kCertFile = L"rtg-codesign.cer";
 
-    /// 静默把内包证书写入本机三个受信任存储（根 / 受信任的发布者 / 受信任的人）。
-    /// 需要管理员权限——安装器已在 UAC 授权后运行；任何一步失败只返回 false，不阻断安装。
-    bool InstallCertificate(const std::wstring& cerPath)
+    /// 读取整个文件到缓冲区；失败返回 false
+    bool ReadFileBytes(const std::wstring& path, std::vector<BYTE>& out)
     {
-        if (GetFileAttributesW(cerPath.c_str()) == INVALID_FILE_ATTRIBUTES) return false;
-
-        std::vector<BYTE> data;
-        HANDLE h = CreateFileW(cerPath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
+        out.clear();
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (h == INVALID_HANDLE_VALUE) return false;
-
         DWORD sz = GetFileSize(h, NULL);
         if (sz == INVALID_FILE_SIZE || sz == 0) { CloseHandle(h); return false; }
-        data.resize(sz);
+        out.resize(sz);
         DWORD rd = 0;
-        BOOL readOk = ReadFile(h, &data[0], sz, &rd, NULL);
+        BOOL ok = ReadFile(h, &out[0], sz, &rd, NULL);
         CloseHandle(h);
-        if (!readOk || rd != sz) return false;
+        if (!ok || rd != sz) { out.clear(); return false; }
+        return true;
+    }
 
+    /// 本机三个受信任存储：根 / 受信任的发布者 / 受信任的人
+    void ForEachTrustedStore(void (*fn)(HCERTSTORE, void*), void* ctx)
+    {
         const wchar_t* stores[] = { L"Root", L"TrustedPublisher", L"TrustedPeople" };
-        bool allOk = true;
         for (int i = 0; i < 3; i++)
         {
             HCERTSTORE st = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, NULL,
                                           CERT_SYSTEM_STORE_LOCAL_MACHINE, stores[i]);
-            if (st == NULL) { allOk = false; continue; }
-            if (!CertAddEncodedCertificateToStore(st, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-                                                  &data[0], (DWORD)data.size(),
-                                                  CERT_STORE_ADD_REPLACE_EXISTING, NULL))
-                allOk = false;
+            if (st == NULL) continue;
+            fn(st, ctx);
             CertCloseStore(st, 0);
         }
-        return allOk;
+    }
+
+    /// 静默把内包证书写入本机三个受信任存储。
+    /// 需要管理员权限——安装器已在 UAC 授权后运行；任何一步失败只返回 false，不阻断安装。
+    struct AddCertCtx { const BYTE* data; DWORD size; bool ok; };
+
+    void AddCertToStore(HCERTSTORE st, void* p)
+    {
+        AddCertCtx* c = (AddCertCtx*)p;
+        if (!CertAddEncodedCertificateToStore(st, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+                                              c->data, c->size, CERT_STORE_ADD_REPLACE_EXISTING, NULL))
+            c->ok = false;
+    }
+
+    bool InstallCertificate(const std::wstring& cerPath)
+    {
+        std::vector<BYTE> data;
+        if (!ReadFileBytes(cerPath, data)) return false;
+        AddCertCtx ctx = { &data[0], (DWORD)data.size(), true };
+        ForEachTrustedStore(AddCertToStore, &ctx);
+        return ctx.ok;
+    }
+
+    /// 卸载时按 SHA1 指纹把该证书从三个受信任存储里移除，避免留下无主的受信任根。
+    struct DelCertCtx { CRYPT_HASH_BLOB blob; };
+
+    void DelCertFromStore(HCERTSTORE st, void* p)
+    {
+        DelCertCtx* c = (DelCertCtx*)p;
+        for (;;)
+        {
+            PCCERT_CONTEXT found = CertFindCertificateInStore(
+                st, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0,
+                CERT_FIND_SHA1_HASH, &c->blob, NULL);
+            if (found == NULL) break;
+            CertDeleteCertificateFromStore(found);   // 该 API 会自行释放上下文
+        }
+    }
+
+    void RemoveCertificate(const std::wstring& cerPath)
+    {
+        std::vector<BYTE> data;
+        if (!ReadFileBytes(cerPath, data)) return;
+
+        PCCERT_CONTEXT proto = CertCreateCertificateContext(
+            X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, &data[0], (DWORD)data.size());
+        if (proto == NULL) return;
+
+        BYTE hash[20] = { 0 };
+        DWORD hashLen = sizeof(hash);
+        BOOL ok = CertGetCertificateContextProperty(proto, CERT_SHA1_HASH_PROP_ID, hash, &hashLen);
+        CertFreeCertificateContext(proto);
+        if (!ok) return;
+
+        DelCertCtx ctx;
+        ctx.blob.cbData = hashLen;
+        ctx.blob.pbData = hash;
+        ForEachTrustedStore(DelCertFromStore, &ctx);
     }
 
     // 安装主体。progress 可空（静默模式）。任何一步失败都返回 false，避免「半成品却提示完成」。
@@ -468,6 +522,9 @@ namespace
         DeleteFileW((std::wstring(menu) + L"\\" + kAppName + L".lnk").c_str());
 
         SHDeleteKeyW(HKEY_CURRENT_USER, kRegKey);
+
+        // 卸载前先把受信任存储里的证书摘掉（需要 .cer 还在安装目录里，故放在删文件之前）
+        RemoveCertificate(dir + L"\\" + kCertFile);
 
         std::wstring self = SelfPath();
         DeleteTreeExcept(dir, self);
