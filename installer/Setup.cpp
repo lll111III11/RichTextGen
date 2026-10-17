@@ -110,8 +110,34 @@ namespace
             (BYTE)(a.GetB() + (b.GetB() - a.GetB()) * t));
     }
 
+    /// 上次安装位置：读注册表 InstallLocation；记录不存在或目录已失效时返回空串。
+    /// 用于让新下载的安装器"继承"上一次的安装位置，升级时不再回落到内置默认目录。
+    std::wstring GetPrevInstallDir()
+    {
+        HKEY k = NULL;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegKey, 0, KEY_READ, &k) != ERROR_SUCCESS)
+            return L"";
+
+        wchar_t buf[MAX_PATH] = { 0 };
+        DWORD sz = sizeof(buf);
+        std::wstring dir;
+        if (RegQueryValueExW(k, L"InstallLocation", NULL, NULL, (BYTE*)buf, &sz) == ERROR_SUCCESS)
+            dir = buf;
+        RegCloseKey(k);
+
+        if (dir.empty()) return L"";
+        if (dir.find(L':') == std::wstring::npos) return L"";                        // 必须是绝对路径
+        if (GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES) return L"";  // 目录必须真实存在
+        return dir;
+    }
+
     std::wstring GetDefaultDir()
     {
+        // 已安装过 → 继承上次安装位置（就地升级）
+        std::wstring prev = GetPrevInstallDir();
+        if (!prev.empty()) return prev;
+
+        // 全新安装 → 使用内置默认目录
         wchar_t buf[MAX_PATH] = { 0 };
         if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, buf)))
             return std::wstring(buf) + L"\\Programs\\RichTextGen";
@@ -679,10 +705,14 @@ namespace
                 0, 0, 0, 0, hwnd, (HMENU)IDC_PROGRESS, g_hInst, NULL);
             SendMessageW(prog, PBM_SETRANGE32, 0, 100);
 
-            CreateWindowExW(0, L"STATIC",
+            HWND status = CreateWindowExW(0, L"STATIC",
                 (BackdropSupported() ? L"准备就绪，点击“立即安装”开始。" : L"当前系统不支持系统级毛玻璃（需 Win11 22H2+），已使用浅色经典界面。"),
                 WS_CHILD | WS_VISIBLE | SS_LEFT,
                 0, 0, 0, 0, hwnd, (HMENU)IDC_STATUS, g_hInst, NULL);
+
+            // 已检测到上次安装位置：明确提示用户将就地升级，避免误装到另一个目录
+            if (!GetPrevInstallDir().empty())
+                SetWindowTextW(status, L"已检测到上次安装位置，将就地升级；如需更换目录请点“浏览…”。");
 
             CreateWindowExW(0, L"BUTTON", L"立即安装", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
                 0, 0, 0, 0, hwnd, (HMENU)IDC_BTN_INSTALL, g_hInst, NULL);
