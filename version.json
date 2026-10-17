@@ -2,7 +2,7 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.8.0.4",
+  "version": "5.9.0.0",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
@@ -11,5 +11,5 @@
     "installer": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe",
     "portable": "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Portable.zip"
   },
-  "notes": "v5.8.0.4 更新：\n· 【安卓版】手机版（APK）已研发完成，并随本版本提交到项目（android/RichTextGen.apk）\n· 【安装器】新增可选组件「MER 地图编辑器（Alpha）」：安装界面提供勾选项与「检测 / 安装状态」按钮，先检测本机是否已装，未装则随本程序一起装到 <安装目录>\\MER-MapEditor(Alpha)；该组件明确标注为 Alpha（开发中）\n· 【界面】设置页「开发计划」卡片更新为完成状态，并新增 MER 地图编辑器条目\n· 桌面端功能与 v5.8.0.3 一致"
+  "notes": "v5.9.0.0 更新（AI 接入 Beta）：\n· 【AI 接入（Beta）】新增「AI 接入」页：支持 DeepSeek / OpenAI / 通义千问 / 智谱 GLM / Moonshot Kimi / 自定义 OpenAI 兼容接口，填入 API Key 即用\n· 【真实操作】AI 可直接修改工作台文本、颜色、颜色写法、粗体/斜体/下划线/删除线/上下标/高亮、字号、透明度、渐变、超链接，并在本地执行\n· 【端口服务】可开启本机端口（默认 18762，仅监听 127.0.0.1），提供 GET /state、POST /action、POST /chat，支持可选 Token 鉴权，方便外部 AI / 客户端接入\n· 【安装器】移除「MER 地图编辑器（Alpha）」组件\n· 【设置】AI 配置保存在 %APPDATA%\\RichTextGen\\ai.json，端口服务可随程序启动自动恢复\n· 该 AI 接入能力处于 Beta 阶段，接口与行为可能继续调整"
 }

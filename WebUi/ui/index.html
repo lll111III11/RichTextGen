@@ -148,6 +148,7 @@
   .c-user{align-self:flex-end;background:var(--accent);color:var(--accentText)}
   .c-bot{align-self:flex-start;background:var(--card);border:1px solid var(--line)}
   .c-err{border:1px solid #c42b1c;color:#c42b1c}
+  .c-ok{border:1px solid #0d7a3e;color:#0d7a3e;background:rgba(13,122,62,.06)}
   /* ===== Win11 记事本式容器（概念设计 M1） ===== */
   #menubar{flex:0 0 auto;height:33px;display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--bg)}
   #menubar .mi{padding:4px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer}
@@ -448,11 +449,6 @@
           <span class="hint">彩色文本生成器 移动版</span></div>
         <p class="hint">我们即将启动 <b>Android 版「彩色文本生成器」（APK）</b> 的研发：把颜色系统、Unity/TMP 标签生成、
           实时预览与选区套样式等核心能力带到手机上，随时随地生成彩色文本。<br><b>状态：已安装完成</b>（APK 已随本版本提交到项目 <code>android/RichTextGen.apk</code>）。</p>
-
-<div class="card"><h3>🧱 MER 地图编辑器（Alpha）</h3>
-<p class="hint">为 SCP:SL 服务端插件 ProjectMER / MapEditorReborn 制作地图与蓝图的编辑器（Unity 2021.3.45f2c1）。<br>
-<b>状态：Alpha（开发中）</b>。安装本程序时可勾选「同时安装 MER 地图编辑器（Alpha）」，它会装到
-<code>&lt;安装目录&gt;\MER-MapEditor(Alpha)</code>；也可点安装界面里的「检测 / 安装状态」先看本机是否已装。</p></div>
         <p class="hint">桌面端将继续稳定维护，并与移动端同步新功能与修复。敬请期待。</p>
         <div class="row"><button class="b p" onclick="host('openUrl|https://github.com/lll111III11/RichTextGen')">关注仓库获取进展</button></div>
       </div>
@@ -462,22 +458,56 @@
       </div>
     </section>
 
-    <!-- AI 对话（自定义模型） -->
+    <!-- AI 接入（Beta） -->
     <section class="page" id="p-chat">
-      <div class="card"><h3>✦ AI 对话 · 自定义模型</h3>
-        <p class="hint">填入你自己的 OpenAI 兼容 API（Endpoint + API Key + 模型名）即可简易对话。支持 DeepSeek / OpenAI / 通义千问等一切兼容接口。</p>
-        <div class="row"><label class="f">Endpoint</label>
-          <input type="text" id="cEndpoint" placeholder="如 https://api.deepseek.com 或 https://api.openai.com/v1" style="width:300px">
-          <label class="f">API Key</label>
-          <input type="password" id="cKey" placeholder="填入你自己的密钥" style="width:250px">
+      <div class="card"><h3>✦ AI 接入 <span class="badge" style="background:#8a5a00;color:#fff8e0">Beta</span></h3>
+        <p class="hint">选择厂商并填入你自己的 API Key。AI 不只是聊天，它会直接修改工作台的文本、颜色、样式、渐变等。</p>
+        <div class="row">
+          <label class="f">厂商</label>
+          <select id="aiProvider" onchange="aiProviderChange()" style="width:200px">
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai">OpenAI</option>
+            <option value="dashscope">通义千问（阿里云）</option>
+            <option value="zhipu">智谱 GLM</option>
+            <option value="moonshot">Moonshot Kimi</option>
+            <option value="custom">自定义（OpenAI 兼容）</option>
+          </select>
           <label class="f">模型</label>
-          <input type="text" id="cModel" placeholder="如 deepseek-chat / gpt-4o-mini / qwen-plus" style="width:200px"></div>
+          <input type="text" id="aiModel" placeholder="如 deepseek-chat" style="width:180px">
+        </div>
+        <div class="row">
+          <label class="f">Endpoint</label>
+          <input type="text" id="aiEndpoint" placeholder="https://api.deepseek.com" style="flex:1;min-width:220px">
+        </div>
+        <div class="row">
+          <label class="f">API Key</label>
+          <input type="password" id="aiKey" placeholder="只保存在本机 %APPDATA%\RichTextGen\ai.json" style="flex:1;min-width:220px">
+          <button class="b p" onclick="aiSave()">保存</button>
+          <span class="hint" id="aiSaveTip"></span>
+        </div>
+      </div>
+
+      <div class="card"><h3>端口服务 · 外部 AI / 客户端接入</h3>
+        <p class="hint">开启后在本机 127.0.0.1 上监听，外部程序可通过 HTTP 调用本工具：GET /state、POST /action、POST /chat。</p>
+        <div class="row">
+          <label><input type="checkbox" id="aiServerOn"> 开启本地端口</label>
+          <label class="f">端口</label><input type="text" id="aiPort" value="18762" style="width:80px">
+          <label class="f">Token</label><input type="text" id="aiToken" placeholder="可留空" style="width:170px">
+          <button class="b" onclick="aiServerApply()">应用</button>
+          <span class="hint" id="aiServerStatus">未启动</span>
+        </div>
+        <div class="hint" style="margin-top:6px;line-height:1.7">
+          调用示例：<span class="mono">curl -X POST http://127.0.0.1:18762/chat -H "Content-Type: application/json" -d "{\"message\":\"把文字改成红色并加粗\"}"</span>
+        </div>
+      </div>
+
+      <div class="card"><h3>AI 对话 / 操作</h3>
         <div id="chatBox"></div>
         <div class="row" style="margin-top:10px">
-          <textarea id="chatInput" placeholder="输入你的问题，例如：帮我解释这段 &lt;color&gt; 标签的含义…" style="flex:1;min-height:64px;user-select:text"></textarea>
+          <textarea id="chatInput" placeholder="例如：把工作台文字改成蓝色渐变、加粗，并套上 size=48" style="flex:1;min-height:64px;user-select:text"></textarea>
           <button class="b p" onclick="chatSend()">发送</button>
           <button class="b" onclick="chatClear()">清空</button></div>
-        <div class="row"><span class="hint">提示：历史对话会自动带上；输入框内按 Enter 发送、Shift+Enter 换行。</span></div>
+        <div class="row"><span class="hint">AI 会返回可执行操作并在本地应用；执行明细会显示在对话里。Enter 发送、Shift+Enter 换行。</span></div>
       </div>
     </section>
 
@@ -508,7 +538,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.8.0.4";
+const VERSION = "5.9.0.0";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -681,6 +711,7 @@ function gen(){
   };
   host('generate|' + JSON.stringify(opts));   // 宿主只按第一个 '|' 切分，正文里的 '|' 无需删除
   updateColorInfo();
+  aiPushState();                              // 同步给 AI / 端口服务
 }
 txt.addEventListener('input', gen);
 $('mode').addEventListener('change', updateColorInfo);
@@ -714,9 +745,55 @@ function doTranslate(){
   }));
 }
 
-/* ---------- AI 对话（自定义模型，OpenAI 兼容协议） ---------- */
-let chatHist = [];                              // [{role:'user'|'assistant', content}]
+/* ---------- AI 接入（Beta）：多厂商 + 真实编辑操作 ---------- */
+const AI_PROVIDERS = {
+  deepseek:  { endpoint:'https://api.deepseek.com', model:'deepseek-chat' },
+  openai:    { endpoint:'https://api.openai.com/v1', model:'gpt-4o-mini' },
+  dashscope: { endpoint:'https://dashscope.aliyuncs.com/compatible-mode/v1', model:'qwen-plus' },
+  zhipu:     { endpoint:'https://open.bigmodel.cn/api/paas/v4', model:'glm-4-flash' },
+  moonshot:  { endpoint:'https://api.moonshot.cn/v1', model:'moonshot-v1-8k' },
+  custom:    { endpoint:'', model:'' }
+};
+let chatHist = [];
 const chatBox = $('chatBox'), chatInput = $('chatInput');
+
+function aiProviderChange(){
+  const p = AI_PROVIDERS[$('aiProvider').value];
+  if(!p) return;
+  if(p.endpoint) $('aiEndpoint').value = p.endpoint;
+  if(p.model) $('aiModel').value = p.model;
+}
+function aiSave(){
+  host('aiSave|' + JSON.stringify({
+    provider:$('aiProvider').value, endpoint:$('aiEndpoint').value,
+    model:$('aiModel').value, key:$('aiKey').value
+  }));
+}
+window.ui.aiSaved = function(msg){ $('aiSaveTip').textContent = msg || '已保存'; };
+window.ui.aiSettings = function(json){
+  try {
+    const o = JSON.parse(json);
+    if(o.provider) $('aiProvider').value = o.provider;
+    if(o.endpoint) $('aiEndpoint').value = o.endpoint;
+    if(o.model) $('aiModel').value = o.model;
+    if(o.key) $('aiKey').value = o.key;
+    if(o.port) $('aiPort').value = o.port;
+    if(o.token) $('aiToken').value = o.token;
+    $('aiServerOn').checked = !!o.serverEnabled;
+  } catch(e){}
+};
+function aiServerApply(){
+  host('aiServerStart|' + JSON.stringify({
+    enabled: $('aiServerOn').checked,
+    port: parseInt($('aiPort').value, 10) || 18762,
+    token: $('aiToken').value
+  }));
+}
+window.ui.aiServerStatus = function(s){
+  $('aiServerStatus').textContent = s || '未启动';
+  $('aiServerStatus').style.color = (s && s.indexOf('运行中') >= 0) ? '#0d7a3e' : '';
+};
+
 function cMsg(role, text, cls){
   const d = document.createElement('div');
   d.className = 'c-msg ' + (role === 'user' ? 'c-user' : 'c-bot') + (cls || '');
@@ -728,20 +805,119 @@ function chatClear(){ chatHist = []; chatBox.innerHTML = ''; status('对话已�
 let chatThinkEl = null;
 function chatSend(){
   const q = chatInput.value.trim();
-  if(!q){ status('先输入问题再发送'); return; }
+  if(!q){ status('先输入内容再发送'); return; }
   chatInput.value = '';
   cMsg('user', q);
   chatHist.push({ role:'user', content:q });
-  chatThinkEl = cMsg('bot', '（正在思考…）');
-  const hist = chatHist.slice(-20);                 // 只带最近 20 条，控制上下文长度
-  host('chat|' + encodeURIComponent(JSON.stringify({
-    endpoint:$('cEndpoint').value, key:$('cKey').value, model:$('cModel').value,
-    history: JSON.stringify(hist)                  // 数组转成 JSON 字符串，C# Field 才能取出
-  })));
+  chatThinkEl = cMsg('bot', '（AI 正在思考并准备操作…）');
+  host('aiChat|' + JSON.stringify({
+    message: q,
+    state: JSON.stringify(aiState()),
+    endpoint: $('aiEndpoint').value,
+    key: $('aiKey').value,
+    model: $('aiModel').value
+  }));
 }
 chatInput.addEventListener('keydown', e => {
   if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); chatSend(); }
 });
+
+/* 当前编辑器状态：既给界面内 AI，也给端口服务 */
+function aiState(){
+  return {
+    text: txt.value,
+    mode: $('mode').value, color: $('color').value, size: $('size').value,
+    bold: $('bold').checked, italic: $('italic').checked, underline: $('underline').checked,
+    strike: $('strike').checked, sub: $('sub').checked, sup: $('sup').checked, mark: $('mark').checked,
+    alpha: $('alpha').value,
+    gradient: $('grad').checked, axial: $('axial').checked, loop: $('loop').checked,
+    gradStart: $('gradStart').value, gradEnd: $('gradEnd').value,
+    link: $('link').value, linkText: $('linkText').value,
+    output: out.value
+  };
+}
+function aiPushState(){ try{ host('aiState|' + JSON.stringify(aiState())); }catch(e){} }
+
+/* 执行 AI 返回的操作 */
+function applyAiActions(actions){
+  const log = [];
+  if(!actions || !actions.length) return log;
+  for(let i=0;i<actions.length;i++){
+    const a = actions[i]; if(!a || !a.type) continue;
+    switch(a.type){
+      case 'setText': txt.value = a.text || ''; log.push('设置文本'); break;
+      case 'appendText': txt.value += (a.text || ''); log.push('追加文本'); break;
+      case 'clearText': txt.value = ''; log.push('清空文本'); break;
+      case 'setColor': $('color').value = a.color || ''; log.push('颜色 ' + (a.color || '')); break;
+      case 'setMode': $('mode').value = a.mode || 'hex'; break;
+      case 'setStyle':
+        ['bold','italic','underline','strike','sub','sup','mark'].forEach(function(k){
+          if(typeof a[k] === 'boolean') $(k).checked = a[k];
+        });
+        log.push('样式'); break;
+      case 'setSize': $('size').value = (a.size == null ? '' : a.size); log.push('字号'); break;
+      case 'setAlpha': $('alpha').value = (a.alpha == null ? '' : a.alpha); log.push('透明度'); break;
+      case 'setGradient':
+        if(typeof a.enabled === 'boolean') $('grad').checked = a.enabled;
+        if(typeof a.axial === 'boolean') $('axial').checked = a.axial;
+        if(typeof a.loop === 'boolean') $('loop').checked = a.loop;
+        if(a.start) $('gradStart').value = a.start;
+        if(a.end) $('gradEnd').value = a.end;
+        log.push('渐变'); break;
+      case 'setLink':
+        if(a.url) $('link').value = a.url;
+        if(a.text) $('linkText').value = a.text;
+        log.push('链接'); break;
+    }
+  }
+  gen(); updateColorInfo(); aiPushState();
+  setTimeout(aiPushState, 150);   // 等生成结果回填后再同步一次
+  return log;
+}
+
+function stripFences(s){
+  s = (s || '').trim();
+  if(s.indexOf('```') !== 0) return s;
+  const nl = s.indexOf('\n');
+  if(nl > 0) s = s.slice(nl + 1);
+  const end = s.lastIndexOf('```');
+  if(end >= 0) s = s.slice(0, end);
+  return s.trim();
+}
+
+window.ui.aiReply = function(r){
+  const bubble = chatThinkEl; chatThinkEl = null;
+  if(!r || !r.ok){
+    const msg = (r && r.content) ? r.content : 'AI 请求失败';
+    if(bubble){ bubble.textContent = msg; bubble.className = 'c-msg c-bot c-err'; }
+    else cMsg('bot', msg, 'c-err');
+    status('AI 请求失败');
+    return;
+  }
+  let content = stripFences(r.content);
+  let obj = null;
+  try { obj = JSON.parse(content); } catch(e){}
+  let reply = (obj && obj.reply) ? obj.reply : content;
+  let actions = (obj && obj.actions) ? obj.actions : [];
+
+  if(bubble){ bubble.textContent = reply; bubble.className = 'c-msg c-bot'; }
+  else cMsg('bot', reply);
+
+  if(actions.length){
+    const applied = applyAiActions(actions);
+    cMsg('bot', '已执行 ' + applied.length + ' 项操作：' + applied.join('、'), 'c-ok');
+    status('AI 已修改编辑器');
+  } else {
+    status('AI 已回复');
+  }
+  chatHist.push({ role:'assistant', content:reply });
+};
+
+/* C# 端口服务回调：执行动作并回传结果 */
+window.ui.aiApplyActions = function(o){
+  const applied = applyAiActions(o.actions || []);
+  try { host('aiActionResult|' + o.id + '|' + JSON.stringify({ ok:true, applied:applied })); } catch(e){}
+};
 
 /* ---------- 小彩蛋：点联网 5 次 → 网络音效（随机从网上获取） ---------- */
 let netClicks = 0;
@@ -784,7 +960,9 @@ window.addEventListener('drop', e=>{
   const f = e.dataTransfer.files[0]; if(!f) return;
   const p = f.path || f.name;                       // WebView2 在拖放时会带上真实路径
   const img = /\.(png|jpg|jpeg|bmp|gif|webp)$/i.test(f.name);
+  const audio = /\.(mp3|wav|ogg|m4a|flac|aac|wma|opus)$/i.test(f.name);
   if(img){ go('img'); host('blockArt|' + encodeURIComponent(p)); }
+  else if(audio){ go('music'); host('musicHost|' + encodeURIComponent(p)); }   // 音乐 → 本机端口 → 本地 URL
   else { host('dropFile|' + encodeURIComponent(p)); }
 });
 
@@ -2244,6 +2422,108 @@ const EdMode = (function(){
     });
     splitter().addEventListener('dblclick', () => { setW(DEF_W); });
   }
+})();
+</script>
+<script>
+/* ================= 追加：音乐 → 本地链接（程序内置 127.0.0.1 端口服务） =================
+   拖入音乐文件后，宿主在 127.0.0.1 上开一个本地 HTTP 服务，返回可播放的本地 URL。
+   URL 形如 http://127.0.0.1:17861/media/歌曲名.mp3 —— 本机任何软件（浏览器 / 播放器 / SCP:SL 等）都能直接访问。
+   注意：链接在「本程序运行期间」有效；部分播放器需要从 0 开始缓冲，已支持 Range 分段。            */
+(function(){
+  const nav = document.querySelector('nav');
+  const btn = document.createElement('button');
+  btn.dataset.p = 'music';
+  btn.innerHTML = '<span class="g">♪</span>音乐链接';
+  btn.onclick = () => go('music');
+  const setBtn = nav.querySelector('button[data-p="set"]');
+  nav.insertBefore(btn, setBtn);
+
+  const page = document.createElement('section');
+  page.className = 'page'; page.id = 'p-music';
+  page.innerHTML =
+    '<div class="card"><h3>音乐 → 本地链接（内置本机端口服务）</h3>' +
+      '<p class="hint">把音乐文件直接拖进窗口任意位置即可：程序会在 127.0.0.1 上开一个本地 HTTP 服务，' +
+      '把这首歌挂上去，返回一条可直接播放、可发给同机其它软件的本地 URL。</p>' +
+      '<div id="musicZone" style="margin:10px 0;padding:22px 14px;border:2px dashed var(--accent,#0067c0);' +
+      'border-radius:10px;text-align:center;background:rgba(0,103,192,.06)">' +
+        '<div style="font-size:30px;line-height:1">♪</div>' +
+        '<div style="margin-top:6px">把音乐文件拖到这里（或拖进窗口任意位置）</div>' +
+        '<div class="hint">支持 mp3 / wav / ogg / m4a / flac / aac / wma / opus —— 松开鼠标即自动生成链接</div>' +
+        '<div style="margin-top:10px"><button class="b p" onclick="host(\'musicPick\')">选择音乐文件…</button></div>' +
+      '</div>' +
+      '<div class="row"><label class="f">本地 URL</label>' +
+        '<input type="text" id="musicUrl" readonly placeholder="拖入音乐后这里会出现链接" style="flex:1;min-width:200px">' +
+        '<button class="b" onclick="musicCopy()">复制</button>' +
+        '<button class="b" onclick="musicOpen()">浏览器打开</button>' +
+        '<button class="b" onclick="musicTest()">试听</button>' +
+      '</div>' +
+      '<div class="row"><span class="hint" id="musicInfo">尚未生成</span></div>' +
+      '<audio id="musicAudio" controls style="width:100%;margin-top:6px;display:none"></audio>' +
+    '</div>' +
+    '<div class="card"><h3>本次已生成的链接（程序运行期间有效）</h3>' +
+      '<div id="musicList"><span class="hint">还没有记录，拖一个音乐进来试试。</span></div>' +
+    '</div>';
+  document.getElementById('pages').appendChild(page);
+
+  const urlBox = () => document.getElementById('musicUrl');
+  const info = () => document.getElementById('musicInfo');
+
+  function musicAdd(name, url){
+    const list = document.getElementById('musicList');
+    if (list.querySelector('.hint')) list.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.alignItems = 'center';
+
+    const a = document.createElement('a');
+    a.href = '#'; a.textContent = name || '音乐';
+    a.style.cssText = 'flex:1;min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    a.title = '点击用浏览器打开';
+    a.onclick = ev => { ev.preventDefault(); host('openUrl|' + url); };
+
+    const u = document.createElement('span');
+    u.className = 'hint';
+    u.style.cssText = 'flex:2;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text';
+    u.textContent = url; u.title = '点击填入上方输入框';
+    u.onclick = () => { urlBox().value = url; };
+
+    const cp = document.createElement('button');
+    cp.className = 'b'; cp.textContent = '复制';
+    cp.onclick = () => host('copy|' + encodeURIComponent(url));
+
+    row.appendChild(a); row.appendChild(u); row.appendChild(cp);
+    list.appendChild(row);
+  }
+
+  window.musicCopy = function(){
+    const u = urlBox().value;
+    if (!u){ status('还没有链接，先拖一个音乐进来'); return; }
+    host('copy|' + encodeURIComponent(u));
+  };
+  window.musicOpen = function(){
+    const u = urlBox().value;
+    if (!u){ status('还没有链接，先拖一个音乐进来'); return; }
+    host('openUrl|' + u);
+  };
+  window.musicTest = function(){
+    const u = urlBox().value;
+    if (!u){ status('还没有链接，先拖一个音乐进来'); return; }
+    const a = document.getElementById('musicAudio');
+    a.style.display = 'block';
+    a.src = u;
+    a.currentTime = 0;
+    const p = a.play();
+    if (p && p.catch) p.catch(function(){});
+  };
+
+  /* 宿主回调：音乐已挂到本机端口 */
+  window.ui.musicUrl = function(o){
+    if (!o || !o.ok){ status((o && o.msg) ? o.msg : '生成失败'); info().textContent = (o && o.msg) ? o.msg : '生成失败'; return; }
+    urlBox().value = o.url;
+    info().textContent = o.name + ' · 已挂到本机端口，程序运行期间有效';
+    status('已生成音乐本地链接：' + o.url);
+    musicAdd(o.name, o.url);
+  };
 })();
 </script></body>
 </html>

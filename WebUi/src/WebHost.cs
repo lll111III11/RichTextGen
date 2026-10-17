@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -385,6 +386,7 @@ namespace RichTextGen
             // 释放全局热键与计时器，避免残留热键占用（否则重启程序会「注册失败（被占用）」）
             try { if (hotkeys != null) hotkeys.UnregisterAll(); } catch { }
             try { if (updateTimer != null) { updateTimer.Stop(); updateTimer.Dispose(); } } catch { }
+            try { if (_mediaListener != null) { _mediaListener.Stop(); _mediaListener = null; } } catch { }   // 关掉音乐本地服务
             base.OnFormClosed(e);
         }
 
@@ -514,6 +516,9 @@ namespace RichTextGen
                     }
                     _pendingOpen.Clear();
                     CheckShellRegistration();   // 首次启动自动注册右键菜单（HKCU 免管理员）
+                    AiConfig.Load();
+                    CallStr("aiSettings", AiConfig.ToJson());
+                    StartAiServerIfEnabled();   // 上次开着端口则自动恢复
                     break;
                 case "hotkeys":
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
@@ -565,6 +570,8 @@ namespace RichTextGen
                 case "importTxt": ImportTxt(); break;
                 case "exportTxt": ExportTxt(Un(arg)); break;
                 case "dropFile": DropFile(Un(arg)); break;
+                case "musicHost": MusicHost(Un(arg)); break;    // 拖入音乐 → 生成本地 URL
+                case "musicPick": MusicPick(); break;           // 点按钮选音乐文件
                 case "checkUpdate": CheckUpdate(true); break;
                 case "doUpdate": DoUpdate(); break;
                 case "openUrl": OpenUrl(arg); break;
@@ -576,6 +583,14 @@ namespace RichTextGen
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
                 case "chat": Chat(Un(arg)); break;
+                // ---- AI 接入（Beta）----
+                case "aiChat": AiChat(arg); break;
+                case "aiSave": AiSaveSettings(arg); break;
+                case "aiLoad": CallStr("aiSettings", AiLoadSettings()); break;
+                case "aiServerStart": AiServerApply(arg); break;
+                case "aiServerStatus": CallStr("aiServerStatus", AiServerStatus()); break;
+                case "aiState": SetAiState(arg); break;
+                case "aiActionResult": OnAiActionResult(arg); break;
                 case "easterEgg": PlayNetSound(); break;
                 case "uninstall": UninstallApp(); break;
                 case "exportHtml": ExportHtml(Un(arg)); break;
@@ -1266,6 +1281,224 @@ namespace RichTextGen
                 catch { CallStr("status", "音效获取失败（网络不通？）"); }
                 finally { try { if (path.Length > 0 && File.Exists(path)) File.Delete(path); } catch { } }
             });
+        }
+
+        // ============================================================ 音乐本地链接服务（127.0.0.1 端口）
+        // 把拖进来的音乐文件挂到本机一个端口上，生成可直接播放的本地 URL（http://127.0.0.1:端口/media/文件名）。
+        // 用 TcpListener 手写 HTTP/1.1（不用 HttpListener）：免管理员、免 urlacl 预留、免防火墙弹窗（只绑回环地址）。
+        private static TcpListener _mediaListener;
+        private static int _mediaPort;
+        private static readonly Dictionary<string, string> _mediaMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object _mediaLock = new object();
+
+        /// <summary>首次使用时在 127.0.0.1 上挑一个空闲端口启动服务；全部被占用返回 0</summary>
+        private static int EnsureMediaServer()
+        {
+            if (_mediaListener != null) return _mediaPort;
+            lock (_mediaLock)
+            {
+                if (_mediaListener != null) return _mediaPort;
+                for (int port = 17861; port < 17961; port++)
+                {
+                    try
+                    {
+                        TcpListener l = new TcpListener(IPAddress.Loopback, port);
+                        l.Start();
+                        _mediaListener = l;
+                        _mediaPort = port;
+                        break;
+                    }
+                    catch { }   // 端口被占用 → 试下一个
+                }
+                if (_mediaListener == null) return 0;
+                System.Threading.Thread t = new System.Threading.Thread(MediaAcceptLoop);
+                t.IsBackground = true;      // 后台线程：随主进程退出，不阻塞关闭
+                t.Start();
+                return _mediaPort;
+            }
+        }
+
+        private static void MediaAcceptLoop()
+        {
+            while (true)
+            {
+                TcpClient c;
+                try { c = _mediaListener.AcceptTcpClient(); }
+                catch { return; }           // 监听已停止
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try { ServeMedia(c); }
+                    catch { }
+                    finally { try { c.Close(); } catch { } }
+                });
+            }
+        }
+
+        /// <summary>把文件登记进服务并返回可访问的本地 URL（同名文件自动加序号区分）</summary>
+        private static string RegisterMedia(string path)
+        {
+            int port = EnsureMediaServer();
+            if (port == 0) return "";
+            string name = Path.GetFileName(path);
+            lock (_mediaLock)
+            {
+                string key = name;
+                for (int i = 2; _mediaMap.ContainsKey(key); i++)
+                    key = Path.GetFileNameWithoutExtension(name) + "-" + i + Path.GetExtension(name);
+                _mediaMap[key] = path;
+                return "http://127.0.0.1:" + port + "/media/" + Uri.EscapeDataString(key);
+            }
+        }
+
+        /// <summary>极简 HTTP 服务：只处理 GET/HEAD /media/xxx，支持 Range（播放器拖进度条要 206）</summary>
+        private static void ServeMedia(TcpClient c)
+        {
+            c.ReceiveTimeout = 15000;
+            c.SendTimeout = 30000;
+            NetworkStream ns = c.GetStream();
+
+            // ---- 读请求头（读到空行为止，最多 16KB，防恶意超长头） ----
+            MemoryStream head = new MemoryStream();
+            byte[] one = new byte[1];
+            int blank = 0;
+            while (head.Length < 16384)
+            {
+                int n = ns.Read(one, 0, 1);
+                if (n <= 0) break;
+                head.WriteByte(one[0]);
+                if (one[0] == (byte)'\n') { if (++blank == 2) break; }
+                else if (one[0] != (byte)'\r') blank = 0;
+            }
+            string[] lines = Encoding.ASCII.GetString(head.ToArray())
+                .Split(new string[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0) { WriteMediaError(ns, 400); return; }
+
+            string[] parts = lines[0].Split(' ');
+            if (parts.Length < 2) { WriteMediaError(ns, 400); return; }
+            string method = parts[0];
+            string rawPath = parts[1];
+            int q = rawPath.IndexOf('?');
+            if (q >= 0) rawPath = rawPath.Substring(0, q);
+
+            // ---- 解析 Range: bytes=start-end ----
+            long from = 0, to = -1;
+            bool hasRange = false;
+            foreach (string ln in lines)
+            {
+                if (ln.Length > 6 && ln.StartsWith("Range:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string v = ln.Substring(6).Trim();
+                    int eq = v.IndexOf('=');
+                    if (eq >= 0) v = v.Substring(eq + 1);
+                    string[] r = v.Split('-');
+                    if (r.Length == 2)
+                    {
+                        if (r[0].Length > 0 && long.TryParse(r[0], out from)) hasRange = true;
+                        if (r[1].Length > 0 && long.TryParse(r[1], out to)) hasRange = true;
+                        if (from < 0) { from = 0; hasRange = false; }
+                    }
+                    break;
+                }
+            }
+
+            const string prefix = "/media/";
+            if (!rawPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { WriteMediaError(ns, 404); return; }
+            string key;
+            try { key = Uri.UnescapeDataString(rawPath.Substring(prefix.Length)); }
+            catch { key = rawPath.Substring(prefix.Length); }
+
+            string file;
+            lock (_mediaLock) { _mediaMap.TryGetValue(key, out file); }
+            if (string.IsNullOrEmpty(file) || !File.Exists(file)) { WriteMediaError(ns, 404); return; }
+
+            long total = new FileInfo(file).Length;
+            long start = hasRange ? from : 0;
+            if (to < 0 || to >= total) to = total - 1;
+            if (hasRange && (from > to || from >= total)) { WriteMediaError(ns, 416); return; }
+            long count = hasRange ? (to - start + 1) : total;
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append(hasRange ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n");
+            sb.Append("Content-Type: ").Append(MediaContentType(file)).Append("\r\n");
+            sb.Append("Content-Length: ").Append(count).Append("\r\n");
+            sb.Append("Accept-Ranges: bytes\r\n");
+            if (hasRange)
+                sb.Append("Content-Range: bytes ").Append(start).Append("-").Append(to).Append("/").Append(total).Append("\r\n");
+            sb.Append("Access-Control-Allow-Origin: *\r\n");
+            sb.Append("Cache-Control: no-cache\r\n");
+            sb.Append("Connection: close\r\n\r\n");
+            byte[] hb = Encoding.ASCII.GetBytes(sb.ToString());
+            ns.Write(hb, 0, hb.Length);
+            if (method == "HEAD") return;
+
+            using (FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                fs.Seek(start, SeekOrigin.Begin);
+                byte[] buf = new byte[64 * 1024];
+                long left = count;
+                while (left > 0)
+                {
+                    int n = fs.Read(buf, 0, (int)Math.Min(buf.Length, left));
+                    if (n <= 0) break;
+                    ns.Write(buf, 0, n);
+                    left -= n;
+                }
+            }
+        }
+
+        private static void WriteMediaError(NetworkStream ns, int code)
+        {
+            string text = code == 404 ? "Not Found" : (code == 416 ? "Range Not Satisfiable" : "Bad Request");
+            byte[] b = Encoding.UTF8.GetBytes(code + " " + text);
+            string h = "HTTP/1.1 " + code + " " + text + "\r\nContent-Type: text/plain; charset=utf-8\r\n" +
+                       "Content-Length: " + b.Length + "\r\nConnection: close\r\n\r\n";
+            byte[] hb = Encoding.ASCII.GetBytes(h);
+            ns.Write(hb, 0, hb.Length);
+            ns.Write(b, 0, b.Length);
+        }
+
+        private static string MediaContentType(string path)
+        {
+            switch (Path.GetExtension(path).ToLowerInvariant())
+            {
+                case ".mp3": return "audio/mpeg";
+                case ".wav": return "audio/wav";
+                case ".ogg": case ".opus": return "audio/ogg";
+                case ".m4a": case ".mp4": return "audio/mp4";   // m4a 本质是 MP4 容器
+                case ".aac": return "audio/aac";
+                case ".flac": return "audio/flac";
+                case ".wma": return "audio/x-ms-wma";
+                case ".webm": return "video/webm";
+                default: return "application/octet-stream";
+            }
+        }
+
+        /// <summary>把音乐文件挂到本机端口，回传可直接访问的本地 URL</summary>
+        private void MusicHost(string path)
+        {
+            path = (path ?? "").Trim().Trim('"');
+            if (path.Length == 0 || !File.Exists(path)) { CallStr("status", "音乐文件不存在：" + path); return; }
+            string url = RegisterMedia(path);
+            if (url.Length == 0)
+            {
+                Call("musicUrl", "{\"ok\":false,\"name\":" + Quote(Path.GetFileName(path)) + ",\"msg\":" +
+                    Quote("本地服务启动失败：17861-17961 端口全被占用") + "}");
+                CallStr("status", "本地服务启动失败：端口全被占用");
+                return;
+            }
+            Call("musicUrl", "{\"ok\":true,\"name\":" + Quote(Path.GetFileName(path)) + ",\"url\":" + Quote(url) + "}");
+            CallStr("status", "已生成音乐本地链接：" + url);
+        }
+
+        /// <summary>备用入口：点按钮选文件（不能拖放时用）</summary>
+        private void MusicPick()
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Filter = "音乐文件|*.mp3;*.wav;*.ogg;*.m4a;*.flac;*.aac;*.wma;*.opus|所有文件|*.*";
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                MusicHost(d.FileName);
+            }
         }
 
         // ============================================================ 卸载
