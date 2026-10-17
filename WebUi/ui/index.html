@@ -38,13 +38,24 @@
   nav button:hover{background:var(--hover)}
   nav button.on{background:var(--card);box-shadow:var(--shadow);font-weight:600}
   nav button.on::before{content:"";position:absolute}
+  /* AI 对话打开时，本项收起，下面几项平滑上移；关闭窗口后滑回 */
+  nav button{max-height:40px;line-height:20px;overflow:hidden;
+             transition:max-height .26s ease,opacity .2s ease,padding .26s ease,transform .12s ease,background-color .18s ease,box-shadow .18s ease}
+  nav button.nav-gone{max-height:0;opacity:0;padding-top:0;padding-bottom:0;
+                      transform:translateX(-14px);pointer-events:none}
   nav .g{width:16px;text-align:center;opacity:.85}
   #pages{flex:1;min-width:0;overflow:auto}
   .page{display:none}
   .page.on{display:block}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);
-        padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
-  .card h3{margin:0 0 10px;font-size:14px;font-weight:600}
+        padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow);
+        resize:vertical;overflow:auto;min-height:90px}
+  .card h3{margin:0 0 10px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .card h3 .card-zoom{margin-left:auto;flex:0 0 auto;width:24px;height:20px;padding:0;line-height:1;
+        border:1px solid var(--inputLine);background:var(--input);color:var(--sub);border-radius:4px;
+        cursor:pointer;font-size:12px}
+  .card h3 .card-zoom:hover{color:var(--accent);border-color:var(--accent)}
+  .card.zoomed{box-shadow:0 6px 22px rgba(0,0,0,.18)}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
   .row:last-child{margin-bottom:0}
   label.f{color:var(--sub);font-size:12.5px;min-width:64px}
@@ -131,18 +142,33 @@
   /* ---- 平滑动效：点击互动 / 页面切换 / 缩放切换 ---- */
   button.b,.wbtn,nav button,.upbtn,.libSw,.chk{transition:transform .12s ease,background-color .15s ease,filter .15s ease,box-shadow .15s ease}
   button.b:active,.wbtn:active,nav button:active,.upbtn:active{transform:scale(.93)}
-  nav button{transition:transform .12s ease,background-color .18s ease,box-shadow .18s ease}
+  nav button{transition:transform .12s ease,background-color .18s ease,box-shadow .18s ease,max-height .26s ease,opacity .2s ease,padding .26s ease}
   .page{animation:pageIn .2s ease}
   @keyframes pageIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
   #pages .card{transition:box-shadow .2s ease,transform .2s ease}
   #pages .card:hover{box-shadow:0 3px 10px rgba(0,0,0,.10)}
   .zoomPulse{animation:zoomPulse .3s ease}
   @keyframes zoomPulse{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
-  #cursorHide{position:fixed;inset:0;cursor:none;z-index:40;display:none}
+  #cursorHide{position:fixed;inset:0;cursor:none;z-index:40;display:none;pointer-events:none}
   #cursorHide.on{display:block}
   /* ---- AI 对话（自定义模型） ---- */
+  #convList{max-height:250px;overflow:auto;border:1px solid var(--inputLine);border-radius:var(--r8);background:var(--input)}
+  .conv-sep{padding:7px 10px 4px;color:var(--sub);font-size:11.5px}
+  .conv-item{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;
+             border-bottom:1px solid var(--line);font-size:13px}
+  .conv-item:last-child{border-bottom:0}
+  .conv-item:hover{background:var(--hover)}
+  .conv-item.on{background:var(--hover);box-shadow:inset 3px 0 0 var(--accent)}
+  .conv-item .ct{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .conv-item .cm{color:var(--sub);font-size:11px;flex:0 0 auto}
+  .conv-item .cp,.conv-item .cx{border:0;background:transparent;color:var(--sub);cursor:pointer;
+        padding:2px 5px;border-radius:4px;font-size:12px;line-height:1}
+  .conv-item .cp.on{color:var(--accent)}
+  .conv-item .cx:hover{color:#c42b1c}
+  .conv-empty{padding:14px 10px;color:var(--sub);font-size:12px}
   #chatBox{height:300px;overflow:auto;border:1px solid var(--inputLine);border-radius:var(--r8);
-           padding:10px;background:var(--input);display:flex;flex-direction:column;gap:8px}
+           padding:10px;background:var(--input);display:flex;flex-direction:column;gap:8px;
+           resize:vertical;min-height:120px;max-height:75vh}
   .c-msg{max-width:86%;padding:8px 11px;border-radius:10px;white-space:pre-wrap;word-break:break-word;
          user-select:text;font-size:13px;line-height:1.55}
   .c-user{align-self:flex-end;background:var(--accent);color:var(--accentText)}
@@ -242,6 +268,8 @@
   #wsFold:hover{background:var(--hover)}
   #wsInner{flex:1;min-height:0;display:flex;flex-direction:column}
   #wsBody{flex:1;min-height:0;display:flex;gap:12px;min-width:0;padding:0 12px 12px 10px}
+  #navSplit{flex:0 0 6px;cursor:ew-resize;border-radius:3px;align-self:stretch;transition:background .15s ease}
+  #navSplit:hover,#navSplit.dragging{background:var(--accent);opacity:.7}
   #ws.cold #wsHead,#ws.cold #wsInner{display:none}
   #wsFold2{display:none}
   #ws.cold #wsFold2{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;height:100%;border:0;
@@ -303,9 +331,11 @@
     <button data-p="gen"><span class="g">✎</span>文本生成</button>
     <button data-p="img"><span class="g">▦</span>图片系统</button>
     <button data-p="trans"><span class="g">⇄</span>在线翻译</button>
-    <button data-p="chat"><span class="g">✦</span>AI 对话</button>
+    <button data-p="chatwin"><span class="g">✦</span>AI 对话</button>
     <button data-p="set"><span class="g">⚙</span>设置</button>
   </nav>
+
+    <div id="navSplit" title="拖动调整导航栏宽度（双击恢复默认）"></div>
 
   <div id="pages">
 
@@ -518,6 +548,55 @@
           <button class="b p" onclick="aiSave()">保存</button>
           <span class="hint" id="aiSaveTip"></span>
         </div>
+        <div class="row">
+          <label class="f">配置方案</label>
+          <select id="aiProfile" onchange="aiProfileChange()" style="width:160px"></select>
+          <input type="text" id="aiProfileName" placeholder="方案名称" style="width:120px">
+          <button class="b" onclick="aiProfileSave()">保存当前</button>
+          <button class="b" onclick="aiProfileSaveAs()">另存为</button>
+          <button class="b" id="aiProfileDelBtn" onclick="aiProfileDelete()">删除</button>
+          <span class="hint">可保存多套 Key / 模型，随时切换</span>
+        </div>
+      </div>
+
+      <div class="card"><h3>🧩 模型预设</h3>
+        <p class="hint">把常用模型填好保存，会按平台分组出现在下方列表里，点一下即可切换；档位数决定推理等级有几档。</p>
+        <div class="row">
+          <label class="f">模型名称</label>
+          <input type="text" id="pmName" placeholder="如 DeepSeek-V41-Flash" style="flex:1;min-width:160px">
+        </div>
+        <div class="row">
+          <label class="f">平台</label>
+          <input type="text" id="pmPlatform" list="pmPlatformList" placeholder="DeepSeek / 通义千问 / 自定义" style="flex:1;min-width:160px">
+          <datalist id="pmPlatformList">
+            <option value="DeepSeek"></option>
+            <option value="OpenAI"></option>
+            <option value="通义千问"></option>
+            <option value="智谱 GLM"></option>
+            <option value="Moonshot Kimi"></option>
+            <option value="自定义"></option>
+          </datalist>
+        </div>
+        <div class="row">
+          <label class="f">接入口</label>
+          <input type="text" id="pmEndpoint" placeholder="https://api.deepseek.com" style="flex:1;min-width:220px">
+        </div>
+        <div class="row">
+          <label class="f">密钥</label>
+          <input type="password" id="pmKey" placeholder="sk-..." style="flex:1;min-width:220px">
+        </div>
+        <div class="row">
+          <label class="f">档位数</label>
+          <select id="pmLevels" style="width:92px">
+            <option value="2">2 档</option>
+            <option value="3">3 档</option>
+            <option value="4" selected>4 档</option>
+            <option value="5">5 档</option>
+          </select>
+          <button class="b p" onclick="addPreset()">＋ 添加</button>
+          <span class="hint" id="pmTip"></span>
+        </div>
+        <div id="presetList" style="margin-top:6px"></div>
       </div>
 
       <div class="card"><h3>联网搜索系统</h3>
@@ -528,24 +607,10 @@
         </div>
       </div>
 
-      <div class="card"><h3>🧠 AI 大脑设置</h3>
-        <p class="hint">控制模型的思考深度与上下文长度。思考越深越聪明、但更慢更费 token；上下文条数越多越记得住前文，但请求更慢更贵。</p>
-        <div class="row">
-          <label class="f">思考强度</label>
-          <select id="aiReasoning" onchange="aiSave()" style="width:150px">
-            <option value="off">关闭（最快）</option>
-            <option value="low">低</option>
-            <option value="medium">中</option>
-            <option value="high" selected>高（推荐）</option>
-            <option value="max">最高（最慢）</option>
-          </select>
-          <label class="f">上下文条数</label>
-          <input type="text" id="aiCtxTurns" value="20" style="width:70px" onchange="aiSave()">
-          <label class="f">最大输出</label>
-          <input type="text" id="aiMaxTokens" value="8192" style="width:90px" onchange="aiSave()">
-        </div>
-        <div class="hint" id="aiBrainTip" style="margin-top:6px;line-height:1.7">
-          DeepSeek → <span class="mono">thinking</span> + <span class="mono">reasoning_effort</span>；通义千问 → <span class="mono">enable_thinking</span> + <span class="mono">thinking_budget</span>；Kimi → <span class="mono">reasoning_effort</span> / <span class="mono">thinking.keep</span>；智谱 GLM → <span class="mono">thinking.type</span> + <span class="mono">reasoning_effort</span>；OpenAI → <span class="mono">reasoning_effort</span>。关闭思考时自动退回普通温度采样。
+      <div class="card"><h3>🧠 AI 大脑</h3>
+        <p class="hint">上下文与单次输出默认取接口上限（不限制）；对话过长时会自动压缩旧上下文继续，无需手动配置。思考强度请到「✦ AI 对话」窗口的底部滑动条调节。</p>
+        <div class="hint" style="line-height:1.7">
+          DeepSeek → <span class="mono">thinking</span> + <span class="mono">reasoning_effort</span>；通义千问 → <span class="mono">enable_thinking</span> + <span class="mono">thinking_budget</span>；Kimi → <span class="mono">reasoning_effort</span> / <span class="mono">thinking.keep</span>；智谱 GLM → <span class="mono">thinking.type</span> + <span class="mono">reasoning_effort</span>；OpenAI → <span class="mono">reasoning_effort</span>。
         </div>
       </div>
 
@@ -554,7 +619,7 @@
         <div class="row">
           <label><input type="checkbox" id="aiMemoryOn" checked onchange="aiMemoryToggle()"> 启用长期记忆</label>
           <button class="b" onclick="aiMemoryReload()">刷新</button>
-          <button class="b" onclick="aiMemoryClear()">清空全部</button>
+          <button class="b" onclick="aiMemoryClear(this)">清空全部</button>
           <span class="hint" id="aiMemoryTip"></span>
         </div>
         <div class="row">
@@ -578,10 +643,34 @@
         </div>
       </div>
 
-      <div class="card"><h3>AI 对话 / 操作 <button class="mini" id="chatFoldBtn" onclick="toggleChatFold()">折叠</button></h3>
+      <div class="card"><h3>🗂 任务 / 会话 <span class="badge" id="convCount">0 个</span></h3>
+        <p class="hint">每新建一个任务就是一条独立会话，消息保存在本机，关闭程序后依然保留；可置顶、重命名、删除。</p>
+        <div class="row">
+          <button class="b p" onclick="newConv()">＋ 新建任务</button>
+          <span class="hint" id="convTip">列表按「置顶 → 最近」排序，双击标题可重命名</span>
+        </div>
+        <div id="convList"></div>
+      </div>
+
+      <div class="card"><h3>AI 对话 / 操作 <button class="mini" onclick="host('openChatPage')" title="在浏览器里打开独立对话页（主窗口收进托盘也能用）">↗ 独立页</button><button class="mini" id="chatFoldBtn" onclick="toggleChatFold()">折叠</button></h3>
+        <div class="row" style="margin-bottom:8px">
+          <label class="f" style="min-width:auto">🧠 思考强度</label>
+          <input type="range" id="aiReasonRange" min="0" max="4" step="1" value="3"
+                 style="flex:1;min-width:140px;accent-color:var(--accent)" oninput="aiReasonInput()" onchange="aiSave()">
+          <span class="hint" id="aiReasonLabel" style="min-width:52px;text-align:center">高</span>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <label class="f" style="min-width:auto">发送方式</label>
+          <select id="aiSendMode" onchange="aiSendModeChange()" style="width:130px">
+            <option value="queue">排队发送</option>
+            <option value="now">立即插队</option>
+          </select>
+          <span class="hint" id="aiSendModeTip">当前有任务运行时，新消息按顺序等待</span>
+        </div>
         <div class="row" style="margin-bottom:8px">
           <label><input type="checkbox" id="aiShowThink" checked onchange="aiThinkToggle()"> 显示思考与执行过程</label>
           <label style="margin-left:14px"><input type="checkbox" id="aiNotifyDone" checked onchange="aiNotifyToggle()"> 完成后系统通知</label>
+          <label style="margin-left:14px"><input type="checkbox" id="aiWebInline" onchange="aiWebInlineToggle()"> 🌐 联网搜索</label>
           <span class="hint">会展示 reasoning_content 与每轮工具调用；想看到模型思考可把模型改为 deepseek-reasoner（若账号支持）</span>
         </div>
         <div id="chatBox"></div>
@@ -620,7 +709,7 @@
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.9.0.1";
+const VERSION = "5.9.0.2";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -629,10 +718,31 @@ function host(msg){
 }
 function status(s){ $('status').textContent = s; }
 function go(p){
+  if (p === 'chat'){ openAiWindow(); return; }   // 原 AI 设置页已合并进独立窗口
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.p===p));
   document.querySelectorAll('.page').forEach(s=>s.classList.toggle('on', s.id==='p-'+p));
 }
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.p));
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  if (b.dataset.p === 'chatwin'){ openAiWindow(); return; }
+  go(b.dataset.p);
+});
+
+/* ---------- AI 对话独立窗口：呼出时导航项收起，关闭后滑回 ---------- */
+let chatNavTimer = null;
+function openAiWindow(){
+  const btn = document.querySelector('nav button[data-p="chatwin"]');
+  if (btn) btn.classList.add('nav-gone');
+  host('openChatPage');
+  if (!(window.chrome && window.chrome.webview)) return;
+  if (chatNavTimer) clearInterval(chatNavTimer);
+  chatNavTimer = setInterval(function(){ host('chatWindowState'); }, 1200);
+}
+function restoreChatNav(){
+  const btn = document.querySelector('nav button[data-p="chatwin"]');
+  if (btn) btn.classList.remove('nav-gone');
+  if (chatNavTimer){ clearInterval(chatNavTimer); chatNavTimer = null; }
+}
+/* aiWindowOpened / aiWindowClosed / aiWindowState 定义在下面的 window.ui 对象里 */
 
 /* ---------- 无边框窗口：标题栏拖动 / 双击最大化 ---------- */
 (function(){
@@ -742,9 +852,13 @@ window.ui = {
   chatReply: o => {
     if(chatThinkEl){ chatThinkEl.textContent = o.text; chatThinkEl.className = 'c-msg c-bot' + (o.ok ? '' : ' c-err'); chatThinkEl = null; }
     else cMsg('bot', o.text, o.ok ? '' : ' c-err');
-    if(o.ok && o.text && o.text !== '（无回复）') chatHist.push({ role:'assistant', content:o.text });
+    if(o.ok && o.text && o.text !== '（无回复）') convAdd('bot', o.text);
     status(o.ok ? '回复完成' : '请求失败');
-  }
+  },
+  /* AI 对话独立窗口：打开时导航项收起，关闭后滑回 */
+  aiWindowOpened: function(){},
+  aiWindowClosed: function(){ restoreChatNav(); },
+  aiWindowState: function(o){ if (!o || !o.open) restoreChatNav(); }
 };
 
 /* ---------- 生成 ---------- */
@@ -836,7 +950,6 @@ const AI_PROVIDERS = {
   moonshot:  { endpoint:'https://api.moonshot.cn/v1', model:'kimi-k2.6' },
   custom:    { endpoint:'', model:'' }
 };
-let chatHist = [];
 const chatBox = $('chatBox'), chatInput = $('chatInput');
 
 function aiProviderChange(){
@@ -853,16 +966,217 @@ function aiNum(id, def, min, max){
   } catch(e){ return def; }
 }
 function aiCfgFromUi(){
-  return {
+  const k = ($('aiKey') ? $('aiKey').value : '') || '';
+  const cfg = {
     provider:$('aiProvider').value, endpoint:$('aiEndpoint').value,
-    model:$('aiModel').value, key:$('aiKey').value,
+    model:$('aiModel').value,
     notifyDone: $('aiNotifyDone').checked,
     webSearch: aiWebEnabled,
-    reasoningEffort: $('aiReasoning') ? $('aiReasoning').value : 'high',
-    contextTurns: aiNum('aiCtxTurns', 20, 0, 200),
-    maxTokens: aiNum('aiMaxTokens', 8192, 512, 65536),
-    memoryEnabled: $('aiMemoryOn') ? $('aiMemoryOn').checked : true
+    reasoningEffort: aiReasonLadder[aiNum('aiReasonRange', aiReasonLadder.length - 1, 0, aiReasonLadder.length - 1)],
+    memoryEnabled: $('aiMemoryOn') ? $('aiMemoryOn').checked : true,
+    profiles: aiProfiles,
+    activeProfile: aiActiveProfile,
+    presets: aiPresets,
+    activePreset: aiActivePreset
   };
+  // 密钥只有在用户真正输入了内容时才带上；空值一律不发送，避免误清已保存的密钥
+  if (k.trim()) cfg.key = k.trim();
+  return cfg;
+}
+
+/* ---------- 思考强度滑动条（档位随模型预设变化） ---------- */
+const REASON_NAMES = { off:'关闭', low:'低', medium:'中', high:'高', max:'最高' };
+let aiReasonLadder = ['off','low','medium','high','max'];
+
+function presetLadder(n){
+  n = Math.max(2, Math.min(5, parseInt(n, 10) || 4));
+  if (n >= 5) return ['off','low','medium','high','max'];
+  if (n === 4) return ['off','low','high','max'];
+  if (n === 3) return ['off','low','high'];
+  return ['off','high'];
+}
+function setReasonLadder(n){
+  aiReasonLadder = presetLadder(n);
+  const r = $('aiReasonRange'); if (!r) return;
+  r.max = String(aiReasonLadder.length - 1);
+  const cur = parseInt(r.value, 10) || 0;
+  if (cur > aiReasonLadder.length - 1) r.value = String(aiReasonLadder.length - 1);
+  aiReasonInput();
+}
+function aiReasonInput(){
+  const max = aiReasonLadder.length - 1;
+  const v = Math.max(0, Math.min(max, aiNum('aiReasonRange', max, 0, max)));
+  const val = aiReasonLadder[v];
+  const lb = $('aiReasonLabel');
+  if (lb) lb.textContent = REASON_NAMES[val] || val;
+  status('思考强度：' + (REASON_NAMES[val] || val));
+}
+
+/* ---------- 多套 API 配置方案 ---------- */
+let aiProfiles = [], aiActiveProfile = '';
+function renderProfiles(){
+  const sel = $('aiProfile'); if (!sel) return;
+  sel.innerHTML = '';
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = aiProfiles.length ? '— 选择已保存方案 —' : '（暂无保存的方案）';
+  sel.appendChild(ph);
+  aiProfiles.forEach(function(p){
+    const o = document.createElement('option');
+    o.value = p.name; o.textContent = p.name;
+    sel.appendChild(o);
+  });
+  sel.value = aiActiveProfile || '';
+}
+function currentProfile(){
+  return { name: aiActiveProfile || '默认',
+           provider:$('aiProvider').value, endpoint:$('aiEndpoint').value,
+           model:$('aiModel').value, key:$('aiKey').value };
+}
+function aiProfileChange(){
+  const name = $('aiProfile').value;
+  if (!name) return;
+  const p = aiProfiles.filter(function(x){ return x.name === name; })[0];
+  if (!p) return;
+  aiActiveProfile = name;
+  if (p.provider) $('aiProvider').value = p.provider;
+  $('aiEndpoint').value = p.endpoint || '';
+  $('aiModel').value = p.model || '';
+  $('aiKey').value = p.key || '';
+  aiSave();
+  status('已切换到配置：' + name);
+}
+function aiProfileSave(){
+  if (!aiActiveProfile){ aiProfileSaveAs(); return; }
+  const cur = currentProfile();
+  const i = aiProfiles.findIndex(function(x){ return x.name === aiActiveProfile; });
+  if (i >= 0) aiProfiles[i] = cur; else aiProfiles.push(cur);
+  aiSave(); renderProfiles();
+  status('已保存配置：' + cur.name);
+}
+function aiProfileSaveAs(){
+  const el = $('aiProfileName');
+  let n = (el && el.value || '').trim();
+  if (!n) n = '配置' + (aiProfiles.length + 1);
+  aiActiveProfile = n;
+  const cur = currentProfile(); cur.name = n;
+  const i = aiProfiles.findIndex(function(x){ return x.name === n; });
+  if (i >= 0) aiProfiles[i] = cur; else aiProfiles.push(cur);
+  if (el) el.value = '';
+  aiSave(); renderProfiles();
+  status('已新建配置：' + n);
+}
+let _delArmTimer = null;
+function aiProfileDelete(){
+  if (!aiActiveProfile){ status('先在列表里选择一个配置方案'); return; }
+  const btn = $('aiProfileDelBtn');
+  if (btn && btn.dataset.arm !== '1'){
+    btn.dataset.arm = '1'; btn.textContent = '确认删除？';
+    clearTimeout(_delArmTimer);
+    _delArmTimer = setTimeout(function(){ btn.dataset.arm = '0'; btn.textContent = '删除'; }, 3000);
+    return;
+  }
+  if (btn){ btn.dataset.arm = '0'; btn.textContent = '删除'; }
+  aiProfiles = aiProfiles.filter(function(x){ return x.name !== aiActiveProfile; });
+  aiActiveProfile = '';
+  aiSave(); renderProfiles();
+  status('已删除配置');
+}
+
+/* ---------- 模型预设 ---------- */
+let aiPresets = [], aiActivePreset = '';
+function providerForPlatform(pf){
+  const s = (pf || '').toLowerCase();
+  if (s.indexOf('deepseek') >= 0) return 'deepseek';
+  if (s.indexOf('openai') >= 0) return 'openai';
+  if (s.indexOf('通义') >= 0 || s.indexOf('qwen') >= 0 || s.indexOf('dashscope') >= 0) return 'dashscope';
+  if (s.indexOf('智谱') >= 0 || s.indexOf('glm') >= 0 || s.indexOf('zhipu') >= 0) return 'zhipu';
+  if (s.indexOf('kimi') >= 0 || s.indexOf('moonshot') >= 0) return 'moonshot';
+  return 'custom';
+}
+function renderPresets(){
+  const box = $('presetList'); if (!box) return;
+  box.innerHTML = '';
+  if (!aiPresets.length){
+    const e = document.createElement('div');
+    e.className = 'hint';
+    e.textContent = '还没有模型预设，填好上面的信息后点「＋ 添加」。';
+    box.appendChild(e);
+    return;
+  }
+  const groups = {};
+  aiPresets.forEach(function(p){
+    const k = p.platform || '自定义';
+    (groups[k] = groups[k] || []).push(p);
+  });
+  Object.keys(groups).forEach(function(k){
+    const s = document.createElement('div');
+    s.className = 'conv-sep'; s.textContent = k;
+    box.appendChild(s);
+    groups[k].forEach(function(p){
+      const row = document.createElement('div');
+      row.className = 'conv-item' + (p.id === aiActivePreset ? ' on' : '');
+      row.onclick = function(){ applyPreset(p.id); };
+
+      const t = document.createElement('span');
+      t.className = 'ct'; t.textContent = p.name; t.title = p.endpoint || '';
+      const m = document.createElement('span');
+      m.className = 'cm'; m.textContent = (p.levels || 4) + ' 档';
+      const use = document.createElement('button');
+      use.className = 'cp'; use.textContent = '使用'; use.style.fontSize = '11.5px';
+      use.onclick = function(ev){ ev.stopPropagation(); applyPreset(p.id); };
+      const x = document.createElement('button');
+      x.className = 'cx'; x.textContent = '✕'; x.title = '删除预设';
+      x.onclick = function(ev){ deletePreset(p.id, ev, x); };
+
+      row.appendChild(t); row.appendChild(m); row.appendChild(use); row.appendChild(x);
+      box.appendChild(row);
+    });
+  });
+}
+function addPreset(){
+  const name = ($('pmName').value || '').trim();
+  const platform = ($('pmPlatform').value || '').trim() || '自定义';
+  const endpoint = ($('pmEndpoint').value || '').trim();
+  const key = ($('pmKey').value || '').trim();
+  const levels = parseInt($('pmLevels').value, 10) || 4;
+  const tip = $('pmTip');
+  if (!name){ if (tip) tip.textContent = '请填写模型名称'; status('先填写模型名称'); return; }
+  if (!endpoint){ if (tip) tip.textContent = '请填写接入口'; status('先填写接入口'); return; }
+
+  const p = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+              name: name, platform: platform, endpoint: endpoint, key: key, levels: levels };
+  const i = aiPresets.findIndex(function(x){ return x.name === name && x.platform === platform; });
+  if (i >= 0) aiPresets[i] = p; else aiPresets.push(p);
+
+  $('pmName').value = ''; $('pmEndpoint').value = ''; $('pmKey').value = '';
+  if (tip) tip.textContent = '已添加：' + name + '（' + platform + '）';
+  aiSave(); renderPresets();
+  status('已添加模型预设：' + name);
+}
+function applyPreset(id){
+  const p = aiPresets.filter(function(x){ return x.id === id; })[0];
+  if (!p) return;
+  aiActivePreset = id;
+  $('aiProvider').value = providerForPlatform(p.platform);
+  $('aiEndpoint').value = p.endpoint || '';
+  $('aiModel').value = p.name || '';
+  $('aiKey').value = p.key || '';
+  setReasonLadder(p.levels || 4);
+  aiSave(); renderPresets();
+  status('已切换到模型：' + p.name + '（' + (p.levels || 4) + ' 档）');
+}
+function deletePreset(id, ev, btn){
+  ev.stopPropagation();
+  if (btn.dataset.arm !== '1'){
+    btn.dataset.arm = '1'; btn.textContent = '确认?'; btn.style.color = '#c42b1c';
+    setTimeout(function(){ btn.dataset.arm = '0'; btn.textContent = '✕'; btn.style.color = ''; }, 3000);
+    return;
+  }
+  aiPresets = aiPresets.filter(function(x){ return x.id !== id; });
+  if (aiActivePreset === id) aiActivePreset = '';
+  aiSave(); renderPresets();
+  status('已删除模型预设');
 }
 function aiSave(){ host('aiSave|' + JSON.stringify(aiCfgFromUi())); }
 function aiNotifyToggle(){ aiSave(); }
@@ -879,8 +1193,17 @@ function aiMemoryAdd(){
   host('aiMemoryAdd|' + JSON.stringify({ text: t }));
 }
 function aiMemoryRemove(id){ host('aiMemoryRemove|' + id); }
-function aiMemoryClear(){
-  if(!confirm('确定清空全部 AI 长期记忆？该操作不可恢复。')) return;
+let _memDelTimer = null;
+function aiMemoryClear(btn){
+  if (!btn || btn.dataset.arm !== '1'){
+    if (btn){
+      btn.dataset.arm = '1'; btn.textContent = '确认清空？';
+      clearTimeout(_memDelTimer);
+      _memDelTimer = setTimeout(function(){ btn.dataset.arm = '0'; btn.textContent = '清空全部'; }, 3000);
+    }
+    return;
+  }
+  btn.dataset.arm = '0'; btn.textContent = '清空全部';
   host('aiMemoryClear|');
 }
 function memRow(it){
@@ -945,7 +1268,21 @@ window.ui.aiSettings = function(json){
     if(o.token) $('aiToken').value = o.token;
     $('aiServerOn').checked = !!o.serverEnabled;
     if (o.notifyDone !== undefined) $('aiNotifyDone').checked = !!o.notifyDone;
-    if (o.reasoningEffort && $('aiReasoning')) $('aiReasoning').value = o.reasoningEffort;
+    aiProfiles = Array.isArray(o.profiles) ? o.profiles : [];
+    aiActiveProfile = o.activeProfile || '';
+    aiPresets = Array.isArray(o.presets) ? o.presets : [];
+    aiActivePreset = o.activePreset || '';
+    const ap = aiPresets.filter(function(x){ return x.id === aiActivePreset; })[0];
+    aiReasonLadder = presetLadder(ap ? (ap.levels || 4) : 5);
+    const rr = $('aiReasonRange');
+    if (rr){
+      rr.max = String(aiReasonLadder.length - 1);
+      const ri = aiReasonLadder.indexOf(o.reasoningEffort || 'high');
+      rr.value = String(ri >= 0 ? ri : Math.min(aiReasonLadder.length - 1, 3));
+      aiReasonInput();
+    }
+    renderProfiles();
+    renderPresets();
     if (o.contextTurns !== undefined && $('aiCtxTurns')) $('aiCtxTurns').value = o.contextTurns;
     if (o.maxTokens && $('aiMaxTokens')) $('aiMaxTokens').value = o.maxTokens;
     if (o.memoryEnabled !== undefined && $('aiMemoryOn')) $('aiMemoryOn').checked = !!o.memoryEnabled;
@@ -962,8 +1299,15 @@ function updateWebBtn(){
   b.textContent = aiWebEnabled ? '🌐 联网搜索系统：已开启' : '🌐 联网搜索系统：已关闭';
   b.style.background = aiWebEnabled ? '#0d7a3e' : '';
   b.style.borderColor = aiWebEnabled ? '#0d7a3e' : '';
+  const cb = $('aiWebInline'); if (cb) cb.checked = aiWebEnabled;
   const t = $('aiWebTip');
   if(t) t.textContent = aiWebEnabled ? 'AI 可在需要时调用 web_search 联网搜索' : '点击开启后，AI 在需要资料时会先搜索再回答';
+}
+function aiWebInlineToggle(){
+  aiWebEnabled = $('aiWebInline').checked;
+  updateWebBtn();
+  aiSave();
+  status(aiWebEnabled ? '已开启联网搜索' : '已关闭联网搜索');
 }
 function aiWebToggle(){
   aiWebEnabled = !aiWebEnabled;
@@ -1102,23 +1446,248 @@ window.ui.aiStep = function(o){
   runAddStep(o);
 };
 
-function cMsg(role, text, cls){
+/* ---------- 任务 / 会话（持久化到本机） ---------- */
+const CONV_KEY = 'rtgConvsV1';
+let convs = [], activeConvId = null;
+let chatThinkEl = null;
+
+function saveConvs(){
+  const payload = JSON.stringify({ list: convs, active: activeConvId });
+  try { localStorage.setItem(CONV_KEY, payload); } catch(e){}
+  try { host('convSave|' + payload); } catch(e){}   // 同时写入 %APPDATA%\RichTextGen\convs.json
+}
+function mkConv(title){
+  return { id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+           title: title || '新任务', pinned: false,
+           createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+}
+function activeConv(){
+  for (let i=0;i<convs.length;i++) if (convs[i].id === activeConvId) return convs[i];
+  return convs[0] || null;
+}
+function loadConvs(){
+  try {
+    const o = JSON.parse(localStorage.getItem(CONV_KEY) || '{}');
+    convs = Array.isArray(o.list) ? o.list : [];
+    activeConvId = o.active || null;
+  } catch(e){ convs = []; }
+  convs = convs.filter(function(c){ return c && c.id; });
+  if (!convs.length){ convs = [mkConv('新任务')]; activeConvId = convs[0].id; }
+  if (!convs.some(function(c){ return c.id === activeConvId; })) activeConvId = convs[0].id;
+  renderConvList(); renderConv();
+  try { host('convLoad'); } catch(e){}   // 再以磁盘文件为准（localStorage 在强杀进程时可能丢失）
+}
+/* 宿主回传 convs.json 内容 */
+window.ui.convs = function(json){
+  try {
+    const o = JSON.parse(json);
+    if (!o || !Array.isArray(o.list) || !o.list.length) return;
+    convs = o.list.filter(function(c){ return c && c.id; });
+    if (!convs.length) return;
+    activeConvId = o.active || convs[0].id;
+    if (!convs.some(function(c){ return c.id === activeConvId; })) activeConvId = convs[0].id;
+    renderConvList(); renderConv();
+  } catch(e){}
+};
+function newConv(){
+  const c = mkConv('新任务');
+  convs.unshift(c); activeConvId = c.id;
+  saveConvs(); renderConvList(); renderConv();
+  if (chatInput) chatInput.focus();
+  status('已新建任务');
+}
+function switchConv(id){
+  activeConvId = id; saveConvs(); renderConvList(); renderConv();
+}
+function pinConv(id, ev){
+  if (ev) ev.stopPropagation();
+  const c = convs.filter(function(x){ return x.id === id; })[0]; if (!c) return;
+  c.pinned = !c.pinned; saveConvs(); renderConvList();
+}
+function delConv(id, ev, btn){
+  if (ev) ev.stopPropagation();
+  if (btn && btn.dataset.arm !== '1'){
+    btn.dataset.arm = '1';
+    btn.textContent = '确认?';
+    btn.style.color = '#c42b1c';
+    setTimeout(function(){ btn.dataset.arm = '0'; btn.textContent = '✕'; btn.style.color = ''; }, 3000);
+    return;
+  }
+  convs = convs.filter(function(c){ return c.id !== id; });
+  if (!convs.length) convs = [mkConv('新任务')];
+  if (!convs.some(function(c){ return c.id === activeConvId; })) activeConvId = convs[0].id;
+  saveConvs(); renderConvList(); renderConv();
+}
+function fmtTime(ts){
+  const d = new Date(ts || Date.now());
+  const p = n => (n < 10 ? '0' : '') + n;
+  return p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function convRow(c){
+  const row = document.createElement('div');
+  row.className = 'conv-item' + (c.id === activeConvId ? ' on' : '');
+  row.onclick = function(){ switchConv(c.id); };
+
+  const pin = document.createElement('button');
+  pin.className = 'cp' + (c.pinned ? ' on' : '');
+  pin.textContent = '📌';
+  pin.title = c.pinned ? '取消置顶' : '置顶';
+  pin.onclick = function(ev){ pinConv(c.id, ev); };
+
+  const t = document.createElement('span');
+  t.className = 'ct';
+  t.textContent = c.title || '新任务';
+  t.title = '双击重命名';
+  t.ondblclick = function(ev){
+    ev.stopPropagation();
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = c.title || '新任务';
+    inp.style.cssText = 'flex:1;min-width:0;font:inherit;font-size:13px;padding:2px 6px;' +
+      'border:1px solid var(--accent);border-radius:4px;background:var(--input);color:var(--text)';
+    row.replaceChild(inp, t);
+    inp.focus(); inp.select();
+    let done = false;
+    function commit(ok){
+      if (done) return;
+      done = true;
+      if (ok){
+        const v = (inp.value || '').trim();
+        if (v){ c.title = v; saveConvs(); }
+      }
+      renderConvList();
+    }
+    inp.onkeydown = function(e){
+      if (e.key === 'Enter'){ e.preventDefault(); commit(true); }
+      else if (e.key === 'Escape'){ commit(false); }
+    };
+    inp.onblur = function(){ commit(true); };
+  };
+
+  const m = document.createElement('span');
+  m.className = 'cm';
+  m.textContent = fmtTime(c.updatedAt);
+
+  const x = document.createElement('button');
+  x.className = 'cx';
+  x.textContent = '✕';
+  x.title = '删除此任务';
+  x.onclick = function(ev){ delConv(c.id, ev, x); };
+
+  row.appendChild(pin); row.appendChild(t); row.appendChild(m); row.appendChild(x);
+  return row;
+}
+function renderConvList(){
+  const box = $('convList'); if (!box) return;
+  box.innerHTML = '';
+  const pinned = convs.filter(function(c){ return c.pinned; });
+  const rest = convs.filter(function(c){ return !c.pinned; })
+                   .sort(function(a,b){ return (b.updatedAt||0) - (a.updatedAt||0); });
+
+  if (pinned.length){
+    const s = document.createElement('div'); s.className = 'conv-sep'; s.textContent = '置顶';
+    box.appendChild(s);
+    pinned.forEach(function(c){ box.appendChild(convRow(c)); });
+  }
+  const s2 = document.createElement('div'); s2.className = 'conv-sep'; s2.textContent = '最近';
+  box.appendChild(s2);
+  if (!rest.length){
+    const e = document.createElement('div'); e.className = 'conv-empty'; e.textContent = '暂无其他任务';
+    box.appendChild(e);
+  } else rest.forEach(function(c){ box.appendChild(convRow(c)); });
+
+  const cnt = $('convCount'); if (cnt) cnt.textContent = convs.length + ' 个';
+}
+let pendingConvId = null;   // 请求发出时的会话，回复回来后仍写回该会话
+function convAddTo(id, role, text, cls){
+  let c = null;
+  for (let i=0;i<convs.length;i++) if (convs[i].id === id){ c = convs[i]; break; }
+  if (!c) c = activeConv();
+  if (!c) return;
+  c.messages = c.messages || [];
+  c.messages.push({ r: role, t: text == null ? '' : String(text), c: cls || '' });
+  if (c.messages.length > 400) c.messages = c.messages.slice(-400);
+  c.updatedAt = Date.now();
+  if (role === 'user' && (!c.title || c.title === '新任务')){
+    c.title = (text || '').replace(/\s+/g, ' ').slice(0, 18) || '新任务';
+  }
+  saveConvs(); renderConvList();
+}
+function convAdd(role, text, cls){ convAddTo(activeConvId, role, text, cls); }
+function appendMsgDom(role, text, cls){
   const d = document.createElement('div');
   d.className = 'c-msg ' + (role === 'user' ? 'c-user' : 'c-bot') + (cls ? ' ' + cls : '');
   d.textContent = text;
   chatBox.appendChild(d); chatBox.scrollTop = chatBox.scrollHeight;
   return d;
 }
-function chatClear(){ chatHist = []; chatBox.innerHTML = ''; currentRun = null; status('对话已清空'); }
-let chatThinkEl = null;
+function renderConv(){
+  if (!chatBox) return;
+  chatBox.innerHTML = ''; currentRun = null; chatThinkEl = null;
+  const c = activeConv(); if (!c) return;
+  (c.messages || []).forEach(function(m){
+    appendMsgDom(m.r === 'user' ? 'user' : 'bot', m.t, m.c);
+  });
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+function cMsg(role, text, cls){ return appendMsgDom(role, text, cls); }
+function chatClear(){
+  const c = activeConv();
+  if (c){ c.messages = []; c.updatedAt = Date.now(); saveConvs(); }
+  chatBox.innerHTML = ''; currentRun = null; chatThinkEl = null;
+  renderConvList();
+  status('当前会话已清空');
+}
+/* ---------- 发送方式：排队 / 插队 ---------- */
+let aiBusy = false, aiQueue = [];
+let aiSendMode = 'queue';
+function aiSendModeChange(){
+  aiSendMode = $('aiSendMode').value;
+  try { localStorage.setItem('rtgSendMode', aiSendMode); } catch(e){}
+  const tip = $('aiSendModeTip');
+  if (tip) tip.textContent = aiSendMode === 'queue'
+    ? '当前有任务运行时，新消息按顺序等待'
+    : '有新消息会立即发出，模型可能同时处理多件事';
+}
+(function(){
+  try {
+    const v = localStorage.getItem('rtgSendMode');
+    if (v === 'now' || v === 'queue'){
+      aiSendMode = v;
+      if ($('aiSendMode')) $('aiSendMode').value = v;
+    }
+  } catch(e){}
+  aiSendModeChange();
+})();
+function aiFinish(){
+  aiBusy = false;
+  if (aiQueue.length){
+    const next = aiQueue.shift();
+    chatInput.value = next;
+    chatSend();
+  }
+}
 function chatSend(){
   const q = chatInput.value.trim();
   if(!q){ status('先输入内容再发送'); return; }
+  if (aiBusy && aiSendMode === 'queue'){
+    aiQueue.push(q);
+    chatInput.value = '';
+    status('已排队（前面还有 ' + aiQueue.length + ' 条）');
+    return;
+  }
   chatInput.value = '';
-  cMsg('user', q);
+  aiBusy = true;
   const ctxTurns = aiNum('aiCtxTurns', 20, 0, 200);   // 可配置的历史条数
-  const hist = ctxTurns > 0 ? chatHist.slice(-ctxTurns) : [];   // 发送前的历史（不含本轮）
-  chatHist.push({ role:'user', content:q });
+  const c = activeConv();
+  const hist = (c && ctxTurns > 0)
+    ? (c.messages || []).filter(function(m){ return m.c !== 'c-err' && m.c !== 'c-ok'; })
+        .slice(-ctxTurns)
+        .map(function(m){ return { role: m.r === 'user' ? 'user' : 'assistant', content: m.t }; })
+    : [];                                              // 发送前的历史（不含本轮）
+  convAdd('user', q);
+  cMsg('user', q);
+  pendingConvId = activeConvId;                      // 记住本次请求所属会话
   aiCaptureSnapshot();                              // 记录任务前状态，供「撤回」使用
   beginRun();                                       // 新建一条执行过程时间线
   chatThinkEl = cMsg('bot', '（AI 正在思考，可能会连续调用工具…）');
@@ -1135,6 +1704,9 @@ function chatSend(){
 chatInput.addEventListener('keydown', e => {
   if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); chatSend(); }
 });
+
+/* 启动时恢复上次的任务/会话列表与消息 */
+loadConvs();
 
 /* 当前编辑器状态：既给界面内 AI，也给端口服务 */
 function aiState(){
@@ -1432,11 +2004,15 @@ function addUndoButton(el){
 
 window.ui.aiReply = function(r){
   const bubble = chatThinkEl; chatThinkEl = null;
+  const cid = pendingConvId || activeConvId;
+  pendingConvId = null;
   if(!r || !r.ok){
     const msg = (r && r.content) ? r.content : 'AI 请求失败';
     if(bubble){ bubble.textContent = msg; bubble.className = 'c-msg c-bot c-err'; }
     else cMsg('bot', msg, 'c-err');
+    convAddTo(cid, 'bot', msg, 'c-err');
     status('AI 请求失败');
+    aiFinish();
     return;
   }
   let content = stripFences(r.content);
@@ -1447,11 +2023,14 @@ window.ui.aiReply = function(r){
   let target = bubble;
   if(target){ target.textContent = reply; target.className = 'c-msg c-bot'; }
   else target = cMsg('bot', reply);
+  convAddTo(cid, 'bot', reply);
 
   let didActions = false;
   if(actions.length){
     const applied = applyAiActions(actions);
-    cMsg('bot', '已执行 ' + applied.length + ' 项操作：' + applied.join('、'), 'c-ok');
+    const doneLine = '已执行 ' + applied.length + ' 项操作：' + applied.join('、');
+    cMsg('bot', doneLine, 'c-ok');
+    convAddTo(cid, 'bot', doneLine, 'c-ok');
     didActions = true;
     status('AI 已修改编辑器');
   } else {
@@ -1463,7 +2042,7 @@ window.ui.aiReply = function(r){
     if(runStats.steps === 0 && currentRun.parentNode) currentRun.parentNode.removeChild(currentRun);
     currentRun = null;
   }
-  chatHist.push({ role:'assistant', content:reply });
+  aiFinish();
 };
 
 /* C# 端口服务回调：执行动作并回传结果 */
@@ -3008,6 +3587,97 @@ const EdMode = (function(){
       splitter().classList.remove('dragging');
     });
     splitter().addEventListener('dblclick', () => { setW(DEF_W); });
+  }
+})();
+
+/* ================= 组件窗口化 =================
+   1) 每个卡片右下角可拖动缩放高度，双击标题栏恢复自适应；
+   2) 工作台导航栏与内容区之间可拖动调整宽度；
+   高度与宽度都记忆在 localStorage，下次启动保持。 */
+(function(){
+  const KEY_H = 'rtgCardH', KEY_NAV = 'rtgNavW';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY_H) || '{}'); } catch(e){ saved = {}; }
+  function saveH(){ try { localStorage.setItem(KEY_H, JSON.stringify(saved)); } catch(e){} }
+
+  function setupCard(card){
+    if (card.__rsz) return;
+    card.__rsz = true;
+    const page = card.closest('.page');
+    const pid = page ? page.id : 'x';
+    const idx = page ? Array.prototype.indexOf.call(page.querySelectorAll('.card'), card) : 0;
+    const key = pid + ':' + idx;
+    if (saved[key]) card.style.height = saved[key] + 'px';
+
+    const h = card.querySelector('h3');
+    if (h){
+      h.addEventListener('dblclick', function(ev){
+        if (ev.target.closest('button')) return;   // 标题里的按钮不触发还原
+        card.style.height = '';
+        card.classList.remove('zoomed');
+        delete saved[key]; saveH();
+      });
+      // 右上角「放大 / 还原」按钮：一键把卡片撑到约 72% 窗口高度
+      if (!h.querySelector('.card-zoom')){
+        const zb = document.createElement('button');
+        zb.type = 'button';
+        zb.className = 'card-zoom';
+        zb.textContent = '⤢';
+        zb.title = '放大 / 还原此卡片（右下角也能拖动改高度）';
+        zb.onclick = function(ev){
+          ev.stopPropagation();
+          const on = card.classList.toggle('zoomed');
+          if (on){
+            card.style.height = Math.round(window.innerHeight * 0.72) + 'px';
+          } else {
+            card.style.height = '';
+            delete saved[key]; saveH();
+          }
+        };
+        h.appendChild(zb);
+      }
+    }
+
+    let timer = null;
+    card.addEventListener('mouseup', function(){
+      clearTimeout(timer);
+      timer = setTimeout(function(){
+        const hgt = parseInt(card.style.height, 10);
+        if (hgt > 0) saved[key] = hgt; else delete saved[key];
+        saveH();
+      }, 250);
+    });
+  }
+
+  function scan(){ document.querySelectorAll('#pages .card').forEach(setupCard); }
+  scan();
+  const pages = document.getElementById('pages');
+  if (pages && window.MutationObserver) new MutationObserver(scan).observe(pages, { childList: true, subtree: true });
+
+  // 导航栏宽度
+  const nav = document.querySelector('#wsBody > nav') || document.querySelector('nav');
+  const sp = document.getElementById('navSplit');
+  if (nav && sp){
+    const DEF = 190, MIN = 110, MAX = 340;
+    function setW(w){
+      w = Math.max(MIN, Math.min(MAX, Math.round(w)));
+      nav.style.width = w + 'px';
+      try { localStorage.setItem(KEY_NAV, String(w)); } catch(e){}
+    }
+    try {
+      const v = parseInt(localStorage.getItem(KEY_NAV), 10);
+      if (v >= MIN && v <= MAX) nav.style.width = v + 'px';
+    } catch(e){}
+    let drag = false, x0 = 0, w0 = 0;
+    sp.addEventListener('mousedown', function(ev){
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      drag = true; x0 = ev.clientX; w0 = nav.offsetWidth;
+      sp.classList.add('dragging');
+    });
+    document.addEventListener('mousemove', function(ev){ if (drag) setW(w0 + (ev.clientX - x0)); });
+    document.addEventListener('mouseup', function(){ if (drag){ drag = false; sp.classList.remove('dragging'); } });
+    sp.addEventListener('dblclick', function(){ setW(DEF); });
   }
 })();
 </script>

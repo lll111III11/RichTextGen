@@ -390,6 +390,9 @@ namespace RichTextGen
             base.OnFormClosed(e);
         }
 
+        /// <summary>主窗口的 WebView2 环境，供独立对话窗口复用（同一进程只能有一个用户数据目录环境）。</summary>
+        internal static CoreWebView2Environment WebEnv;
+
         private void OnWebReady(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
             if (!e.IsSuccess || web.CoreWebView2 == null)
@@ -406,6 +409,7 @@ namespace RichTextGen
             }
             web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             web.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            try { WebEnv = web.CoreWebView2.Environment; } catch { }
             web.CoreWebView2.WebMessageReceived += OnMessage;
             web.CoreWebView2.NavigateToString(LoadHtml());
         }
@@ -425,6 +429,23 @@ namespace RichTextGen
             }
             catch { }
             return "<html><body style='font-family:Microsoft YaHei'>界面资源缺失</body></html>";
+        }
+
+        internal static string LoadChatHtml()
+        {
+            try
+            {
+                Assembly asm = Assembly.GetExecutingAssembly();
+                foreach (string n in asm.GetManifestResourceNames())
+                {
+                    if (n.EndsWith("chat.html", StringComparison.OrdinalIgnoreCase))
+                        using (Stream s = asm.GetManifestResourceStream(n))
+                        using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
+                            return sr.ReadToEnd();
+                }
+            }
+            catch { }
+            return "<html><body style='font-family:Microsoft YaHei'>chat.html 资源缺失</body></html>";
         }
 
         // ============================================================ 桥
@@ -595,6 +616,10 @@ namespace RichTextGen
                 case "aiMemoryAdd": CallStr("aiMemory", AiMemoryAdd(arg)); break;
                 case "aiMemoryRemove": CallStr("aiMemory", AiMemoryRemove(arg)); break;
                 case "aiMemoryClear": CallStr("aiMemory", AiMemoryClear()); break;
+                case "convLoad": CallStr("convs", AiConvsLoad()); break;
+                case "convSave": AiConvsSave(arg); break;
+                case "openChatPage": AiOpenChatPage(); break;
+                case "chatWindowState": Call("aiWindowState", "{\"open\":" + (ChatWindow.IsOpen ? "true" : "false") + "}"); break;
                 case "aiUndone": NotifyToast("已撤回", "已恢复本次 AI 修改前的状态。"); break;
                 case "easterEgg": PlayNetSound(); break;
                 case "uninstall": UninstallApp(); break;

@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>彩色文本生成器 · AI 对话</title>
+<style>
+  :root{
+    --bg:#f3f4f6; --panel:#ffffff; --line:#e3e5e8; --text:#1f2328; --sub:#6b7280;
+    --accent:#0067c0; --accentText:#fff; --hover:#eef2f7; --danger:#c42b1c;
+    --user:#0067c0; --bot:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#17181a; --panel:#1f2023; --line:#2e3034; --text:#e8e8e8; --sub:#9aa0a6;
+           --accent:#4cc2ff; --accentText:#08131d; --hover:#2a2c30; --danger:#ff6b5e;
+           --user:#1c4f78; --bot:#232529; }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.6 "Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+       display:flex;flex-direction:column;overflow:hidden}
+  header{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 14px;
+         background:var(--panel);border-bottom:1px solid var(--line)}
+  header .t{font-weight:600}
+  header .sp{flex:1}
+  .badge{font-size:12px;color:var(--sub);border:1px solid var(--line);border-radius:99px;padding:1px 9px}
+  .badge.ok{color:#0f7b3f;border-color:#0f7b3f}
+  .badge.bad{color:var(--danger);border-color:var(--danger)}
+  main{flex:1;min-height:0;display:flex}
+  aside{width:240px;flex:0 0 auto;background:var(--panel);border-right:1px solid var(--line);
+        display:flex;flex-direction:column;min-height:0}
+  aside .top{padding:10px;display:flex;gap:8px}
+  button{font:inherit;cursor:pointer}
+  .b{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:8px;padding:7px 12px}
+  .b:hover{background:var(--hover)}
+  .b.p{background:var(--accent);color:var(--accentText);border-color:transparent;font-weight:600}
+  #convList{flex:1;min-height:0;overflow:auto;padding-bottom:10px}
+  .sep{padding:6px 12px 2px;color:var(--sub);font-size:11.5px}
+  .item{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;font-size:13px;border-left:3px solid transparent}
+  .item:hover{background:var(--hover)}
+  .item.on{background:var(--hover);border-left-color:var(--accent)}
+  .item .ct{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .cm{color:var(--sub);font-size:11px}
+  .item .cp,.item .cx{border:0;background:transparent;color:var(--sub);padding:2px 4px;border-radius:4px;font-size:12px}
+  .item .cp.on{color:var(--accent)}
+  .item .cx:hover{color:var(--danger)}
+  section.chat{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+  #msgs{flex:1;min-height:0;overflow:auto;padding:18px clamp(14px,6vw,120px);display:flex;flex-direction:column;gap:10px}
+  .msg{max-width:min(760px,86%);padding:10px 13px;border-radius:12px;white-space:pre-wrap;word-break:break-word;
+       font-size:13.5px;line-height:1.65}
+  .msg.user{align-self:flex-end;background:var(--user);color:#fff;border-bottom-right-radius:4px}
+  .msg.bot{align-self:flex-start;background:var(--bot);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .msg.err{border-color:var(--danger);color:var(--danger)}
+  .msg.ok{border-color:#0f7b3f;color:#0f7b3f;font-size:12.5px}
+  .msg.pending{color:var(--sub);font-style:italic}
+  .composer{flex:0 0 auto;padding:12px clamp(14px,6vw,120px) 16px;background:var(--bg);border-top:1px solid var(--line)}
+  /* ---- 新任务草稿条 ---- */
+  #draftBar{display:none;align-items:center;gap:8px;flex:0 0 auto;padding:8px 14px;
+            background:var(--panel);border-bottom:1px solid var(--line)}
+  #draftBar.on{display:flex}
+  #draftBar .dt{font-weight:600;font-size:13px;white-space:nowrap}
+  #draftBar input{flex:1;min-width:80px;max-width:260px;padding:5px 9px;border:1px solid var(--line);
+                  border-radius:7px;background:var(--bg);color:var(--text);font:inherit;font-size:13px;outline:none}
+  #draftBar input:focus{border-color:var(--accent)}
+  #draftBar button[disabled]{opacity:.45;cursor:not-allowed}
+  #draftBar .hint{margin:0}
+  .item.draft .ct{color:var(--sub)}
+  .tools{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;color:var(--sub);font-size:12.5px}
+  .tools .grp{display:inline-flex;align-items:center;gap:8px;flex:1;min-width:210px}
+  .tools input[type=range]{flex:1;min-width:90px;accent-color:var(--accent)}
+  .tools label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+  .box{display:flex;gap:8px;align-items:flex-end}
+  textarea{flex:1;resize:vertical;min-height:56px;max-height:200px;padding:10px 12px;border-radius:10px;
+           border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  .hint{color:var(--sub);font-size:12px;margin-top:6px}
+  .empty{color:var(--sub);text-align:center;padding:40px 0}
+  /* ---- 设置面板 ---- */
+  #settings{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:30;overflow:auto;padding:18px}
+  #settings.on{display:block}
+  .sbox{max-width:680px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .shead{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .shead .sp{flex:1}
+  .sbody{padding:14px 16px;max-height:76vh;overflow:auto}
+  .sec{margin:14px 0 8px;font-size:12.5px;color:var(--sub)}
+  .sec:first-child{margin-top:0}
+  .srow{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+  .srow label{min-width:72px;color:var(--sub);font-size:12.5px}
+  .srow input[type=text],.srow input[type=password],.srow input[type=number],.srow select{
+    flex:1;min-width:120px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg);color:var(--text);font:inherit;font-size:13px;outline:none}
+  .srow input:focus,.srow select:focus{border-color:var(--accent)}
+  .preset-row{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);font-size:13px}
+  .preset-row .ct{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .preset-row .cm{color:var(--sub);font-size:11.5px}
+  .preset-row button{border:0;background:transparent;color:var(--sub);cursor:pointer;font-size:12px;padding:2px 5px}
+  .preset-row button:hover{color:var(--accent)}
+  .preset-sep{padding:6px 4px 2px;color:var(--sub);font-size:11.5px}
+  /* ---- 模型选择 ---- */
+  .msel{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);
+        color:var(--text);border-radius:8px;padding:4px 10px;font-size:12.5px;max-width:230px}
+  .msel:hover{background:var(--hover)}
+  .msel .ic{color:var(--sub)}
+  .msel .nm{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .msel .ar{color:var(--sub);font-size:10px;margin-left:2px}
+  #modelMenu{position:fixed;display:none;z-index:40;min-width:272px;max-width:330px;background:var(--panel);
+             border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden}
+  #modelMenu.on{display:block;animation:mpop .14s ease}
+  @keyframes mpop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .mm-list{max-height:326px;overflow:auto;padding:6px 0}
+  .mm-sec{padding:6px 14px 3px;color:var(--sub);font-size:11.5px}
+  .mm-row{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;font-size:13.5px}
+  .mm-row:hover{background:var(--hover)}
+  .mm-row .ic{width:16px;text-align:center;color:var(--sub)}
+  .mm-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mm-row .rt{color:var(--sub);font-size:12px}
+  .mm-row .ck{color:#0f7b3f;font-weight:700;font-size:12px}
+  .mm-empty{padding:6px 14px 10px;color:var(--sub);font-size:12px}
+  .mm-foot{display:flex;align-items:center;gap:9px;padding:9px 14px;border-top:1px solid var(--line);
+           cursor:pointer;font-size:13px}
+  .mm-foot:hover{background:var(--hover)}
+  .mm-foot .ic{width:16px;text-align:center;color:var(--sub)}
+  @media (max-width:720px){ aside{display:none} }
+</style>
+</head>
+<body>
+<header>
+  <span class="t">✦ 彩色文本生成器 · AI 对话</span>
+  <span class="badge" id="ver">连接中…</span>
+  <span class="sp"></span>
+  <button class="b" style="padding:4px 10px" onclick="toggleSettings()">⚙ 设置</button>
+  <span class="badge" id="conn">—</span>
+</header>
+<main>
+  <aside>
+    <div class="top">
+      <button class="b p" style="flex:1" onclick="newConv()">＋ 新建任务</button>
+    </div>
+    <div id="convList"></div>
+  </aside>
+  <section class="chat">
+    <div id="draftBar">
+      <span class="dt">📝 新任务</span>
+      <input type="text" id="draftName" placeholder="任务名称">
+      <button class="b p" id="draftOk" onclick="confirmDraft()">确定</button>
+      <span class="hint" id="draftTip">先对话，才能确认名称</span>
+    </div>
+    <div id="msgs"></div>
+    <div class="composer">
+      <div class="tools">
+        <button class="msel" id="modelBtn" onclick="toggleModelMenu(event)" title="选择模型">
+          <span class="ic">▣</span><span class="nm" id="modelBtnName">模型</span><span class="ar">▾</span>
+        </button>
+        <span class="grp">
+          <span>🧠 思考强度</span>
+          <input type="range" id="effort" min="0" max="4" step="1" value="3" oninput="onEffort()" onchange="saveCfg()">
+          <span id="effortLabel" style="min-width:32px">高</span>
+        </span>
+        <label><input type="checkbox" id="web" onchange="saveCfg()"> 🌐 联网搜索</label>
+      </div>
+      <div class="box">
+        <textarea id="input" placeholder="例如：把正文改成蓝色并加粗（Enter 发送，Shift+Enter 换行）"></textarea>
+        <button class="b p" onclick="send()">发送</button>
+      </div>
+      <div class="hint">对话会直接操作主程序里的编辑器；主窗口关到托盘时，这个页面仍可继续工作。</div>
+    </div>
+
+<div id="modelMenu">
+  <div class="mm-list" id="mmList"></div>
+  <div class="mm-foot" onclick="openAddModel()"><span class="ic">⚙</span> 添加模型</div>
+</div>
+  </section>
+</main>
+
+<div id="settings">
+  <div class="sbox">
+    <div class="shead"><b>AI 设置</b><span class="sp"></span><button class="b" onclick="toggleSettings()">关闭</button></div>
+    <div class="sbody">
+      <div class="sec">模型接入</div>
+      <div class="srow"><label>厂商</label>
+        <select id="sProvider">
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="dashscope">通义千问</option>
+          <option value="zhipu">智谱 GLM</option>
+          <option value="moonshot">Moonshot Kimi</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <div class="srow"><label>模型</label><input type="text" id="sModel" placeholder="如 deepseek-flash"></div>
+      <div class="srow"><label>接入口</label><input type="text" id="sEndpoint" placeholder="https://api.deepseek.com"></div>
+      <div class="srow"><label>API Key</label><input type="password" id="sKey" placeholder="留空表示不修改" oninput="keyDirty = true"><span class="cm" id="sKeyTip"></span></div>
+      <div class="srow"><button class="b p" onclick="saveSettings()">保存设置</button><span id="sTip" style="color:var(--sub);font-size:12px"></span></div>
+
+      <div class="sec">模型预设（只保存名称与档位，接入口 / 密钥沿用上面的设置）</div>
+      <div class="srow">
+        <input type="text" id="pName" placeholder="模型名称（显示在模型列表里）">
+        <select id="pLevels" style="max-width:110px">
+          <option value="2">2 档</option>
+          <option value="3">3 档</option>
+          <option value="4" selected>4 档</option>
+          <option value="5">5 档</option>
+        </select>
+        <button class="b" onclick="addPreset()">＋ 添加预设</button>
+      </div>
+      <div id="presetList"></div>
+
+      <div class="sec">长期记忆</div>
+      <div class="srow">
+        <label style="min-width:auto"><input type="checkbox" id="sMem"> 启用长期记忆</label>
+        <button class="b" onclick="compressMemory()" title="从当前对话提取偏好与约定，压缩写入长期记忆">🗜 压缩长期记忆</button>
+      </div>
+      <div class="srow"><input type="text" id="mText" placeholder="手动添加一条记忆">
+        <button class="b" onclick="addMemory()">添加</button>
+        <button class="b" id="mClear" onclick="clearMemory(this)">清空全部</button></div>
+      <div id="memList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+let convs = [], activeId = null, sending = false;
+/* 未确认的新任务草稿：不进会话列表、不落盘为任务，确认名称后才真正创建 */
+let draft = null;
+const DRAFT_ID = '__draft__';
+
+function $(id){ return document.getElementById(id); }
+function setConn(ok, txt){
+  const b = $('conn'); b.textContent = txt; b.className = 'badge ' + (ok ? 'ok' : 'bad');
+}
+async function api(path, opt){
+  opt = opt || {};
+  const headers = Object.assign({}, opt.headers || {});
+  if (TOKEN) headers['X-Auth-Token'] = TOKEN;
+  if (opt.body) headers['Content-Type'] = 'application/json; charset=utf-8';
+  const r = await fetch(path, { method: opt.method || 'GET', headers, body: opt.body });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const t = await r.text();
+  return t ? JSON.parse(t) : {};
+}
+
+/* ---------- 会话 ---------- */
+function mkConv(){
+  return { id:'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+           title:'新任务', pinned:false, createdAt:Date.now(), updatedAt:Date.now(), messages:[] };
+}
+function mkDraft(){ return { title:'', messages:[], createdAt: Date.now() }; }
+function saveDraft(){
+  try{ localStorage.setItem('rtgDraft', draft ? JSON.stringify(draft) : ''); }catch(e){}
+}
+function loadDraft(){
+  try{
+    const s = localStorage.getItem('rtgDraft');
+    if (s) { const d = JSON.parse(s); if (d && typeof d === 'object') draft = d; }
+  }catch(e){}
+}
+function activeConv(){
+  if (activeId === DRAFT_ID && draft) return draft;
+  for (let i=0;i<convs.length;i++) if (convs[i].id === activeId) return convs[i];
+  return convs[0] || null;
+}
+async function loadConvs(){
+  try{
+    const o = await api('/convs');
+    if (o && Array.isArray(o.list) && o.list.length){
+      convs = o.list.filter(c => c && c.id);
+      activeId = o.active || convs[0].id;
+    }
+  }catch(e){}
+  if (!convs.length){
+    // 没有任何已确认任务 → 进入草稿，不自动创建任务
+    if (!draft) draft = mkDraft();
+    activeId = DRAFT_ID;
+  } else if (activeId === DRAFT_ID && !draft){
+    activeId = convs[0].id;
+  } else if (!convs.some(c => c.id === activeId)){
+    activeId = convs[0].id;
+  }
+  renderList(); renderMsgs();
+}
+async function saveConvs(){
+  try{ await api('/convs', { method:'POST', body: JSON.stringify({ list: convs, active: activeId }) }); }catch(e){}
+}
+function newConv(){
+  // 已有未确认的草稿 → 直接回到那个界面，绝不重复创建任务
+  if (!draft) { draft = mkDraft(); saveDraft(); }
+  activeId = DRAFT_ID;
+  saveConvs(); renderList(); renderMsgs();
+  $('input').focus();
+}
+function switchConv(id){ activeId = id; saveConvs(); renderList(); renderMsgs(); }
+function pinConv(id, ev){
+  ev.stopPropagation();
+  const c = convs.filter(x => x.id === id)[0]; if (!c) return;
+  c.pinned = !c.pinned; saveConvs(); renderList();
+}
+function delConv(id, ev, btn){
+  ev.stopPropagation();
+  if (btn.dataset.arm !== '1'){
+    btn.dataset.arm = '1'; btn.textContent = '确认?'; btn.style.color = 'var(--danger)';
+    setTimeout(()=>{ btn.dataset.arm='0'; btn.textContent='✕'; btn.style.color=''; }, 3000);
+    return;
+  }
+  convs = convs.filter(c => c.id !== id);
+  if (!convs.length){
+    // 全部删完 → 回到草稿，不再自动造一个任务
+    if (!draft) { draft = mkDraft(); saveDraft(); }
+    activeId = DRAFT_ID;
+  } else if (!convs.some(c => c.id === activeId)){
+    activeId = convs[0].id;
+  }
+  saveConvs(); renderList(); renderMsgs();
+}
+function renderList(){
+  const box = $('convList'); box.innerHTML = '';
+  const pinned = convs.filter(c => c.pinned);
+  const rest = convs.filter(c => !c.pinned).sort((a,b) => (b.updatedAt||0)-(a.updatedAt||0));
+  /* 未确认的草稿固定排在最上面 */
+  if (draft){
+    const d = document.createElement('div');
+    d.className = 'item draft' + (activeId === DRAFT_ID ? ' on' : '');
+    d.onclick = () => { activeId = DRAFT_ID; renderList(); renderMsgs(); saveConvs(); };
+    const t = document.createElement('span');
+    t.className = 'ct';
+    t.textContent = '📝 ' + (draft.title || '未命名任务');
+    const m = document.createElement('span');
+    m.className = 'cm';
+    m.textContent = '草稿';
+    d.appendChild(t); d.appendChild(m);
+    box.appendChild(d);
+  }
+  function row(c){
+    const d = document.createElement('div');
+    d.className = 'item' + (c.id === activeId ? ' on' : '');
+    d.onclick = () => switchConv(c.id);
+    const p = document.createElement('button');
+    p.className = 'cp' + (c.pinned ? ' on' : ''); p.textContent = '📌';
+    p.title = c.pinned ? '取消置顶' : '置顶';
+    p.onclick = (e) => pinConv(c.id, e);
+    const t = document.createElement('span');
+    t.className = 'ct'; t.textContent = c.title || '新任务'; t.title = '双击重命名';
+    t.ondblclick = (e) => {
+      e.stopPropagation();
+      const inp = document.createElement('input');
+      inp.value = c.title || '新任务';
+      inp.style.cssText = 'flex:1;min-width:0;font:inherit;font-size:13px;padding:2px 6px;border:1px solid var(--accent);border-radius:4px;background:transparent;color:var(--text)';
+      d.replaceChild(inp, t); inp.focus(); inp.select();
+      let done = false;
+      const commit = (ok) => {
+        if (done) return; done = true;
+        if (ok){ const v = (inp.value||'').trim(); if (v){ c.title = v; saveConvs(); } }
+        renderList();
+      };
+      inp.onkeydown = (ev) => { if (ev.key==='Enter'){ ev.preventDefault(); commit(true);} else if (ev.key==='Escape'){ commit(false);} };
+      inp.onblur = () => commit(true);
+    };
+    const m = document.createElement('span');
+    m.className = 'cm';
+    const dt = new Date(c.updatedAt || Date.now());
+    m.textContent = String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+    const x = document.createElement('button');
+    x.className = 'cx'; x.textContent = '✕'; x.title = '删除';
+    x.onclick = (e) => delConv(c.id, e, x);
+    d.appendChild(p); d.appendChild(t); d.appendChild(m); d.appendChild(x);
+    return d;
+  }
+  if (pinned.length){
+    const s = document.createElement('div'); s.className='sep'; s.textContent='置顶'; box.appendChild(s);
+    pinned.forEach(c => box.appendChild(row(c)));
+  }
+  const s2 = document.createElement('div'); s2.className='sep'; s2.textContent='最近'; box.appendChild(s2);
+  rest.forEach(c => box.appendChild(row(c)));
+}
+function renderMsgs(){
+  const box = $('msgs'); box.innerHTML = '';
+  const c = activeConv();
+  if (!c){ updateDraftBar(); return; }
+  if (!c.messages || !c.messages.length){
+    const e = document.createElement('div'); e.className='empty';
+    e.textContent = (activeId === DRAFT_ID)
+      ? '这是一个新任务。先聊一句，确认内容无误后点上方「确定」，才会真正创建并命名这个任务。'
+      : '这个任务还没有消息。输入内容开始，或点左上角新建任务。';
+    box.appendChild(e);
+    updateDraftBar();
+    return;
+  }
+  c.messages.forEach(m => addBubbleDom(m.r === 'user' ? 'user' : 'bot', m.t, m.c));
+  box.scrollTop = box.scrollHeight;
+  updateDraftBar();
+}
+function addBubbleDom(role, text, cls){
+  const d = document.createElement('div');
+  d.className = 'msg ' + (role === 'user' ? 'user' : 'bot') + (cls ? ' ' + cls : '');
+  d.textContent = text;
+  $('msgs').appendChild(d);
+  $('msgs').scrollTop = $('msgs').scrollHeight;
+  return d;
+}
+
+/* ---------- 新任务草稿：确认名称后才真正创建任务 ---------- */
+function persistActiveUI(){
+  if (activeId === DRAFT_ID){ saveDraft(); renderList(); }
+  else { saveConvs(); renderList(); }
+  renderMsgs();
+}
+function draftHasReply(){
+  if (!draft || !Array.isArray(draft.messages)) return false;
+  return draft.messages.some(function(m){ return m.r !== 'user' && m.c !== 'err'; });
+}
+function updateDraftBar(){
+  const bar = $('draftBar'); if (!bar) return;
+  const on = activeId === DRAFT_ID && !!draft;
+  bar.classList.toggle('on', on);
+  if (!on) return;
+  const ok = draftHasReply();
+  const inp = $('draftName');
+  if (inp && document.activeElement !== inp) inp.value = draft.title || '';
+  if (inp) inp.placeholder = ok ? '任务名称' : '对话后自动带出';
+  $('draftOk').disabled = !ok;
+  $('draftTip').textContent = ok ? '确认名称后才会创建任务' : '先对话，才能确认名称';
+}
+function confirmDraft(){
+  if (!draft || activeId !== DRAFT_ID || !draftHasReply()) return;
+  const name = (($('draftName').value || '').trim()) || draft.title || '新任务';
+  const c = {
+    id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    title: name, pinned: false,
+    createdAt: draft.createdAt || Date.now(),
+    updatedAt: Date.now(),
+    messages: draft.messages || []
+  };
+  convs.unshift(c);
+  activeId = c.id;
+  draft = null;
+  saveDraft();
+  saveConvs(); renderList(); renderMsgs();
+  $('input').focus();
+}
+
+/* ---------- 配置 ---------- */
+const LADDER_NAMES = { off:'关闭', low:'低', medium:'中', high:'高', max:'最高' };
+let ladder = ['off','low','medium','high','max'];
+let activePresetName = '';
+let modelList = [];      // 服务端「厂商 → 默认模型」
+let presets = [];        // 自定义模型（预设）
+let curProvider = 'deepseek';
+let curModel = '';
+
+function presetLadder(n){
+  n = Math.max(2, Math.min(5, parseInt(n, 10) || 4));
+  if (n >= 5) return ['off','low','medium','high','max'];
+  if (n === 4) return ['off','low','high','max'];
+  if (n === 3) return ['off','low','high'];
+  return ['off','high'];
+}
+function setLadder(n){
+  ladder = presetLadder(n);
+  const r = $('effort'); if (!r) return;
+  r.max = String(ladder.length - 1);
+  if ((parseInt(r.value, 10) || 0) > ladder.length - 1) r.value = String(ladder.length - 1);
+  onEffort();
+}
+function onEffort(){
+  const r = $('effort'); if (!r) return;
+  const max = ladder.length - 1;
+  const v = Math.min(max, Math.max(0, parseInt(r.value, 10) || 0));
+  $('effortLabel').textContent = LADDER_NAMES[ladder[v]] || ladder[v];
+}
+async function loadCfg(){
+  try{
+    const o = await api('/config');
+    const i = ladder.indexOf(o.reasoningEffort);
+    $('effort').value = String(i >= 0 ? i : Math.min(ladder.length - 1, 3));
+    $('web').checked = !!o.webSearch;
+    onEffort();
+  }catch(e){}
+}
+async function saveCfg(){
+  onEffort();
+  const v = parseInt($('effort').value, 10) || 0;
+  try{
+    await api('/config', { method:'POST', body: JSON.stringify({ reasoningEffort: ladder[v], webSearch: $('web').checked }) });
+  }catch(e){}
+}
+
+/* ---------- 设置面板 ---------- */
+/* 密钥输入框是否被用户改动过：改动过就不允许任何刷新把它清掉 */
+let keyDirty = false;
+function toggleSettings(){
+  const box = $('settings');
+  if (!box) return;
+  const on = box.classList.toggle('on');
+  // 注意：这里故意不重置 keyDirty —— 用户已经输入但还没保存的密钥，
+  // 关闭/重开设置面板时也要保留，避免"输入到一半被清空"导致的密钥丢失。
+  if (on){ loadSettings(); loadMemory(); }
+}
+async function loadSettings(){
+  try{
+    const o = await api('/settings');
+    if (o.provider) $('sProvider').value = o.provider;
+    $('sModel').value = o.model || '';
+    $('sEndpoint').value = o.endpoint || '';
+    // 只有在用户没在编辑密钥时才重置输入框，避免把刚输入的密钥清掉
+    const keyEl = $('sKey');
+    if (!keyDirty){
+      keyEl.value = '';
+      keyEl.placeholder = o.keySet ? ('留空表示不修改（当前已保存：' + (o.keyMask || '已保存') + '）') : '尚未填写';
+    }
+    $('sKeyTip').textContent = o.keySet ? ('已保存 ' + (o.keyMask || '')) : '尚未填写';
+    $('sMem').checked = !!o.memoryEnabled;
+    activePresetName = o.activePreset || '';
+    curProvider = o.provider || curProvider;
+    curModel = o.model || '';
+    presets = o.presets || [];
+    refreshModelBtn();
+    const ap = presets.filter(function(p){ return p.name === activePresetName; })[0];
+    if (ap) setLadder(ap.levels || 4);
+    renderPresets(presets);
+    $('sTip').textContent = '';
+  }catch(e){
+    $('sTip').textContent = '读取设置失败：' + e.message;
+  }
+}
+async function saveSettings(){
+  const keyEl = $('sKey');
+  const k = (keyEl.value || '').trim();   // 先取值，后续任何刷新都不影响
+  const body = {
+    provider: $('sProvider').value,
+    model: $('sModel').value.trim(),
+    endpoint: $('sEndpoint').value.trim(),
+    memoryEnabled: $('sMem').checked
+  };
+  if (k) body.key = k;
+  try{
+    await api('/settings', { method:'POST', body: JSON.stringify(body) });
+    const o = await api('/settings');          // 回读服务端真实状态做校验
+    if (k){
+      if (o.keySet){
+        keyDirty = false;
+        keyEl.value = '';                       // 已确认写入 → 输入框清空
+        keyEl.placeholder = '留空表示不修改（当前已保存：' + (o.keyMask || '已保存') + '）';
+        $('sKeyTip').textContent = '已保存 ' + (o.keyMask || '');
+        $('sTip').textContent = '✓ 保存成功，密钥已写入本机配置';
+        $('sTip').style.color = '#0f7b3f';
+      }else{
+        $('sTip').textContent = '⚠ 服务端未写入密钥，请重试';
+        $('sTip').style.color = 'var(--danger)';
+      }
+    }else{
+      $('sTip').textContent = o.keySet ? ('✓ 其它设置已保存（密钥未改动，仍为 ' + (o.keyMask || '已保存') + '）')
+                                       : '✓ 已保存（尚未填写密钥）';
+      $('sTip').style.color = '#0f7b3f';
+    }
+    $('sMem').checked = !!o.memoryEnabled;
+    setTimeout(function(){ $('sTip').style.color = ''; }, 4000);
+  }catch(e){
+    $('sTip').textContent = '保存失败：' + e.message;
+    $('sTip').style.color = 'var(--danger)';
+  }
+}
+
+/* ---------- 模型选择（底部工具栏） ---------- */
+async function loadProviders(){
+  try{ const o = await api('/providers'); modelList = o.providers || []; }catch(e){}
+}
+function providerOf(id){
+  return modelList.filter(function(p){ return p.id === id; })[0] || null;
+}
+function refreshModelBtn(){
+  const n = $('modelBtnName'); if (n) n.textContent = curModel || '选择模型';
+}
+async function toggleModelMenu(ev){
+  if (ev) ev.stopPropagation();
+  const m = $('modelMenu'); if (!m) return;
+  if (m.classList.contains('on')){ m.classList.remove('on'); return; }
+  // 每次打开都重新拉一次，保证在设置里新加的模型立刻出现
+  try{
+    const o = await api('/settings');
+    curProvider = o.provider || curProvider;
+    curModel = o.model || '';
+    presets = o.presets || [];
+    activePresetName = o.activePreset || '';
+    refreshModelBtn();
+  }catch(e){}
+  renderModelMenu();
+  m.classList.add('on');
+  placeModelMenu();
+}
+function placeModelMenu(){
+  const b = $('modelBtn'), m = $('modelMenu');
+  if (!b || !m) return;
+  const r = b.getBoundingClientRect();
+  const w = Math.min(330, Math.max(272, window.innerWidth - 16));
+  m.style.width = w + 'px';
+  m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+  m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  m.style.top = 'auto';
+}
+function mmRow(icon, name, right, active){
+  const d = document.createElement('div'); d.className = 'mm-row';
+  const i1 = document.createElement('span'); i1.className = 'ic'; i1.textContent = icon;
+  const n = document.createElement('span'); n.className = 'nm'; n.textContent = name;
+  d.appendChild(i1); d.appendChild(n);
+  if (right){ const rt = document.createElement('span'); rt.className = 'rt'; rt.textContent = right; d.appendChild(rt); }
+  if (active){ const c = document.createElement('span'); c.className = 'ck'; c.textContent = '✓'; d.appendChild(c); }
+  return d;
+}
+function mmSection(text){
+  const d = document.createElement('div'); d.className = 'mm-sec'; d.textContent = text; return d;
+}
+function mmEmpty(text){
+  const d = document.createElement('div'); d.className = 'mm-empty'; d.textContent = text; return d;
+}
+function renderModelMenu(){
+  const box = $('mmList'); if (!box) return;
+  box.innerHTML = '';
+  const p = providerOf(curProvider);
+
+  box.appendChild(mmSection('推荐模型'));
+  if (p && p.model){
+    const row = mmRow('▣', p.model, p.name || '', !activePresetName && curModel === p.model);
+    row.onclick = function(){ pickModel(p.model, false); };
+    box.appendChild(row);
+  }else{
+    box.appendChild(mmEmpty('当前平台没有推荐模型，可在下方添加自定义模型'));
+  }
+
+  box.appendChild(mmSection('自定义模型'));
+  if (!presets.length){
+    box.appendChild(mmEmpty('还没有自定义模型，点下方「添加模型」'));
+  }
+  presets.forEach(function(pr){
+    const active = pr.name === activePresetName || (!activePresetName && pr.name === curModel);
+    const row = mmRow('◆', pr.name, (pr.levels || 4) + ' 档', active);
+    row.onclick = function(){ pickModel(pr.name, true); };
+    box.appendChild(row);
+  });
+}
+async function pickModel(name, isPreset){
+  const m = $('modelMenu'); if (m) m.classList.remove('on');
+  if (!name) return;
+  try{
+    if (isPreset){
+      const pr = presets.filter(function(x){ return x.name === name; })[0];
+      activePresetName = name;
+      if (pr) setLadder(pr.levels || 4);
+      await api('/settings', { method:'POST', body: JSON.stringify({ model: name, activePreset: name }) });
+    }else{
+      activePresetName = '';
+      await api('/settings', { method:'POST', body: JSON.stringify({ model: name, activePreset: '' }) });
+    }
+    curModel = name;
+    refreshModelBtn();
+    const s = $('sModel'); if (s) s.value = name;
+    $('sTip').textContent = '已切换模型：' + name;
+  }catch(e){
+    $('sTip').textContent = '切换失败：' + e.message;
+  }
+}
+function openAddModel(){
+  const m = $('modelMenu'); if (m) m.classList.remove('on');
+  const box = $('settings'); if (!box) return;
+  if (!box.classList.contains('on')) toggleSettings();
+  const inp = $('pName');
+  if (inp) setTimeout(function(){ inp.focus(); }, 150);
+}
+document.addEventListener('click', function(e){
+  const m = $('modelMenu'); if (!m || !m.classList.contains('on')) return;
+  if (e.target.closest('#modelMenu') || e.target.closest('#modelBtn')) return;
+  m.classList.remove('on');
+});
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape'){ const m = $('modelMenu'); if (m) m.classList.remove('on'); }
+});
+window.addEventListener('resize', function(){
+  const m = $('modelMenu'); if (m) m.classList.remove('on');
+});
+function renderPresets(list){
+  const box = $('presetList'); if (!box) return;
+  box.innerHTML = '';
+  if (!list.length){
+    const e = document.createElement('div');
+    e.className = 'preset-sep'; e.textContent = '还没有预设';
+    box.appendChild(e);
+    return;
+  }
+  list.forEach(function(p){
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    const t = document.createElement('span');
+    t.className = 'ct';
+    t.textContent = p.name + (p.name === activePresetName ? ' ✓' : '');
+    const m = document.createElement('span');
+    m.className = 'cm'; m.textContent = (p.levels || 4) + ' 档';
+    const use = document.createElement('button');
+    use.textContent = '使用';
+    use.onclick = function(){ usePreset(p); };
+    const x = document.createElement('button');
+    x.textContent = '✕';
+    x.onclick = function(){ deletePreset(p.name, x); };
+    row.appendChild(t); row.appendChild(m); row.appendChild(use); row.appendChild(x);
+    box.appendChild(row);
+  });
+}
+async function usePreset(p){
+  $('sModel').value = p.name || '';
+  if (!keyDirty) $('sKey').value = '';   // 用户已输入密钥时不要清掉
+  activePresetName = p.name;
+  setLadder(p.levels || 4);
+  try{
+    await api('/settings', { method:'POST', body: JSON.stringify({ model: p.name, activePreset: p.name }) });
+    $('sTip').textContent = '已切换到：' + p.name;
+    await loadSettings();
+  }catch(e){ $('sTip').textContent = '切换失败：' + e.message; }
+}
+async function addPreset(){
+  const name = ($('pName').value || '').trim();
+  const levels = parseInt($('pLevels').value, 10) || 4;
+  if (!name){ $('sTip').textContent = '请填写模型名称'; return; }
+  try{
+    await api('/preset/add', { method:'POST', body: JSON.stringify({ name: name, levels: levels }) });
+    $('pName').value = '';
+    $('sTip').textContent = '已添加预设：' + name;
+    await loadSettings();
+  }catch(e){ $('sTip').textContent = '添加失败：' + e.message; }
+}
+async function deletePreset(name, btn){
+  if (btn.dataset.arm !== '1'){
+    btn.dataset.arm = '1'; btn.textContent = '确认?'; btn.style.color = 'var(--danger)';
+    setTimeout(function(){ btn.dataset.arm='0'; btn.textContent='✕'; btn.style.color=''; }, 3000);
+    return;
+  }
+  try{
+    await api('/preset/delete', { method:'POST', body: JSON.stringify({ name: name }) });
+    $('sTip').textContent = '已删除预设：' + name;
+    await loadSettings();
+  }catch(e){ $('sTip').textContent = '删除失败：' + e.message; }
+}
+async function loadMemory(){
+  try{
+    const o = await api('/memory');
+    const box = $('memList'); if (!box) return;
+    box.innerHTML = '';
+    const items = (o.items || []).filter(function(m){ return m.kind !== 'task'; });
+    if (!items.length){
+      const e = document.createElement('div'); e.className = 'preset-sep'; e.textContent = '暂无记忆';
+      box.appendChild(e); return;
+    }
+    items.reverse().forEach(function(m){
+      const row = document.createElement('div'); row.className = 'preset-row';
+      const t = document.createElement('span'); t.className = 'ct'; t.textContent = m.text;
+      const x = document.createElement('button'); x.textContent = '✕';
+      x.onclick = async function(){
+        try{ await api('/memory/remove', { method:'POST', body: JSON.stringify({ id: m.id }) }); loadMemory(); }catch(e){}
+      };
+      row.appendChild(t); row.appendChild(x);
+      box.appendChild(row);
+    });
+  }catch(e){}
+}
+async function compressMemory(){
+  const c = activeConv(); if (!c) return;
+  const msgs = (c.messages || []).filter(function(m){ return m.c !== 'err' && m.c !== 'ok'; })
+      .slice(-120)
+      .map(function(m){ return { role: m.r === 'user' ? 'user' : 'assistant', content: m.t }; });
+  if (!msgs.length){ $('sTip').textContent = '当前对话为空，没有可压缩的内容'; return; }
+  $('sTip').textContent = '正在压缩长期记忆…';
+  try{
+    const r = await api('/memory/compress', { method:'POST', body: JSON.stringify({ messages: msgs }) });
+    $('sTip').textContent = '已压缩并写入 ' + (r.added || 0) + ' 条长期记忆';
+    loadMemory();
+  }catch(e){ $('sTip').textContent = '压缩失败：' + e.message; }
+}
+async function addMemory(){
+  const t = ($('mText').value || '').trim();
+  if (!t) return;
+  try{
+    await api('/memory/add', { method:'POST', body: JSON.stringify({ text: t }) });
+    $('mText').value = '';
+    loadMemory();
+  }catch(e){}
+}
+async function clearMemory(btn){
+  if (btn.dataset.arm !== '1'){
+    btn.dataset.arm = '1'; btn.textContent = '确认清空？';
+    setTimeout(function(){ btn.dataset.arm='0'; btn.textContent='清空全部'; }, 3000);
+    return;
+  }
+  btn.dataset.arm = '0'; btn.textContent = '清空全部';
+  try{ await api('/memory/clear', { method:'POST', body: '{}' }); loadMemory(); }catch(e){}
+}
+
+/* ---------- 发送 ---------- */
+async function send(){
+  const el = $('input');
+  const q = (el.value || '').trim();
+  if (!q){ return; }
+  if (sending){ return; }
+  const c = activeConv();
+  if (!c) return;
+  sending = true;
+  el.value = '';
+  const hist = (c.messages || []).filter(m => m.c !== 'err' && m.c !== 'ok')
+      .slice(-200).map(m => ({ role: m.r === 'user' ? 'user' : 'assistant', content: m.t }));
+  c.messages.push({ r:'user', t:q });
+  c.updatedAt = Date.now();
+  if (!c.title || c.title === '新任务') c.title = q.replace(/\s+/g,' ').slice(0, 18);
+  persistActiveUI();
+  const pending = addBubbleDom('bot', 'AI 正在思考…', 'pending');
+
+  try{
+    const r = await api('/chat', { method:'POST', body: JSON.stringify({ message:q, history: JSON.stringify(hist) }) });
+    pending.remove();
+    if (r && r.ok){
+      c.messages.push({ r:'bot', t: r.reply || '（无回复）' });
+      if (r.steps && r.steps.length) c.messages.push({ r:'bot', t:'已执行：' + r.steps.join('；'), c:'ok' });
+      setConn(true, '已连接');
+    }else{
+      c.messages.push({ r:'bot', t:(r && r.error) || '请求失败', c:'err' });
+    }
+  }catch(e){
+    pending.remove();
+    c.messages.push({ r:'bot', t:'连接主程序失败：' + e.message + '（请确认程序仍在运行、端口服务已开启）', c:'err' });
+    setConn(false, '连接断开');
+  }
+  c.updatedAt = Date.now();
+  persistActiveUI();
+  sending = false;
+}
+$('input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+});
+
+/* ---------- 启动 ---------- */
+(async function boot(){
+  try{
+    const h = await api('/health');
+    $('ver').textContent = (h.app || '彩色文本生成器') + ' v' + (h.version || '?');
+    setConn(true, '已连接');
+  }catch(e){
+    $('ver').textContent = '未连接';
+    setConn(false, '无法连接主程序');
+  }
+  await loadProviders();
+  await loadSettings();
+  await loadCfg();
+  loadDraft();
+  await loadConvs();
+  $('input').focus();
+})();
+</script>
+</body>
+</html>

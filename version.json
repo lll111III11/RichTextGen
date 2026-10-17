@@ -2,14 +2,14 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.9.0.1",
+  "version": "5.9.0.2",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
   "type": "feature",
   "downloads": {
-    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.1/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.1/RichTextGen-Portable.zip"
+    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.2/RichTextGen-Setup.exe",
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.2/RichTextGen-Portable.zip"
   },
-  "notes": "v5.9.0.1 更新（AI 记忆与思考能力）：\n· 【长期记忆】新增 AI 长期记忆：AI 可主动把偏好、项目约定、重要事实写入 ai-memory.json，每次对话自动加载；AI 页新增「长期记忆」卡片，可查看、删除、清空、手动添加，并可总开关\n· 【思考能力】新增思考强度五档（关闭 / 低 / 中 / 高 / 最高），按平台自动适配 DeepSeek thinking+reasoning_effort、通义 enable_thinking+thinking_budget、Kimi reasoning_effort / thinking.keep、智谱 thinking.type + reasoning_effort、OpenAI reasoning_effort\n· 【上下文】上下文条数由固定 20 条改为可调（0-200），最大输出 token 可调（512-65536）\n· 【工具调用修复】模型把操作写在正文（<actions>…</actions> 或 {\"reply\":…,\"actions\":…}）时不再被忽略，会自动解析执行并把结果回传继续多轮\n· 【样式修复】setColor / setSize / setStyle 现在直接写入 <color> / <size> / <b> 等标签，真正改动正文，不再只改工作台控件\n· 【稳定性】修复多轮工具调用时上下文未累积的问题；新增“只说不做”自动纠正；接口错误回显真实 HTTP 原因\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
+  "notes": "v5.9.0.2 更新（AI 对话工作台化 + 密钥安全修复）：\n· 【AI 独立窗口】「AI 对话」改为从屏幕左侧滑出的独立窗口，不再覆盖主界面；主窗口收进托盘后仍然可以继续对话和写入正文；关闭窗口时该导航项平滑滑回\n· 【任务/会话】新增任务列表：新建、切换、置顶、重命名、删除，全部本地持久化，关掉程序再打开消息依旧保留\n· 【新建任务改为草稿】点「新建任务」只进入草稿界面，不会立刻创建任务；反复点击也不会重复创建；只有正式对话之后点「确定」，任务名称才确定下来\n· 【模型选择】底部工具栏新增模型选择菜单：推荐模型 + 自定义模型，选中后自动按档位重排思考强度滑条；并在设置里新增「添加模型」入口\n· 【模型预设精简】预设只保存「模型名称 + 档位数」，平台 / 接入口 / 密钥统一沿用上方的 AI 接入配置\n· 【上下文不再限制】删除「上下文条数」「最大输出」，默认取接口上限；对话过长时自动压缩旧上下文继续，无需手动配置\n· 【压缩长期记忆】新增「压缩长期记忆」按钮：一键从当前对话提取偏好与约定写入长期记忆，也可继续手动增删\n· 【密钥安全修复】修复三处会导致 API Key 丢失的问题：① 保存成功后输入框被清空，看起来像被删除；② 刷新设置面板 / 切换模型预设会把正在输入的密钥清掉，导致保存时实际没带上密钥；③ 主窗口保存时若密钥框为空，会把已保存的密钥写成空值并落盘。现在保存后会回读校验并明确显示「已保存 + 掩码」，设置页也会显示当前已保存的密钥掩码\n· 【界面】各卡片支持纵向拉伸缩放（⤢ 按钮 / 拖动右下角 / 双击标题还原），记忆缩放比例\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
 }

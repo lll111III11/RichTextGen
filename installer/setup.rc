@@ -1,11 +1,15 @@
+// 本文件是 UTF-8 编码；rc.exe 默认按系统 ANSI 代码页解析，
+// 必须显式声明代码页，否则中文资源（如 FileDescription）会变成乱码。
+#pragma code_page(65001)
+
 // 安装程序资源：内嵌图标（由 rc.exe 编译为 .res 后链接进 exe）
 // IDI_ICON1 是 Windows 约定的小整数 ID，资源管理器/快捷方式会自动采用第 1 个图标
 IDI_ICON1 ICON "app.ico"
 
 // 版本信息（资源管理器「属性 → 详细信息」可见）
 1 VERSIONINFO
-FILEVERSION 5,9,0,1
-PRODUCTVERSION 5,9,0,1
+FILEVERSION 5,9,0,2
+PRODUCTVERSION 5,9,0,2
 FILEOS 0x40004L
 FILETYPE 0x1L
 BEGIN
@@ -15,12 +19,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "3576220975@qq.com"
             VALUE "FileDescription",  "彩色文本生成器 安装程序"
-            VALUE "FileVersion",      "5.9.0.1"
+            VALUE "FileVersion",      "5.9.0.2"
             VALUE "InternalName",     "RichTextGen-Setup"
             VALUE "LegalCopyright",   "2026-2027 All rights reserved - Reverse engineering strictly prohibited"
             VALUE "OriginalFilename", "RichTextGen-Setup.exe"
             VALUE "ProductName",      "Rich text & multifunctional tool"
-            VALUE "ProductVersion",   "5.9.0.1"
+            VALUE "ProductVersion",   "5.9.0.2"
         END
     END
     BLOCK "VarFileInfo"
