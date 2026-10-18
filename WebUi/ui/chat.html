@@ -70,6 +70,17 @@
   .tools input[type=range]{flex:1;min-width:90px;accent-color:var(--accent)}
   .tools label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
   .box{display:flex;gap:8px;align-items:flex-end}
+  .att{flex:0 0 auto;width:40px;height:40px;border:1px solid var(--line);background:var(--panel);
+       color:var(--sub);border-radius:10px;cursor:pointer;font-size:17px;line-height:1}
+  .att:hover{background:var(--hover);color:var(--accent);border-color:var(--accent)}
+  /* ---- 图片附件（视觉输入） ---- */
+  #atts{display:none;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  #atts.on{display:flex}
+  #atts .att{position:relative;width:64px;height:64px;border:1px solid var(--line);border-radius:8px;
+             overflow:hidden;background:var(--panel)}
+  #atts .att img{width:100%;height:100%;object-fit:cover;display:block}
+  #atts .att button{position:absolute;top:1px;right:1px;width:18px;height:18px;line-height:1;padding:0;
+                    border:0;border-radius:9px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:11px}
   textarea{flex:1;resize:vertical;min-height:56px;max-height:200px;padding:10px 12px;border-radius:10px;
            border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;outline:none}
   textarea:focus{border-color:var(--accent)}
@@ -159,8 +170,10 @@
         </span>
         <label><input type="checkbox" id="web" onchange="saveCfg()"> 🌐 联网搜索</label>
       </div>
+      <div id="atts"></div>
       <div class="box">
-        <textarea id="input" placeholder="例如：把正文改成蓝色并加粗（Enter 发送，Shift+Enter 换行）"></textarea>
+        <button class="att" id="attBtn" onclick="pickImage()" title="添加图片（也支持直接粘贴截图 / 拖入图片）">📎</button>
+        <textarea id="input" placeholder="例如：把正文改成蓝色并加粗（Enter 发送，Shift+Enter 换行；Ctrl+V 可粘贴截图）"></textarea>
         <button class="b p" onclick="send()">发送</button>
       </div>
       <div class="hint">对话会直接操作主程序里的编辑器；主窗口关到托盘时，这个页面仍可继续工作。</div>
@@ -792,26 +805,93 @@ async function clearMemory(btn){
   try{ await api('/memory/clear', { method:'POST', body: '{}' }); loadMemory(); }catch(e){}
 }
 
+/* ---------- 图片附件（视觉输入） ---------- */
+let atts = [];                 // [{url:dataURL, name}]
+const MAX_ATTS = 4;
+const MAX_ATT_BYTES = 8 * 1024 * 1024;
+
+function attsRender(){
+  const box = $('atts'); if (!box) return;
+  box.innerHTML = '';
+  box.classList.toggle('on', atts.length > 0);
+  atts.forEach(function(a, i){
+    const d = document.createElement('div'); d.className = 'att';
+    const im = document.createElement('img'); im.src = a.url; im.alt = a.name || 'image';
+    const x = document.createElement('button'); x.textContent = '✕'; x.title = '移除这张图片';
+    x.onclick = function(){ atts.splice(i, 1); attsRender(); };
+    d.appendChild(im); d.appendChild(x);
+    box.appendChild(d);
+  });
+}
+function fileToAtt(file){
+  return new Promise(function(res){
+    if (!file || !/^image\//.test(file.type || '')) return res(null);
+    if (file.size > MAX_ATT_BYTES){ status('图片超过 8MB，已跳过：' + (file.name || 'image')); return res(null); }
+    const r = new FileReader();
+    r.onload = function(){ res({ url: String(r.result), name: file.name || 'image' }); };
+    r.onerror = function(){ res(null); };
+    r.readAsDataURL(file);
+  });
+}
+async function addFiles(files){
+  const list = Array.prototype.slice.call(files || []);
+  for (let i = 0; i < list.length; i++){
+    if (atts.length >= MAX_ATTS){ status('最多添加 ' + MAX_ATTS + ' 张图片'); break; }
+    const a = await fileToAtt(list[i]);
+    if (a) atts.push(a);
+  }
+  if (atts.length) status('已添加 ' + atts.length + ' 张图片，发送时会一并给 AI 看');
+  attsRender();
+}
+function pickImage(){
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  inp.onchange = function(){ addFiles(inp.files); };
+  inp.click();
+}
+// 粘贴截图（Win+Shift+S 截图后直接 Ctrl+V）
+document.addEventListener('paste', function(e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  const files = [];
+  for (let i = 0; i < items.length; i++){
+    if (items[i].kind === 'file' && /^image\//.test(items[i].type || '')){
+      const f = items[i].getAsFile(); if (f) files.push(f);
+    }
+  }
+  if (files.length){ e.preventDefault(); addFiles(files); }
+});
+// 拖入图片
+document.addEventListener('dragover', function(e){ e.preventDefault(); });
+document.addEventListener('drop', function(e){
+  e.preventDefault();
+  addFiles(e.dataTransfer ? e.dataTransfer.files : null);
+});
+
 /* ---------- 发送 ---------- */
 async function send(){
   const el = $('input');
-  const q = (el.value || '').trim();
-  if (!q){ return; }
+  let q = (el.value || '').trim();
+  const imgs = atts.map(function(a){ return a.url; });
+  if (!q && !imgs.length){ return; }
   if (sending){ return; }
   const c = activeConv();
   if (!c) return;
+  if (!q) q = '请看这张图片。';
   sending = true;
   el.value = '';
+  const shown = q + (imgs.length ? '（并附图 ' + imgs.length + ' 张）' : '');
   const hist = (c.messages || []).filter(m => m.c !== 'err' && m.c !== 'ok')
       .slice(-200).map(m => ({ role: m.r === 'user' ? 'user' : 'assistant', content: m.t }));
-  c.messages.push({ r:'user', t:q });
+  c.messages.push({ r:'user', t: shown });
   c.updatedAt = Date.now();
   if (!c.title || c.title === '新任务') c.title = q.replace(/\s+/g,' ').slice(0, 18);
   persistActiveUI();
   const pending = addBubbleDom('bot', 'AI 正在思考…', 'pending');
 
   try{
-    const r = await api('/chat', { method:'POST', body: JSON.stringify({ message:q, history: JSON.stringify(hist) }) });
+    const payload = { message: q, history: JSON.stringify(hist) };
+    if (imgs.length) payload.images = JSON.stringify(imgs);
+    const r = await api('/chat', { method:'POST', body: JSON.stringify(payload) });
     pending.remove();
     if (r && r.ok){
       c.messages.push({ r:'bot', t: r.reply || '（无回复）' });
@@ -825,6 +905,7 @@ async function send(){
     c.messages.push({ r:'bot', t:'连接主程序失败：' + e.message + '（请确认程序仍在运行、端口服务已开启）', c:'err' });
     setConn(false, '连接断开');
   }
+  atts = []; attsRender();
   c.updatedAt = Date.now();
   persistActiveUI();
   sending = false;

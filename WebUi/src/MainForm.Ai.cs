@@ -254,6 +254,50 @@ namespace RichTextGen
             while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
             if (i >= json.Length) return "";
             char open = json[i];
+
+            // 值本身是一个 JSON 字符串（例如独立窗口把 history 用 JSON.stringify 成字符串发过来）。
+            // 旧实现在这里直接返回空串，导致历史消息被静默丢弃——模型因此"记不住"上下文。
+            // 这里取出字符串内容并反转义，返回其内部文本（本身就是一段 JSON），交给调用方解析。
+            if (open == '"')
+            {
+                StringBuilder sb = new StringBuilder();
+                int j = i + 1;
+                while (j < json.Length)
+                {
+                    char ch = json[j];
+                    if (ch == '\\' && j + 1 < json.Length)
+                    {
+                        char nx = json[j + 1];
+                        if (nx == 'u' && j + 5 < json.Length)
+                        {
+                            int code;
+                            if (int.TryParse(json.Substring(j + 2, 4),
+                                    System.Globalization.NumberStyles.HexNumber, null, out code))
+                            {
+                                sb.Append((char)code);
+                                j += 6;
+                                continue;
+                            }
+                        }
+                        switch (nx)
+                        {
+                            case 'n': sb.Append('\n'); break;
+                            case 'r': sb.Append('\r'); break;
+                            case 't': sb.Append('\t'); break;
+                            case 'b': sb.Append('\b'); break;
+                            case 'f': sb.Append('\f'); break;
+                            default: sb.Append(nx); break;      // \" \\ \/ 等
+                        }
+                        j += 2;
+                        continue;
+                    }
+                    if (ch == '"') break;
+                    sb.Append(ch);
+                    j++;
+                }
+                return sb.ToString();
+            }
+
             char close = open == '[' ? ']' : (open == '{' ? '}' : '\0');
             if (close == '\0') return "";
             int depth = 0;
@@ -501,7 +545,9 @@ namespace RichTextGen
                 {
                     if (_items[i].Kind != "task") continue;
                     tc++;
-                    tasks.Append("- [").Append(_items[i].At).Append("] ").Append(_items[i].Text).Append('\n');
+                    string t = _items[i].Text;
+                    if (t.Length > 200) t = t.Substring(0, 200) + "…";
+                    tasks.Append("- [").Append(_items[i].At).Append("] ").Append(t).Append('\n');
                 }
                 if (notes.Length == 0 && tasks.Length == 0) return "";
                 StringBuilder sb = new StringBuilder();
@@ -509,7 +555,9 @@ namespace RichTextGen
                     sb.Append("【长期记忆】以下是用户要求你长期记住的偏好、约定与事实，回答和操作时必须遵守；")
                       .Append("不要向用户复述这些条目，也不要说“根据我的记忆”。\n").Append(notes);
                 if (tasks.Length > 0)
-                    sb.Append("\n【最近任务】以下是你最近完成过的任务，可作为上下文参考：\n").Append(tasks);
+                    sb.Append("\n【历史会话记录】以下是你在**更早的、别的会话**里处理过的任务日志，只供了解背景。")
+                      .Append("它们**不属于当前这次对话**：用户问“我最开始/第一句说了什么”“我们刚才聊了什么”时，")
+                      .Append("必须只依据本次对话的真实消息，绝不能拿这里的记录当成本次对话的内容。\n").Append(tasks);
                 return sb.ToString();
             }
         }
@@ -697,7 +745,7 @@ namespace RichTextGen
                     tmp = Field(json, "provider"); if (tmp.Length > 0) provider = tmp;
 
                     AgentResult r = RunAgent(endpoint, key, model, provider, message,
-                        string.IsNullOrEmpty(state) ? _aiState : state, history);
+                        string.IsNullOrEmpty(state) ? _aiState : state, history, "");
                     if (!r.Ok) { Call("aiReply", "{\"ok\":false,\"content\":" + Quote(r.Error) + "}"); return; }
                     Call("aiReply", "{\"ok\":true,\"content\":" + Quote(r.Content) + ",\"steps\":" + r.StepsJson + "}");
                     CallStr("status", "AI 已完成（Beta）");
@@ -718,24 +766,123 @@ namespace RichTextGen
         }
 
         /// <summary>端口服务调用：同步跑完整 Agent 循环（含多轮工具执行与可选历史）。</summary>
-        internal AgentResult AiChatSync(string message, string history)
+        internal AgentResult AiChatSync(string message, string history, string images)
         {
             AgentResult r = RunAgent(AiConfig.Endpoint, AiConfig.Key, AiConfig.Model, AiConfig.Provider,
-                message, _aiState, history ?? "");
+                message, _aiState, history ?? "", images ?? "");
             if (r.Ok) NotifyAiDone(r.Content, r.StepCount);
             return r;
         }
 
         // ============================================================ 模型请求
-        private static string BuildSystemPrompt(string state, string provider, string model, bool webSearch, string memory)
+
+        /// <summary>把当前思考强度档位翻成中文，供模型自述与界面显示。</summary>
+        private static string EffortText(string effort)
+        {
+            switch ((effort ?? "").Trim().ToLowerInvariant())
+            {
+                case "off": return "关闭（不启用思考，走普通采样）";
+                case "low": return "低";
+                case "medium": return "中";
+                case "high": return "高";
+                case "max": return "最高";
+                default: return "未设置";
+            }
+        }
+
+        /// <summary>
+        /// 该模型是否（很可能）支持思考参数。
+        /// DeepSeek 当前主推的 deepseek-flash 默认就开思考模式，因此归为支持；
+        /// 其余平台也按支持处理，实在不支持时接口会忽略该参数，由用户自行换模型。
+        /// </summary>
+        private static bool ModelSupportsThinking(string provider, string model)
+        {
+            string p = (provider ?? "").Trim().ToLowerInvariant();
+            string m = (model ?? "").Trim().ToLowerInvariant();
+            if (p == "deepseek") return true;                 // flash 默认开启思考模式
+            if (p == "moonshot")
+                return m.Contains("k3") || m.Contains("k2.6") || m.Contains("k2.7") || m.Contains("k2-");
+            return true;
+        }
+
+        /// <summary>
+        /// 该模型是否（很可能）支持图片输入。名称启发式；不确定时按不支持处理并提示用户，
+        /// 这样模型不会声称自己看到了其实读不到的图。
+        /// </summary>
+        private static bool ModelSupportsVision(string provider, string model)
+        {
+            string m = (model ?? "").Trim().ToLowerInvariant();
+            // 按模型名判断，不依赖厂商字段（用户常用「自定义」接入同一批模型）
+            if (m.Contains("deepseek"))
+                return !m.Contains("v4-pro");                 // deepseek-flash 支持图片；v4-pro 不支持
+            string[] keys = { "vl", "vision", "gpt-4o", "gpt-4.1", "gpt-5", "glm-4v",
+                              "gemini", "claude-3", "claude-4", "internvl", "minicpm-v" };
+            foreach (string k in keys) if (m.Contains(k)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 会话起点锚点：把最早几条用户消息固定写进系统提示。
+        /// 这样即使上下文被压缩过，模型依然能准确回答"我最开始说了什么"这类定位问题。
+        /// </summary>
+        private static string BuildHistoryAnchor(string history)
+        {
+            if (string.IsNullOrEmpty(history)) return "";
+            string h = history.Trim();
+            if (!(h.StartsWith("[") && h.EndsWith("]"))) return "";
+
+            List<string> objs = SplitTopLevelObjects(h.Substring(1, h.Length - 2));
+            if (objs.Count == 0) return "";
+
+            List<string> firstUsers = new List<string>();
+            foreach (string obj in objs)
+            {
+                string role = AiConfig.JStr(obj, "role") ?? "";
+                if (role != "user") continue;
+                if (firstUsers.Count >= 3) break;
+                string c = (AiConfig.JStr(obj, "content") ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+                if (c.Length == 0) continue;
+                if (c.Length > 180) c = c.Substring(0, 180) + "…";
+                firstUsers.Add(c);
+            }
+            if (firstUsers.Count == 0) return "";
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("本次会话的起点信息（必须记住；用户问“我最开始/第一句/一开始说了什么”时以此为准，不要猜）：\n");
+            sb.Append("· 目前本次会话累计 ").Append(objs.Count).Append(" 条消息（含助手回复）。\n");
+            sb.Append("· 最早的用户消息依次是：");
+            for (int i = 0; i < firstUsers.Count; i++)
+                sb.Append("\n  ").Append(i + 1).Append(") ").Append(firstUsers[i]);
+            sb.Append('\n');
+            return sb.ToString();
+        }
+
+        private static string BuildSystemPrompt(string state, string provider, string model, bool webSearch,
+                                                string memory, string anchor)
         {
             string who = string.IsNullOrEmpty(provider) ? "你当前接入的 AI 服务商" : provider;
             string mdl = string.IsNullOrEmpty(model) ? "" : "（模型：" + model + "）";
+            bool canThink = ModelSupportsThinking(provider, model);
+            bool canSee = ModelSupportsVision(provider, model);
             return
                 "你是一个通用 AI 助手" + mdl + "，由 " + who + " 提供。\n" +
                 "你现在运行在「彩色文本生成器」这个工具里，可以通过 apply_editor_actions 直接操作编辑器。\n" +
                 "身份要求：当用户问你是谁、你是什么模型、来自哪个平台时，如实说明你的真实模型与提供方；" +
                 "不要自称是「彩色文本生成器」自研的模型，也不要把工具名当成你的身份。\n" +
+                "自身配置自述（被问到思考强度、推理档位、能否看图时，按下述事实回答，不要一律否认）：\n" +
+                "· 当前思考强度档位：由本工具设置为「" + EffortText(AiConfig.ReasoningEffort) + "」。" +
+                (canThink
+                    ? "你的模型确实支持思考参数，档位会真实生效；注意 DeepSeek 只区分 high 与 max 两档，" +
+                      "界面上的「低 / 中」会被接口折叠成 high，「最高」才是 max，如实说明即可。"
+                    : "但当前模型名看起来不支持思考参数，该档位可能被接口忽略、不产生实际效果，请如实说明这一点。") + "\n" +
+                "· 图片输入（视觉）：" + (canSee
+                    ? "当前模型支持，用户可以贴图、拖入图片或截图后粘贴给你看；收到图片要真正描述画面内容，不要假装没看到。"
+                    : "当前模型不支持图片输入，用户发图你读不到画面，只能读文字；" +
+                      "如需看图，建议用户换成支持视觉的模型（如 deepseek-flash、qwen-vl、gpt-4o、glm-4v 等）。") + "\n" +
+                "· 上下文：本工具默认把全部历史消息都发给你（不做人为截断）；只在拼接长度过大时才由系统自动压缩，"
+                + "压缩后本次会话的早期内容会以「会话摘要 + 起点信息」的形式保留。\n" +
+                "· 不确定的事直接说不确定，不要编造。回答「我最开始说了什么」这类问题时，以本提示下方的"
+                + "「会话起点信息」为准。\n" +
                 "工作方式：\n" +
                 (webSearch ? "0. 需要最新信息、资料、事实核查或用户明确要求搜索时，先调用 web_search 联网搜索，再基于搜索结果回答或操作。\n" : "") +
                 "1. 你可以连续多轮调用工具，直到任务完成；轮数不设上限，上下文过长时系统会自动压缩，不用担心中断。\n" +
@@ -747,6 +894,7 @@ namespace RichTextGen
                 "7. 用户要求改标题时用 setTitle。\n" +
                 "8. 当用户表达长期偏好、项目约定、固定习惯，或明确说“记住”时，调用 remember 写入长期记忆；" +
                 "只记稳定、可复用的事实，不要记录一次性的临时内容。\n\n" +
+                (string.IsNullOrEmpty(anchor) ? "" : anchor + "\n") +
                 (string.IsNullOrEmpty(memory) ? "" : memory + "\n") +
                 "当前编辑器状态 JSON：\n" + (string.IsNullOrEmpty(state) ? "{}" : state) + "\n\n" +
                 "如果接口不支持函数调用，请把操作写在 <actions> 与 </actions> 之间（或者只返回一个 JSON 对象，不要 Markdown 围栏）：\n" +
@@ -774,7 +922,14 @@ namespace RichTextGen
         /// 上下文压缩阈值（字符数）。超过后自动把旧对话压缩成摘要再继续；
         /// 想调整压缩时机就改这里（默认 48000 字符，约 1.2 万 token）。
         /// </summary>
-        private const int CompressAtChars = 48000;
+        /// <summary>
+        /// 上下文压缩触发阈值（拼接后的 messages 字符数）。
+        /// 早先设为 48000 过于保守——几十轮正常对话就会触发，压缩后早期内容被摘要替换，
+        /// 用户会明显感到"上下文被截断"。现在放宽到 128000 字符（约 64k tokens），
+        /// 只有在确实接近主流模型上下文窗口时才压缩；同时系统提示里始终带「会话起点信息」，
+        /// 保证压缩后仍能回答"我最开始说了什么"。
+        /// </summary>
+        private const int CompressAtChars = 128000;
 
         private static string ToolsJson(bool webSearch)
         {
@@ -826,9 +981,55 @@ namespace RichTextGen
                    (webSearch ? "," + search : "") + "],\"tool_choice\":\"auto\"";
         }
 
+        /// <summary>从 JSON 字符串数组里取出所有元素（元素是 base64 data URL，不含转义引号）。</summary>
+        private static List<string> JsonStringArray(string json)
+        {
+            List<string> list = new List<string>();
+            if (string.IsNullOrEmpty(json)) return list;
+            int i = 0;
+            while (i < json.Length)
+            {
+                if (json[i] != '"') { i++; continue; }
+                int j = i + 1;
+                StringBuilder sb = new StringBuilder();
+                while (j < json.Length)
+                {
+                    char c = json[j];
+                    if (c == '\\' && j + 1 < json.Length) { sb.Append(json[j + 1]); j += 2; continue; }
+                    if (c == '"') break;
+                    sb.Append(c);
+                    j++;
+                }
+                if (sb.Length > 0) list.Add(sb.ToString());
+                i = j + 1;
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// 组装本轮 user 消息的 content。
+        /// 无图片时是纯字符串；有图片时按 OpenAI 兼容的多模态数组下发：
+        /// [{"type":"text","text":...},{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}]
+        /// </summary>
+        private static string BuildUserContent(string message, string images)
+        {
+            List<string> imgs = JsonStringArray(images);
+            if (imgs.Count == 0) return Quote(message);
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("[{\"type\":\"text\",\"text\":").Append(Quote(message)).Append('}');
+            foreach (string u in imgs)
+            {
+                if (u.Length < 16 || u.IndexOf("data:image", StringComparison.OrdinalIgnoreCase) != 0) continue;
+                sb.Append(",{\"type\":\"image_url\",\"image_url\":{\"url\":").Append(Quote(u)).Append("}}");
+            }
+            sb.Append(']');
+            return sb.ToString();
+        }
+
         /// <summary>多轮 Agent：模型可连续调用工具，执行结果回传后继续思考，直到给出最终回复。</summary>
         private AgentResult RunAgent(string endpoint, string key, string model, string provider,
-                                     string message, string state, string history)
+                                     string message, string state, string history, string images)
         {
             AgentResult r = new AgentResult();
             if (string.IsNullOrEmpty((message ?? "").Trim()))
@@ -847,8 +1048,10 @@ namespace RichTextGen
 
             // system + 历史上下文 + 本轮 user
             string memoryText = AiConfig.MemoryEnabled ? AiMemory.PromptText() : "";
-            string messages = "[{\"role\":\"system\",\"content\":" +
-                              Quote(BuildSystemPrompt(state, provider, model, AiConfig.WebSearchEnabled, memoryText)) + "}";
+            // 会话起点锚点：无论上下文是否被压缩，模型都能答出"我最开始说了什么"
+            string anchor = BuildHistoryAnchor(history);
+            string sysPrompt = BuildSystemPrompt(state, provider, model, AiConfig.WebSearchEnabled, memoryText, anchor);
+            string messages = "[{\"role\":\"system\",\"content\":" + Quote(sysPrompt) + "}";
             if (!string.IsNullOrEmpty(history))
             {
                 string h = history.Trim();
@@ -858,7 +1061,7 @@ namespace RichTextGen
                     if (inner.Length > 0) messages += "," + inner;
                 }
             }
-            messages += ",{\"role\":\"user\",\"content\":" + Quote(message) + "}]";
+            messages += ",{\"role\":\"user\",\"content\":" + BuildUserContent(message, images) + "}]";
 
             // 任务开始前让前端保存一份快照，供通知卡片上的「撤销」使用
             Call("aiCaptureSnapshot", "{}");
@@ -892,7 +1095,7 @@ namespace RichTextGen
                     {
                         rollingSummary = sum;
                         messages = "[{\"role\":\"system\",\"content\":" +
-                                   Quote(BuildSystemPrompt(state, provider, model, AiConfig.WebSearchEnabled, memoryText)) + "}" +
+                                   Quote(sysPrompt) + "}" +
                                    ",{\"role\":\"user\",\"content\":" +
                                    Quote("【会话压缩摘要】以下是本次任务此前过程的摘要，请基于它继续完成任务，不要重复已完成的部分：\n" + sum) +
                                    "}]";
@@ -2106,7 +2309,8 @@ namespace RichTextGen
                 string message = AiConfig.JStr(body, "message");
                 if (string.IsNullOrEmpty(message)) { WriteJson(ns, 400, "{\"ok\":false,\"error\":\"缺少 message\"}"); return; }
                 string history = AiConfig.JRaw(body, "history");   // 可选：[{role,content},...]
-                AgentResult r = _form != null ? _form.AiChatSync(message, history) : new AgentResult { Error = "no ui" };
+                string images = AiConfig.JRaw(body, "images");     // 可选：["data:image/png;base64,..."]
+                AgentResult r = _form != null ? _form.AiChatSync(message, history, images) : new AgentResult { Error = "no ui" };
                 if (!r.Ok) { WriteJson(ns, 200, "{\"ok\":false,\"error\":" + AiConfig.J(r.Error) + "}"); return; }
                 WriteJson(ns, 200, "{\"ok\":true,\"reply\":" + AiConfig.J(r.Content) +
                     ",\"steps\":" + r.StepsJson + "}");
