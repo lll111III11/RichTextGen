@@ -1,15 +1,15 @@
-﻿{
+{
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.9.0.4",
+  "version": "5.9.0.5",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
-  "type": "chore",
+  "type": "fix",
   "downloads": {
-    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.4/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.4/RichTextGen-Portable.zip"
+    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.5/RichTextGen-Setup.exe",
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.5/RichTextGen-Portable.zip"
   },
-  "notes": "v5.9.0.4 维护更新：\n· 本次更新未包含功能改动，请直接覆盖安装或解压替换即可\n· 建议所有用户更新到本版本\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
+  "notes": "v5.9.0.5 更新（AI 上下文修复 + 图片输入）：\n· 【重要修复】修复 AI 对话历史消息被静默丢弃：此前对话页发出的历史上下文在解析环节被直接丢掉，导致 AI「记不住」之前聊过的内容、只能靠旧任务日志拼凑，表现为上下文像被截断；现已真正带上完整历史\n· 【上下文】自动压缩阈值放宽（48000 → 128000 字符），并新增「会话起点信息」锚点，即使压缩后也能准确回答「我最开始说了什么」\n· 【历史记录】更早会话的任务日志已明确标注「不属于当前这次对话」，避免模型把它们误当成本次对话内容\n· 【图片输入】AI 对话支持发图：点 📎 选择图片、Ctrl+V 粘贴截图、或直接把图片拖进窗口（最多 4 张、单张 8MB）；支持视觉的模型可以直接识别画面内容\n· 【模型自述】系统提示中会告知模型当前思考强度档位、是否支持思考参数与图片输入，被问到时如实回答而不再一律否认（DeepSeek 的档位仅区分「高 / 最高」两档）\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
 }
