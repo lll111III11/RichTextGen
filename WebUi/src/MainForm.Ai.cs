@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Net;
@@ -869,23 +870,41 @@ namespace RichTextGen
                 "你现在运行在「彩色文本生成器」这个工具里，可以通过 apply_editor_actions 直接操作编辑器。\n" +
                 "身份要求：当用户问你是谁、你是什么模型、来自哪个平台时，如实说明你的真实模型与提供方；" +
                 "不要自称是「彩色文本生成器」自研的模型，也不要把工具名当成你的身份。\n" +
+                "角色定位：\n" +
+                "· 你既是干活的助手，也是可以聊天的对象。用户想闲聊聊两句，就自然接着聊，不要生硬地把话题拉回工具功能；" +
+                "用户要干活，就干脆利落地动手，少说废话。\n" +
+                "· 保持中立。涉及政治、宗教、伦理、社会争议、价值判断这类话题时，客观陈述已知事实和各方主流观点，" +
+                "说清分歧所在，把判断权留给用户；不要替用户站队，也不要嘲讽、贬低任何一方或煽动情绪。" +
+                "如果用户明确要求按某个立场写，可以配合表达，但要说明那是用户指定的立场。\n" +
+                "· 区分「事实」「推测」「观点」，不确定就直说不确定，不编造数据、人名、时间、链接或出处。\n" +
+                "· 回答长度跟着需求走：一句话能说清就别写一段，需要展开时再展开，不要空话套话。\n" +
                 "自身配置自述（被问到思考强度、推理档位、能否看图时，按下述事实回答，不要一律否认）：\n" +
                 "· 当前思考强度档位：由本工具设置为「" + EffortText(AiConfig.ReasoningEffort) + "」。" +
                 (canThink
-                    ? "你的模型确实支持思考参数，档位会真实生效；注意 DeepSeek 只区分 high 与 max 两档，" +
-                      "界面上的「低 / 中」会被接口折叠成 high，「最高」才是 max，如实说明即可。"
+                    ? "你的模型确实支持思考参数，档位会真实生效；注意不同平台可用的档位数量并不一样——" +
+                      "DeepSeek 只区分 high 与 max 两档（界面上的「低 / 中」会被接口折叠成 high，「最高」才是 max），" +
+                      "OpenAI / 通义 / 智谱等平台则支持 low / medium / high 多档，如实说明即可。"
                     : "但当前模型名看起来不支持思考参数，该档位可能被接口忽略、不产生实际效果，请如实说明这一点。") + "\n" +
                 "· 图片输入（视觉）：" + (canSee
-                    ? "当前模型支持，用户可以贴图、拖入图片或截图后粘贴给你看；收到图片要真正描述画面内容，不要假装没看到。"
-                    : "当前模型不支持图片输入，用户发图你读不到画面，只能读文字；" +
-                      "如需看图，建议用户换成支持视觉的模型（如 deepseek-flash、qwen-vl、gpt-4o、glm-4v 等）。") + "\n" +
-                "· 上下文：本工具默认把全部历史消息都发给你（不做人为截断）；只在拼接长度过大时才由系统自动压缩，"
-                + "压缩后本次会话的早期内容会以「会话摘要 + 起点信息」的形式保留。\n" +
-                "· 不确定的事直接说不确定，不要编造。回答「我最开始说了什么」这类问题时，以本提示下方的"
-                + "「会话起点信息」为准。\n" +
+                    ? "当前模型支持图片输入，用户可以贴图、拖入图片或截图后粘贴给你看；收到图片要真正描述画面内容，" +
+                      "不要假装没看到。本工具还会额外附上一份本机 OCR 的文字结果（可能有个别错字），可作为文字部分的参考。"
+                    : "当前模型不支持直接读图，但本工具会用本机 OCR 把图片里的文字识别出来附在消息末尾，" +
+                      "所以你能读到图上的文字（可能有错别字或漏字）；对于画面构图、颜色、人物等非文字内容你无法判断，" +
+                      "要如实告诉用户「我只能读到图上的文字」，并建议换成支持视觉的模型（如 qwen-vl、gpt-4o、glm-4v 等）。") + "\n" +
+                "· 上下文：本工具默认把全部历史消息都发给你（不做人为截断）；只在拼接长度过大时才由系统自动压缩，" +
+                "压缩后本次会话的早期内容会以「会话摘要 + 起点信息」的形式保留。\n" +
+                "· 不确定的事直接说不确定，不要编造。回答「我最开始说了什么」这类问题时，以本提示下方的" +
+                "「会话起点信息」为准。\n" +
                 "工作方式：\n" +
-                (webSearch ? "0. 需要最新信息、资料、事实核查或用户明确要求搜索时，先调用 web_search 联网搜索，再基于搜索结果回答或操作。\n" : "") +
-                "1. 你可以连续多轮调用工具，直到任务完成；轮数不设上限，上下文过长时系统会自动压缩，不用担心中断。\n" +
+                (webSearch
+                    ? "0. 联网（需要最新信息、热点、资料、事实核查、官网公告、版本更新、或用户明确要求搜索时）：\n" +
+                      "   a) 先用 web_search 搜关键词，看返回的标题与摘要；\n" +
+                      "   b) 摘要不够用时，用 fetch_url 打开其中最相关的一两个链接，把正文读进来再下结论；\n" +
+                      "   c) 代码、文档、教程、更新公告、说明书这类页面必须读进去再理解，不要只看摘要就猜；\n" +
+                      "   d) 一次没搜到有用的结果，就换关键词、换说法、换搜索引擎或直接打开官方页面，不要搜一次就说「搜不到」；\n" +
+                      "   e) 关键结论请给出链接，并说明来源与时间；搜到的内容与你的记忆冲突时，以更新的、更权威的来源为准。\n"
+                    : "")
+                + "1. 你可以连续多轮调用工具，直到任务完成；轮数不设上限，上下文过长时系统会自动压缩，不用担心中断。\n" +
                 "2. actions 数组一次可以放任意多个操作（几十个也可以），不要一次只放一个、更不要一段一段挤。\n" +
                 "3. 写长文/整首诗/整段代码时，直接一次 setText 写完整；确实超出输出长度时再用 appendText 续写。\n" +
                 "4. 多轮修改后想确认结果，调用 read_state 读取最新状态，不要靠猜。\n" +
@@ -896,6 +915,9 @@ namespace RichTextGen
                 "只记稳定、可复用的事实，不要记录一次性的临时内容。\n\n" +
                 (string.IsNullOrEmpty(anchor) ? "" : anchor + "\n") +
                 (string.IsNullOrEmpty(memory) ? "" : memory + "\n") +
+                "关于编辑器状态：下面的 JSON 里 tabs 是所有已打开标签页的名字，tabContents 是每个标签页的正文" +
+                "（超长会被截断）。用户说「我打开的那个 TXT / 那个标签页」时，先看 tabs 和 tabContents，" +
+                "不要凭空回答「没有标签页」；确实为空才说没有。需要最新内容时调用 read_state 重新读取。\n" +
                 "当前编辑器状态 JSON：\n" + (string.IsNullOrEmpty(state) ? "{}" : state) + "\n\n" +
                 "如果接口不支持函数调用，请把操作写在 <actions> 与 </actions> 之间（或者只返回一个 JSON 对象，不要 Markdown 围栏）：\n" +
                 "<actions>[{\"type\":\"setText\",\"text\":\"...\"}]</actions>\n" +
@@ -908,7 +930,8 @@ namespace RichTextGen
                 "- 样式：setColor（color）/ setMode（mode）/ setStyle（bold 等）/ setSize（size）/ setAlpha（alpha）/ setGradient / setLink\n" +
                 "- 其他：setTheme（dark|light）/ openUrl（url）/ goPage（work|chat|img|trans|set）/ openFile\n" +
                 "另外 actions 里也可以放：{\"type\":\"remember\",\"text\":\"要记住的事\"}、" +
-                "{\"type\":\"read_state\"}、{\"type\":\"web_search\",\"query\":\"关键词\"}\n" +
+                "{\"type\":\"read_state\"}、{\"type\":\"web_search\",\"query\":\"关键词\"}、" +
+                "{\"type\":\"fetch_url\",\"url\":\"https://…\"}\n" +
                 "不需要修改时 actions 返回空数组。";
         }
 
@@ -959,7 +982,7 @@ namespace RichTextGen
             string stateTool =
                 "{\"type\":\"function\",\"function\":{\"name\":\"read_state\"," +
                 "\"description\":\"读取编辑器当前最新状态（正文、标题、颜色、样式、标签列表、选区）。多轮修改后需要确认结果时调用。\"," +
-                "\"parameters\":{\"type\":\"object\",\"properties\":{}}}";
+                "\"parameters\":{\"type\":\"object\",\"properties\":{}}}}";
 
             string search =
                 "{\"type\":\"function\",\"function\":{\"name\":\"web_search\"," +
@@ -968,6 +991,16 @@ namespace RichTextGen
                 "\"query\":{\"type\":\"string\",\"description\":\"搜索关键词\"}," +
                 "\"count\":{\"type\":\"integer\",\"description\":\"返回条数，1-8，默认 5\"}" +
                 "},\"required\":[\"query\"]}}}";
+
+            string fetch =
+                "{\"type\":\"function\",\"function\":{\"name\":\"fetch_url\"," +
+                "\"description\":\"打开一个网址并把正文读进来（深度阅读）。网页会去掉脚本/样式/标签只留正文；" +
+                "txt、md、json、xml、csv、源码文件等纯文本原样读取。搜索结果摘要不够、需要看完整文章/" +
+                "官方公告/文档/代码时调用。\"," +
+                "\"parameters\":{\"type\":\"object\",\"properties\":{" +
+                "\"url\":{\"type\":\"string\",\"description\":\"要打开的完整网址（http/https）\"}," +
+                "\"maxChars\":{\"type\":\"integer\",\"description\":\"最多返回多少字符，默认 20000，上限 60000\"}" +
+                "},\"required\":[\"url\"]}}}";
 
             string memory =
                 "{\"type\":\"function\",\"function\":{\"name\":\"remember\"," +
@@ -978,7 +1011,28 @@ namespace RichTextGen
                 "},\"required\":[\"text\"]}}}";
 
             return ",\"tools\":[" + editor + "," + stateTool + "," + memory +
-                   (webSearch ? "," + search : "") + "],\"tool_choice\":\"auto\"";
+                   (webSearch ? "," + search + "," + fetch : "") + "],\"tool_choice\":\"auto\"";
+        }
+
+        /// <summary>
+        /// 诊断用：只有当 %TEMP%\rtg_ai_debug.on 存在时才把每次请求/响应写入 %TEMP%\ai_debug.log。
+        /// 平时不产生任何文件，排查工具调用类问题时应临时建这个标记文件。
+        /// </summary>
+        private static void AiDebugLog(string req, string resp, string err)
+        {
+            try
+            {
+                string flag = Path.Combine(Path.GetTempPath(), "rtg_ai_debug.on");
+                if (!File.Exists(flag)) return;
+                StringBuilder sb = new StringBuilder();
+                sb.Append("\n========== ").Append(DateTime.Now.ToString("HH:mm:ss")).Append(" ==========\n");
+                sb.Append("--- REQUEST ---\n").Append(req.Length > 20000 ? req.Substring(0, 20000) : req).Append('\n');
+                sb.Append("--- RESPONSE (").Append(resp.Length).Append(" chars) ---\n")
+                  .Append(resp.Length > 20000 ? resp.Substring(0, 20000) : resp).Append('\n');
+                if (!string.IsNullOrEmpty(err)) sb.Append("--- ERR ---\n").Append(err).Append('\n');
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "ai_debug.log"), sb.ToString(), Encoding.UTF8);
+            }
+            catch { }
         }
 
         /// <summary>从 JSON 字符串数组里取出所有元素（元素是 base64 data URL，不含转义引号）。</summary>
@@ -1027,6 +1081,148 @@ namespace RichTextGen
             return sb.ToString();
         }
 
+        /// <summary>
+        /// 本机 OCR：当前模型不支持图片输入时，用 Windows 自带的 OCR 引擎把图里的文字识别出来，
+        /// 拼进用户消息，让模型至少能读到图上的文字。
+        /// 实现方式：把图片落到临时目录，调 PowerShell（WinRT Windows.Media.Ocr）识别，结果写文件读回。
+        /// 返回给模型看的说明文本；多张图依次识别。
+        /// </summary>
+        private static string OcrImages(string imagesJson)
+        {
+            List<string> imgs = JsonStringArray(imagesJson);
+            StringBuilder sb = new StringBuilder();
+            int idx = 0;
+            foreach (string u in imgs)
+            {
+                if (u.Length < 16 || u.IndexOf("data:image", StringComparison.OrdinalIgnoreCase) != 0) continue;
+                idx++;
+                string err;
+                string text = OcrDataUrl(u, out err);
+                sb.Append("\n\n【图片 ").Append(idx).Append(" 的本机 OCR 识别结果】\n");
+                if (text.Length == 0)
+                {
+                    sb.Append("（没有识别到文字");
+                    if (err.Length > 0) sb.Append("：").Append(err);
+                    else sb.Append("，可能图里本来就没有文字，或分辨率太低");
+                    sb.Append("）\n");
+                }
+                else
+                {
+                    sb.Append(text).Append('\n');
+                    sb.Append("（以上是 OCR 结果，可能有错字或漏字；画面颜色、构图、人物等非文字内容无法识别）\n");
+                }
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>对一张 data:image/...base64 图片做 OCR，返回识别文本（失败返回空串并给出原因）。</summary>
+        private static string OcrDataUrl(string dataUrl, out string err)
+        {
+            err = "";
+            string dir = Path.Combine(Path.GetTempPath(), "rtg_ocr_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                int comma = dataUrl.IndexOf(',');
+                if (comma < 0) { err = "图片数据格式不正确"; return ""; }
+                string head = dataUrl.Substring(0, comma).ToLowerInvariant();
+                string ext = head.IndexOf("jpeg", StringComparison.Ordinal) >= 0 ||
+                             head.IndexOf("jpg", StringComparison.Ordinal) >= 0 ? ".jpg" : ".png";
+                byte[] bytes = Convert.FromBase64String(dataUrl.Substring(comma + 1));
+                Directory.CreateDirectory(dir);
+                string inPath = Path.Combine(dir, "in" + ext);
+                string outPath = Path.Combine(dir, "out.txt");
+                File.WriteAllBytes(inPath, bytes);
+
+                string script = OcrScript(inPath, outPath);
+                string b64 = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+                ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
+                    "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + b64);
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                using (Process p = Process.Start(psi))
+                {
+                    p.StandardOutput.ReadToEnd();
+                    p.StandardError.ReadToEnd();
+                    if (!p.WaitForExit(30000)) { try { p.Kill(); } catch { } err = "OCR 超时"; return ""; }
+                }
+
+                if (!File.Exists(outPath)) { err = "OCR 没有返回结果（本机可能不支持 Windows OCR）"; return ""; }
+                string t = File.ReadAllText(outPath, Encoding.UTF8).Trim();
+                if (t.StartsWith("OCR_ERROR:", StringComparison.Ordinal))
+                {
+                    err = t.Substring(10).Trim();
+                    return "";
+                }
+                return CleanOcrText(t);
+            }
+            catch (Exception ex)
+            {
+                err = ex.Message;
+                return "";
+            }
+            finally
+            {
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        /// <summary>OCR 会把中文按字拆开加空格，这里去掉汉字之间的空白。</summary>
+        private static string CleanOcrText(string s)
+        {
+            s = Regex.Replace(s ?? "", "(?<=[\u4e00-\u9fff])[ \t]+(?=[\u4e00-\u9fff])", "");
+            s = Regex.Replace(s, "[ \t]+\n", "\n");
+            s = Regex.Replace(s, "\n{3,}", "\n\n");
+            return s.Trim();
+        }
+
+        /// <summary>给 PowerShell 的 OCR 脚本（路径用单引号转义嵌入）。</summary>
+        private static string OcrScript(string inPath, string outPath)
+        {
+            string pin = (inPath ?? "").Replace("'", "''");
+            string pout = (outPath ?? "").Replace("'", "''");
+            return
+                "Add-Type -AssemblyName System.Runtime.WindowsRuntime\r\n" +
+                "$null = [Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime]\r\n" +
+                "$null = [Windows.Graphics.Imaging.BitmapDecoder,Windows.Graphics.Imaging,ContentType=WindowsRuntime]\r\n" +
+                "$null = [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime]\r\n" +
+                "$null = [Windows.Globalization.Language,Windows.Globalization,ContentType=WindowsRuntime]\r\n" +
+                "$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { " +
+                "$_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and " +
+                "$_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]\r\n" +
+                "function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); " +
+                "$t.Wait(-1) | Out-Null; $t.Result }\r\n" +
+                "$out = '" + pout + "'\r\n" +
+                "try {\r\n" +
+                "  $f = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync('" + pin + "')) ([Windows.Storage.StorageFile])\r\n" +
+                "  $s = Await ($f.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])\r\n" +
+                "  $d = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])\r\n" +
+                "  $b = Await ($d.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])\r\n" +
+                "  $e = $null\r\n" +
+                "  try { $e = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage((New-Object Windows.Globalization.Language 'zh-Hans-CN')) } catch { }\r\n" +
+                "  if ($null -eq $e) { $e = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }\r\n" +
+                "  if ($null -eq $e) { throw '本机没有可用的 OCR 语言包' }\r\n" +
+                "  $r = Await ($e.RecognizeAsync($b)) ([Windows.Media.Ocr.OcrResult])\r\n" +
+                "  $sb = New-Object System.Text.StringBuilder\r\n" +
+                "  foreach ($l in $r.Lines) { [void]$sb.AppendLine($l.Text) }\r\n" +
+                "  [System.IO.File]::WriteAllText($out, $sb.ToString(), (New-Object System.Text.UTF8Encoding $false))\r\n" +
+                "} catch {\r\n" +
+                "  [System.IO.File]::WriteAllText($out, ('OCR_ERROR:' + $_.Exception.Message), (New-Object System.Text.UTF8Encoding $false))\r\n" +
+                "}\r\n";
+        }
+
+        /// <summary>
+        /// 把「思考 / 工具调用过程」同时推给主窗口界面和独立对话窗口。
+        /// 主窗口走 WebView2 的 ui.* 回调；独立对话窗口不认识 ui.*，因此额外塞进
+        /// AiServer 的事件队列，由 chat.html 轮询 /events 取走并渲染时间线。
+        /// </summary>
+        private void EmitProcess(string fn, string jsonArg)
+        {
+            Call(fn, jsonArg);
+            AiServer.PushEvent(fn, jsonArg);
+        }
+
         /// <summary>多轮 Agent：模型可连续调用工具，执行结果回传后继续思考，直到给出最终回复。</summary>
         private AgentResult RunAgent(string endpoint, string key, string model, string provider,
                                      string message, string state, string history, string images)
@@ -1045,6 +1241,15 @@ namespace RichTextGen
             if (string.IsNullOrEmpty((endpoint ?? "").Trim())) endpoint = "https://api.deepseek.com";
             if (string.IsNullOrEmpty((model ?? "").Trim())) model = "deepseek-chat";
             endpoint = NormalizeEndpoint(endpoint);
+
+            // 有图片时先做本机 OCR：无论模型是否支持视觉，都先把图里的文字读出来拼进消息，
+            // 保证"截图里写了什么"这类问题一定能答；模型支持视觉时再把原图一起发过去。
+            if (!string.IsNullOrEmpty(images))
+            {
+                string ocr = OcrImages(images);
+                if (ocr.Length > 0) message = message + ocr;
+                if (!ModelSupportsVision(provider, model)) images = "";   // 不支持视觉就别塞图片，避免接口报错
+            }
 
             // system + 历史上下文 + 本轮 user
             string memoryText = AiConfig.MemoryEnabled ? AiMemory.PromptText() : "";
@@ -1101,7 +1306,7 @@ namespace RichTextGen
                                    "}]";
                         string cstep = "上下文已压缩（" + round + " 轮后），继续执行";
                         steps.Add(cstep);
-                        Call("aiStep", "{\"round\":" + (round + 1) + ",\"types\":[\"compress\"]," +
+                        EmitProcess("aiStep", "{\"round\":" + (round + 1) + ",\"types\":[\"compress\"]," +
                             "\"applied\":" + Quote("压缩会话上下文") + ",\"text\":" + Quote(cstep) + "}");
                     }
                 }
@@ -1111,6 +1316,7 @@ namespace RichTextGen
                               ExtraParams(provider, model, thinkingOn) +
                               (toolsAvailable ? tools : "") + "}";
                 string resp = HttpPostEx(endpoint, key.Trim(), body, 180000, out postErr);
+                AiDebugLog(body, resp, postErr);
 
                 if (resp.Length == 0 && thinkingOn)
                 {
@@ -1141,7 +1347,7 @@ namespace RichTextGen
                 if (reasoning.Length > 0)
                 {
                     if (reasoning.Length > 1500) reasoning = reasoning.Substring(0, 1500) + "…";
-                    Call("aiThink", "{\"round\":" + (round + 1) + ",\"text\":" + Quote(reasoning) + "}");
+                    EmitProcess("aiThink", "{\"round\":" + (round + 1) + ",\"text\":" + Quote(reasoning) + "}");
                 }
 
                 string toolCalls = ExtractToolCallsArray(resp);
@@ -1165,7 +1371,7 @@ namespace RichTextGen
                     {
                         toolCalls = dsmlCalls;
                         lastContent = StripDsml(lastContent);
-                        Call("aiStep", "{\"round\":" + (round + 1) + ",\"types\":[]," +
+                        EmitProcess("aiStep", "{\"round\":" + (round + 1) + ",\"types\":[]," +
                             "\"applied\":" + Quote("解析 DeepSeek 工具标记") + ",\"text\":" +
                             Quote("第 " + (round + 1) + " 轮：解析模型工具标记") + "}");
                     }
@@ -1189,7 +1395,7 @@ namespace RichTextGen
 
                             string tStep = "第 " + (round + 1) + " 轮：" + (tApplied.Length > 0 ? tApplied : "执行文本指令");
                             steps.Add(tStep);
-                            Call("aiStep", "{\"round\":" + (round + 1) + ",\"types\":" + tTypes +
+                            EmitProcess("aiStep", "{\"round\":" + (round + 1) + ",\"types\":" + tTypes +
                                 ",\"applied\":" + Quote(tApplied) + ",\"text\":" + Quote(tStep) + "}");
                             continue;
                         }
@@ -1248,6 +1454,15 @@ namespace RichTextGen
                         types = "[\"web_search\"]";
                         applied = "联网搜索「" + query + "」";
                     }
+                    else if (string.Equals(c.Name, "fetch_url", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string url = AiConfig.JStr(c.Arguments, "url") ?? "";
+                        int mc = 20000;
+                        if (AiConfig.JInt(c.Arguments, "maxChars", out mc) && mc <= 0) mc = 20000;
+                        result = FetchUrl(url, mc);
+                        types = "[\"fetch_url\"]";
+                        applied = "读取链接「" + ShortUrl(url) + "」";
+                    }
                     else if (string.Equals(c.Name, "remember", StringComparison.OrdinalIgnoreCase))
                     {
                         string text = AiConfig.JStr(c.Arguments, "text") ?? "";
@@ -1280,7 +1495,7 @@ namespace RichTextGen
 
                     string step = "第 " + (round + 1) + " 轮：" + (applied.Length > 0 ? applied : "执行工具调用");
                     steps.Add(step);
-                    Call("aiStep", "{\"round\":" + (round + 1) + ",\"types\":" + types +
+                    EmitProcess("aiStep", "{\"round\":" + (round + 1) + ",\"types\":" + types +
                         ",\"applied\":" + Quote(applied) + ",\"text\":" + Quote(step) + "}");
                 }
             }
@@ -1648,6 +1863,16 @@ namespace RichTextGen
                     extra.Append(WebSearch(q, n)).Append('\n');
                     continue;
                 }
+                if (string.Equals(type, "fetch_url", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(type, "fetchUrl", StringComparison.OrdinalIgnoreCase))
+                {
+                    string u = AiConfig.JStr(obj, "url") ?? "";
+                    int mc = 20000, tmp2;
+                    if (AiConfig.JInt(obj, "maxChars", out tmp2) && tmp2 > 0) mc = tmp2;
+                    done.Add("读取链接「" + ShortUrl(u) + "」");
+                    extra.Append(FetchUrl(u, mc)).Append('\n');
+                    continue;
+                }
                 keep.Add(obj);
             }
 
@@ -1787,6 +2012,155 @@ namespace RichTextGen
             s = WebUtility.HtmlDecode(s);
             s = Regex.Replace(s, "\\s+", " ").Trim();
             return s;
+        }
+
+        /// <summary>
+        /// 打开一个链接并把正文读进来（深度阅读）。
+        /// 网页会去掉脚本/样式/标签只留可读文本；txt / md / json / 源码等纯文本原样返回。
+        /// 只支持 http/https，最多读 4MB 原始字节，返回文本按 maxChars 截断并标注。
+        /// </summary>
+        private static string FetchUrl(string url, int maxChars)
+        {
+            url = (url ?? "").Trim();
+            if (url.Length == 0) return "{\"ok\":false,\"error\":\"url 为空\"}";
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return "{\"ok\":false,\"error\":\"只支持 http/https 链接\"}";
+            if (maxChars <= 0) maxChars = 20000;
+            if (maxChars > 60000) maxChars = 60000;
+
+            int status = 0;
+            string ctype = "", charset = "", finalUrl = url, raw = null, err = "";
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.Timeout = 25000;
+                req.ReadWriteTimeout = 25000;
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
+                req.Accept = "text/html,application/xhtml+xml,application/json,text/plain,*/*";
+                req.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                req.AllowAutoRedirect = true;
+                req.MaximumAutomaticRedirections = 8;
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                {
+                    status = (int)resp.StatusCode;
+                    ctype = resp.ContentType ?? "";
+                    charset = resp.CharacterSet ?? "";
+                    try { finalUrl = resp.ResponseUri != null ? resp.ResponseUri.ToString() : url; } catch { }
+                    using (Stream s = resp.GetResponseStream())
+                    using (MemoryStream ms = new MemoryStream())
+                    {
+                        byte[] buf = new byte[8192];
+                        int n, total = 0;
+                        while ((n = s.Read(buf, 0, buf.Length)) > 0)
+                        {
+                            ms.Write(buf, 0, n);
+                            total += n;
+                            if (total > 4 * 1024 * 1024) break;   // 超大文件只取前 4MB，避免拖死进程
+                        }
+                        raw = DecodeBytes(ms.ToArray(), charset, ctype);
+                    }
+                }
+            }
+            catch (WebException we)
+            {
+                try
+                {
+                    HttpWebResponse er = we.Response as HttpWebResponse;
+                    if (er != null) status = (int)er.StatusCode;
+                }
+                catch { }
+                err = we.Message;
+            }
+            catch (Exception ex) { err = ex.Message; }
+
+            if (raw == null)
+                return "{\"ok\":false,\"error\":" + Quote("打开失败：" + err) +
+                       ",\"status\":" + status + ",\"url\":" + Quote(url) + "}";
+
+            bool isHtml = ctype.IndexOf("html", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          (ctype.Length == 0 &&
+                           Regex.IsMatch(raw.Substring(0, Math.Min(raw.Length, 2048)), "<(html|body|!doctype)", RegexOptions.IgnoreCase));
+            string title = "";
+            if (isHtml)
+            {
+                Match tm = Regex.Match(raw, "<title[^>]*>([\\s\\S]*?)</title>", RegexOptions.IgnoreCase);
+                if (tm.Success) title = StripHtml(tm.Groups[1].Value);
+            }
+            string text = isHtml ? HtmlToReadable(raw) : (raw ?? "").Trim();
+            bool truncated = text.Length > maxChars;
+            if (truncated) text = text.Substring(0, maxChars) + "\n\n…（正文较长，已截断到 " + maxChars + " 字符；" +
+                                 "需要后半部分请用更大的 maxChars 再读一次）";
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"ok\":true,\"url\":").Append(Quote(finalUrl));
+            sb.Append(",\"status\":").Append(status);
+            sb.Append(",\"contentType\":").Append(Quote(ctype));
+            sb.Append(",\"title\":").Append(Quote(title));
+            sb.Append(",\"chars\":").Append(text.Length);
+            sb.Append(",\"truncated\":").Append(truncated ? "true" : "false");
+            sb.Append(",\"content\":").Append(Quote(text)).Append('}');
+            return sb.ToString();
+        }
+
+        /// <summary>界面上展示用的短链接（太长会挤爆提示条）。</summary>
+        private static string ShortUrl(string url)
+        {
+            url = (url ?? "").Trim();
+            if (url.Length <= 60) return url;
+            return url.Substring(0, 42) + "…" + url.Substring(url.Length - 14);
+        }
+
+        /// <summary>按响应头 / meta 声明的编码解码；UTF-8 解出大量乱码时回退 GB18030。</summary>
+        private static string DecodeBytes(byte[] data, string charset, string ctype)
+        {
+            string enc = (charset ?? "").Trim();
+            if (enc.Length == 0)
+            {
+                string head = Encoding.ASCII.GetString(data, 0, Math.Min(data.Length, 4096));
+                Match m = Regex.Match(head, "<meta[^>]+charset\\s*=\\s*[\"']?([a-zA-Z0-9_\\-]+)", RegexOptions.IgnoreCase);
+                if (m.Success) enc = m.Groups[1].Value;
+                else
+                {
+                    m = Regex.Match(ctype ?? "", "charset\\s*=\\s*([a-zA-Z0-9_\\-]+)", RegexOptions.IgnoreCase);
+                    if (m.Success) enc = m.Groups[1].Value;
+                }
+            }
+            Encoding e = null;
+            if (enc.Length > 0) { try { e = Encoding.GetEncoding(enc); } catch { e = null; } }
+            if (e == null) e = new UTF8Encoding(false);
+            string s = e.GetString(data);
+            if (e.CodePage == 65001)
+            {
+                int bad = 0;
+                for (int i = 0; i < s.Length; i++) if (s[i] == '\uFFFD') bad++;
+                if (bad > s.Length / 200 + 3)
+                {
+                    try { s = Encoding.GetEncoding(936).GetString(data); } catch { }   // GB18030/GBK
+                }
+            }
+            return s;
+        }
+
+        /// <summary>HTML → 可读正文：保留段落换行，去掉脚本、样式、注释和所有标签。</summary>
+        private static string HtmlToReadable(string html)
+        {
+            string s = html ?? "";
+            s = Regex.Replace(s, "<!--[\\s\\S]*?-->", " ");
+            s = Regex.Replace(s, "<(script|style|noscript|svg|template)[^>]*>[\\s\\S]*?</\\1>", " ", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, "<li[^>]*>", "\n· ", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, "</(p|div|li|tr|h[1-6]|section|article|pre|blockquote|table|ul|ol)>", "\n", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, "<h([1-6])[^>]*>", "\n\n", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, "<[^>]+>", " ");
+            s = WebUtility.HtmlDecode(s);
+            s = s.Replace("\r\n", "\n").Replace('\r', '\n');
+            s = Regex.Replace(s, "[ \\t\\f\\v\\u00A0]+", " ");
+            s = Regex.Replace(s, " *\n *", "\n");
+            s = Regex.Replace(s, "\n{3,}", "\n\n");
+            return s.Trim();
         }
 
         private static string WebSearch(string query, int count)
@@ -2035,6 +2409,35 @@ namespace RichTextGen
         private static MainForm _form;
         private static string _token = "";
 
+        // ---- 过程事件队列（思考 / 工具调用），供独立对话页轮询 /events 取走 ----
+        // 独立对话窗口的 chat.html 不在主窗口的 WebView 里，收不到 ui.aiThink / ui.aiStep，
+        // 因此把每条过程事件塞进这个队列，前端按 seq 增量拉取后渲染时间线。
+        private static readonly List<string> _evEvents = new List<string>();
+        private static readonly object _evLock = new object();
+        private static int _evBase;      // 队列首元素前一条事件的 seq（从 0 开始）
+
+        /// <summary>压入一条过程事件（fn 为 aiThink / aiStep，jsonArg 为其参数 JSON）。</summary>
+        public static void PushEvent(string fn, string jsonArg)
+        {
+            try
+            {
+                lock (_evLock)
+                {
+                    _evEvents.Add(jsonArg ?? "{}");
+                    _evSeqFns.Add(fn ?? "");
+                    if (_evEvents.Count > 500)   // 只保留最近的一段，避免长时间运行后内存膨胀
+                    {
+                        int drop = _evEvents.Count - 500;
+                        _evEvents.RemoveRange(0, drop);
+                        _evSeqFns.RemoveRange(0, drop);
+                        _evBase += drop;
+                    }
+                }
+            }
+            catch { }
+        }
+        private static readonly List<string> _evSeqFns = new List<string>();
+
         public static bool Running { get { return _listener != null; } }
         public static int Port { get { return _port; } }
 
@@ -2120,6 +2523,37 @@ namespace RichTextGen
             if (path == "/state")
             {
                 WriteJson(ns, 200, _form != null ? _form.GetAiState() : "{}");
+                return;
+            }
+
+            // 过程事件（思考 / 工具调用）增量拉取：独立对话窗口用它渲染执行时间线。
+            // since=N 取 seq>N 的事件；peek=1 只回 next 不回事件（发送前定位起点用）。
+            if (path == "/events" && method == "GET")
+            {
+                string qs = headers.ContainsKey("__query") ? headers["__query"] : "";
+                int since;
+                int.TryParse(QueryValue(qs, "since"), out since);
+                bool peek = QueryValue(qs, "peek") == "1";
+                lock (_evLock)
+                {
+                    StringBuilder sb = new StringBuilder();
+                    sb.Append("{\"ok\":true,\"next\":").Append(_evBase + _evEvents.Count)
+                      .Append(",\"events\":[");
+                    if (!peek)
+                    {
+                        int start = since - _evBase;
+                        if (start < 0) start = 0;
+                        for (int i = start; i < _evEvents.Count; i++)
+                        {
+                            if (i > start) sb.Append(',');
+                            sb.Append("{\"seq\":").Append(_evBase + i + 1)
+                              .Append(",\"fn\":").Append(AiConfig.J(_evSeqFns[i]))
+                              .Append(",\"arg\":").Append(_evEvents[i]).Append('}');
+                        }
+                    }
+                    sb.Append("]}");
+                    WriteJson(ns, 200, sb.ToString());
+                }
                 return;
             }
 
@@ -2319,7 +2753,7 @@ namespace RichTextGen
 
             WriteJson(ns, 200,
                 "{\"ok\":true,\"app\":\"彩色文本生成器\",\"ai\":\"beta\",\"endpoints\":[" +
-                "\"GET /health\",\"GET /state\",\"GET /providers\",\"GET /ui\",\"GET /convs\",\"POST /convs\"," +
+                "\"GET /health\",\"GET /state\",\"GET /events\",\"GET /providers\",\"GET /ui\",\"GET /convs\",\"POST /convs\"," +
                 "\"GET /config\",\"POST /config\",\"POST /action\",\"POST /chat\"]}");
         }
 

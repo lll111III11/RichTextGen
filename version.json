@@ -2,14 +2,14 @@
   "name": "彩色文本生成器",
   "product": "Rich text & multifunctional tool",
   "description": "多功能性的一种工具",
-  "version": "5.9.0.5",
+  "version": "5.9.0.6",
   "minSupported": "5.4.0.0",
   "channel": "stable",
   "mandatory": false,
-  "type": "fix",
+  "type": "feature",
   "downloads": {
-    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.5/RichTextGen-Setup.exe",
-    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.5/RichTextGen-Portable.zip"
+    "installer": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.6/RichTextGen-Setup.exe",
+    "portable": "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.6/RichTextGen-Portable.zip"
   },
-  "notes": "v5.9.0.5 更新（AI 上下文修复 + 图片输入）：\n· 【重要修复】修复 AI 对话历史消息被静默丢弃：此前对话页发出的历史上下文在解析环节被直接丢掉，导致 AI「记不住」之前聊过的内容、只能靠旧任务日志拼凑，表现为上下文像被截断；现已真正带上完整历史\n· 【上下文】自动压缩阈值放宽（48000 → 128000 字符），并新增「会话起点信息」锚点，即使压缩后也能准确回答「我最开始说了什么」\n· 【历史记录】更早会话的任务日志已明确标注「不属于当前这次对话」，避免模型把它们误当成本次对话内容\n· 【图片输入】AI 对话支持发图：点 📎 选择图片、Ctrl+V 粘贴截图、或直接把图片拖进窗口（最多 4 张、单张 8MB）；支持视觉的模型可以直接识别画面内容\n· 【模型自述】系统提示中会告知模型当前思考强度档位、是否支持思考参数与图片输入，被问到时如实回答而不再一律否认（DeepSeek 的档位仅区分「高 / 最高」两档）\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
+  "notes": "v5.9.0.6 更新（工具调用修复 + 深度联网 + 视觉识别）：\n· 【重要修复】修复工具调用整体失效：read_state 的工具定义少了一个括号，导致整个 tools 数组不是合法 JSON，接口每次返回 400，程序又静默降级成「无工具」模式——这正是工具调用与思考过程「消失」的原因\n· 【思考过程】独立对话窗口新增可折叠的「执行过程」时间线：思考内容、联网搜索、读取链接、编辑操作分开显示并实时刷新\n· 【上下文】去掉历史消息的静默截断（主窗口只发最近 20 条、独立窗口只发最近 200 条），改为全量发送；超长时仍由系统自动压缩并保留会话起点信息\n· 【标签页】编辑器状态改为标签变化即时同步，并新增所有已打开标签页的正文；AI 不再回答「没有标签页」\n· 【深度联网】新增 fetch_url：可以直接打开链接读正文（网页去掉脚本与标签、代码和纯文本原样读取），自动识别 UTF-8 / GBK 编码，支持长文分段读取\n· 【系统提示】大幅扩写：保持中立、闲聊与干活兼顾、区分事实与推测、联网时先搜索再读全文并给出处\n· 【视觉识别】新增本机 OCR：贴图、粘贴截图或拖入图片时，先用 Windows 自带 OCR 识别图中文字再交给模型；即使模型不支持视觉也能读图上的字（只能读文字，读不出画面内容）\n· 【思考档位】DeepSeek 平台仅区分「高 / 最高」两档，低/中会折叠为高\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整"
 }

@@ -53,6 +53,20 @@
   .msg.err{border-color:var(--danger);color:var(--danger)}
   .msg.ok{border-color:#0f7b3f;color:#0f7b3f;font-size:12.5px}
   .msg.pending{color:var(--sub);font-style:italic}
+  /* ---- 执行过程时间线（思考 / 工具调用） ---- */
+  .run{align-self:flex-start;width:min(760px,86%);border:1px solid var(--line);border-radius:10px;
+       background:var(--panel);font-size:12.5px;overflow:hidden}
+  .run-head{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;color:var(--sub);user-select:none}
+  .run-head .chev{transition:transform .15s;font-size:10px}
+  .run.collapsed .chev{transform:rotate(-90deg)}
+  .run-body{padding:0 12px 8px}
+  .run.collapsed .run-body{display:none}
+  .run-item{display:flex;gap:8px;padding:3px 0;line-height:1.55}
+  .run-item .ico{flex:0 0 auto;width:16px;text-align:center;color:var(--sub)}
+  .run-item .txt{flex:1;min-width:0;word-break:break-word}
+  .run-item .sub{color:var(--sub);margin-top:2px}
+  .run-item.think .txt{color:var(--sub);white-space:pre-wrap;max-height:7.5em;overflow:hidden;cursor:pointer}
+  .run-item.think.open .txt{max-height:none}
   .composer{flex:0 0 auto;padding:12px clamp(14px,6vw,120px) 16px;background:var(--bg);border-top:1px solid var(--line)}
   /* ---- 新任务草稿条 ---- */
   #draftBar{display:none;align-items:center;gap:8px;flex:0 0 auto;padding:8px 14px;
@@ -867,6 +881,78 @@ document.addEventListener('drop', function(e){
   addFiles(e.dataTransfer ? e.dataTransfer.files : null);
 });
 
+/* ---------- 执行过程时间线（思考 / 工具调用实时回显） ---------- */
+// 独立对话窗口收不到主窗口的 ui.aiThink / ui.aiStep 回调，
+// 因此改为轮询端口服务的 /events，把思考与工具调用渲染成可折叠的时间线。
+let runEl = null, runCount = 0, evSince = 0, evTimer = null;
+
+function runBegin(){
+  if (runEl && runEl.parentNode) runEl.parentNode.removeChild(runEl);
+  runEl = document.createElement('div');
+  runEl.className = 'run';
+  runEl.innerHTML = '<div class="run-head"><span class="chev">▾</span>' +
+    '<span class="tt">执行过程 · 0 步</span></div><div class="run-body"></div>';
+  runEl.querySelector('.run-head').onclick = function(){ runEl.classList.toggle('collapsed'); };
+  $('msgs').appendChild(runEl);
+  runCount = 0;
+  $('msgs').scrollTop = $('msgs').scrollHeight;
+}
+function runHead(){
+  if (!runEl) return;
+  const tt = runEl.querySelector('.tt');
+  if (tt) tt.textContent = '执行过程 · ' + runCount + ' 步';
+}
+function runAdd(kind, text, sub){
+  if (!runEl) runBegin();
+  const d = document.createElement('div');
+  d.className = 'run-item ' + kind;
+  const ico = document.createElement('span');
+  ico.className = 'ico';
+  ico.textContent = kind === 'think' ? '◐' : (kind === 'search' ? '⌕' : (kind === 'fetch' ? '⇩' : '✎'));
+  const t = document.createElement('div');
+  t.className = 'txt';
+  t.textContent = text;
+  if (sub){ const s = document.createElement('div'); s.className = 'sub'; s.textContent = sub; t.appendChild(s); }
+  d.appendChild(ico); d.appendChild(t);
+  if (kind === 'think') d.onclick = function(){ d.classList.toggle('open'); };
+  runEl.querySelector('.run-body').appendChild(d);
+  runCount++; runHead();
+  $('msgs').scrollTop = $('msgs').scrollHeight;
+}
+async function evPoll(){
+  if (!evTimer) return;
+  try{
+    const o = await api('/events?since=' + evSince);
+    (o && o.events ? o.events : []).forEach(function(e){
+      evSince = e.seq;
+      let a = e.arg || {};
+      if (typeof a === 'string'){ try { a = JSON.parse(a); } catch(err){ a = {}; } }
+      if (e.fn === 'aiThink') runAdd('think', a.text || '');
+      else if (e.fn === 'aiStep'){
+        const types = a.types || [];
+        const kind = types.indexOf('web_search') >= 0 ? 'search'
+                   : (types.indexOf('fetch_url') >= 0 ? 'fetch' : 'step');
+        const sub = (a.applied && a.applied !== a.text) ? ('结果：' + a.applied) : '';
+        runAdd(kind, a.text || '执行工具调用', sub);
+      }
+    });
+  }catch(err){}
+}
+async function evStart(){
+  runBegin();
+  try{ const o = await api('/events?peek=1'); evSince = (o && o.next) || 0; }
+  catch(err){ evSince = 0; }
+  if (evTimer) clearInterval(evTimer);
+  evTimer = setInterval(evPoll, 500);
+}
+async function evStop(){
+  await evPoll();
+  if (evTimer){ clearInterval(evTimer); evTimer = null; }
+  const box = runEl;
+  runEl = null;
+  if (box && !runCount && box.parentNode) box.parentNode.removeChild(box);
+}
+
 /* ---------- 发送 ---------- */
 async function send(){
   const el = $('input');
@@ -880,12 +966,14 @@ async function send(){
   sending = true;
   el.value = '';
   const shown = q + (imgs.length ? '（并附图 ' + imgs.length + ' 张）' : '');
+  // 历史消息全部发送，不做人为截断（过长时由服务端自动压缩并保留摘要与起点信息）
   const hist = (c.messages || []).filter(m => m.c !== 'err' && m.c !== 'ok')
-      .slice(-200).map(m => ({ role: m.r === 'user' ? 'user' : 'assistant', content: m.t }));
+      .map(m => ({ role: m.r === 'user' ? 'user' : 'assistant', content: m.t }));
   c.messages.push({ r:'user', t: shown });
   c.updatedAt = Date.now();
   if (!c.title || c.title === '新任务') c.title = q.replace(/\s+/g,' ').slice(0, 18);
   persistActiveUI();
+  await evStart();                                   // 开始轮询思考/工具调用过程
   const pending = addBubbleDom('bot', 'AI 正在思考…', 'pending');
 
   try{
@@ -893,6 +981,7 @@ async function send(){
     if (imgs.length) payload.images = JSON.stringify(imgs);
     const r = await api('/chat', { method:'POST', body: JSON.stringify(payload) });
     pending.remove();
+    await evStop();                                  // 收尾：把剩余事件取完
     if (r && r.ok){
       c.messages.push({ r:'bot', t: r.reply || '（无回复）' });
       if (r.steps && r.steps.length) c.messages.push({ r:'bot', t:'已执行：' + r.steps.join('；'), c:'ok' });
@@ -902,6 +991,7 @@ async function send(){
     }
   }catch(e){
     pending.remove();
+    await evStop();
     c.messages.push({ r:'bot', t:'连接主程序失败：' + e.message + '（请确认程序仍在运行、端口服务已开启）', c:'err' });
     setConn(false, '连接断开');
   }

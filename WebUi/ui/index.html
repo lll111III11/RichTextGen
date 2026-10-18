@@ -907,7 +907,7 @@ function gen(){
   };
   host('generate|' + JSON.stringify(opts));   // 宿主只按第一个 '|' 切分，正文里的 '|' 无需删除
   updateColorInfo();
-  aiPushState();                              // 同步给 AI / 端口服务
+  aiPushStateSoon();                          // 同步给 AI / 端口服务（输入时合并推送）
 }
 txt.addEventListener('input', gen);
 $('mode').addEventListener('change', updateColorInfo);
@@ -1419,13 +1419,14 @@ function runAddStep(o){
   const run = ensureRun(); if(!run) return;
   const types = (o && o.types && o.types.length) ? o.types : [];
   const isSearch = types.indexOf('web_search') >= 0;
+  const isFetch = types.indexOf('fetch_url') >= 0;
   const isMem = types.indexOf('remember') >= 0;
-  if(isSearch) runStats.searches++;
+  if(isSearch || isFetch) runStats.searches++;
   else if(!isMem) runStats.edits += Math.max(1, types.length);
 
   const item = document.createElement('div');
   item.className = 'ar-item ar-step';
-  item.innerHTML = '<span class="ar-ico">' + (isSearch ? '⌕' : (isMem ? '🗂' : '✎')) + '</span>' +
+  item.innerHTML = '<span class="ar-ico">' + (isSearch ? '⌕' : (isFetch ? '⇩' : (isMem ? '🗂' : '✎'))) + '</span>' +
     '<div class="ar-content"><div class="ar-line"></div><div class="ar-detail"></div></div>';
   item.querySelector('.ar-line').textContent = (o && o.text) ? o.text : '执行工具调用';
   const detail = (types.length ? ('工具：' + types.join('、')) : '') +
@@ -1678,11 +1679,10 @@ function chatSend(){
   }
   chatInput.value = '';
   aiBusy = true;
-  const ctxTurns = aiNum('aiCtxTurns', 20, 0, 200);   // 可配置的历史条数
+  // 历史消息全部发送，不做人为截断（过长时由服务端自动压缩并保留摘要与起点信息）
   const c = activeConv();
-  const hist = (c && ctxTurns > 0)
+  const hist = c
     ? (c.messages || []).filter(function(m){ return m.c !== 'c-err' && m.c !== 'c-ok'; })
-        .slice(-ctxTurns)
         .map(function(m){ return { role: m.r === 'user' ? 'user' : 'assistant', content: m.t }; })
     : [];                                              // 发送前的历史（不含本轮）
   convAdd('user', q);
@@ -1714,6 +1714,7 @@ function aiState(){
     documentTitle: (typeof DocM !== 'undefined' && DocM.activeName) ? DocM.activeName() : '',
     documentText: (typeof DocM !== 'undefined' && DocM.activeText) ? DocM.activeText() : '',
     tabs: (typeof DocM !== 'undefined' && DocM.tabNames) ? DocM.tabNames() : [],
+    tabContents: (typeof DocM !== 'undefined' && DocM.allTabs) ? DocM.allTabs() : [],
     text: txt.value,
     mode: $('mode').value, color: $('color').value, size: $('size').value,
     bold: $('bold').checked, italic: $('italic').checked, underline: $('underline').checked,
@@ -1733,6 +1734,12 @@ function aiState(){
   };
 }
 function aiPushState(){ try{ host('aiState|' + JSON.stringify(aiState())); }catch(e){} }
+/* 输入时高频触发，做 300ms 合并，避免每次敲键都把全部标签正文重新序列化 */
+let aiPushTimer = null;
+function aiPushStateSoon(){
+  if (aiPushTimer) clearTimeout(aiPushTimer);
+  aiPushTimer = setTimeout(function(){ aiPushTimer = null; aiPushState(); }, 300);
+}
 
 /* 任务开始前保存快照，通知卡片上的「撤销」用它恢复 */
 let aiSnapshot = null;
@@ -2916,6 +2923,9 @@ const DocM = (function(){
       bar.appendChild(tab);
     }
     updateTitle();
+    // 标签页增删/切换/改名后立即把最新状态同步给 AI 与端口服务，
+    // 否则独立对话窗口里的 AI 读到的还是旧快照（会答"没有标签页"）。
+    try { if (typeof aiPushState === 'function') aiPushState(); } catch(e){}
   }
   function loadEditor(d){ edSrc().value = d.buffer; if (viewHook) viewHook(); }
   /* 当前编辑区的真实文本：渲染模式下 contenteditable 里可能是最新，从这里统一取 */
@@ -3054,11 +3064,26 @@ const DocM = (function(){
   }
   function closeActive(){ if (activeId) closeTab(activeId); }
   function tabNames(){ return docs.map(d => d.name); }
+  /* 所有已打开标签页的正文（AI 需要看非当前标签页的内容时用）。
+     单个标签最多 15000 字符、合计最多 30000 字符，避免把请求撑爆。 */
+  function allTabs(){
+    let total = 0;
+    const out = [];
+    for (const d of docs){
+      if (total >= 30000) break;
+      let t = (d.id === activeId) ? activeText() : (d.buffer || '');
+      if (t.length > 15000) t = t.slice(0, 15000) + '\n…（已截断）';
+      if (total + t.length > 30000) t = t.slice(0, Math.max(0, 30000 - total)) + '\n…（已截断）';
+      total += t.length;
+      out.push({ name: d.name, text: t, active: d.id === activeId });
+    }
+    return out;
+  }
 
   return { newTab, switchTab, closeTab, save, saveAs, addDoc, openFromHost, saved, markDirty,
            setActiveBuffer, setViewHook: f => { viewHook = f; },
            activeText, activeName, setActiveText, setActiveName,
-           switchByName, closeActive, tabNames };
+           switchByName, closeActive, tabNames, allTabs };
 })();
 /* 启动：创建第一个「无标题」标签 */
 DocM.addDoc('无标题', '', '', true);
