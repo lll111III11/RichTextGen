@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -20,16 +22,95 @@ namespace RichTextGen
         /// <summary>命令行传入的待打开文件（Shell 右键「用彩色文本生成器打开」等）</summary>
         public static string[] StartupFiles = new string[0];
 
+        /// <summary>
+        /// 单实例互斥体：同一版本只允许一个进程（后台只保留一个）；
+        /// 名称里带版本号，因此 5.9.0.6 与 5.9.0.7 这类不同版本可以同时各跑一个，互不干扰。
+        /// </summary>
+        private static Mutex _instanceMutex;
+        private static string InstanceKey
+        {
+            get
+            {
+                string v = MainForm.Version;
+                return string.IsNullOrEmpty(v) ? "unknown" : v.Replace(' ', '_');
+            }
+        }
+        private static string PipeName { get { return "RichTextGen_IPC_" + InstanceKey; } }
+
         [STAThread]
         private static void Main(string[] args)
         {
+            bool created;
+            try
+            {
+                _instanceMutex = new Mutex(true, @"Local\RichTextGen_SingleInstance_" + InstanceKey, out created);
+            }
+            catch { created = true; }
+
+            if (!created)
+            {
+                // 已有实例在运行：把命令行里的文件（或空启动）转交给它，然后本进程直接退出。
+                SendToPrimary(args);
+                return;
+            }
+
             if (args != null) StartupFiles = args;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            Thread pipe = new Thread(PipeLoop);
+            pipe.IsBackground = true;
+            pipe.Start();
             try { Application.Run(new MainForm()); }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.ToString(), "运行错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>把启动参数交给已在运行的实例（同名管道，仅当前用户可连）。</summary>
+        private static void SendToPrimary(string[] args)
+        {
+            try
+            {
+                using (NamedPipeClientStream c = new NamedPipeClientStream(".", PipeName, PipeDirection.Out))
+                {
+                    c.Connect(2000);
+                    using (StreamWriter w = new StreamWriter(c, new UTF8Encoding(false)))
+                    {
+                        w.WriteLine("__ACTIVATE__");
+                        foreach (string a in args ?? new string[0])
+                        {
+                            string p = (a ?? "").Trim().Trim('"');
+                            if (p.Length > 0 && File.Exists(p)) w.WriteLine(p);
+                        }
+                        w.Flush();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>主实例上的管道监听：收到路径就在主窗口里开标签，收到 ACTIVATE 就把窗口叫到前台。</summary>
+        private static void PipeLoop()
+        {
+            while (true)
+            {
+                try
+                {
+                    using (NamedPipeServerStream s = new NamedPipeServerStream(PipeName, PipeDirection.In, 1))
+                    {
+                        s.WaitForConnection();
+                        List<string> msgs = new List<string>();
+                        using (StreamReader r = new StreamReader(s, Encoding.UTF8))
+                        {
+                            string line;
+                            while ((line = r.ReadLine()) != null)
+                                if (line.Trim().Length > 0) msgs.Add(line.Trim());
+                        }
+                        if (msgs.Count > 0) MainForm.ForwardToMain(msgs);
+                    }
+                }
+                catch { Thread.Sleep(300); }
             }
         }
     }
@@ -52,6 +133,15 @@ namespace RichTextGen
         private bool _allowClose;                        // true 才允许真正退出（仅托盘菜单「退出」置位）
         private readonly List<string> _pendingOpen = new List<string>();   // 命令行/右键传入的待打开文件
 
+        /// <summary>true = 拖拽标签分裂出来的副窗口：不注册热键/托盘/更新检查/AI 端口，关闭即真关。</summary>
+        private readonly bool _secondary;
+        /// <summary>副窗口启动时要打开的文档（fileOpened JSON）。</summary>
+        private string _pendingTear;
+        /// <summary>主窗口引用：单实例转发时用它把文件送进来。</summary>
+        private static MainForm _mainWindow;
+        /// <summary>本窗口里未保存的标签数量（界面每次变化时回报，用于副窗口关闭前确认）。</summary>
+        private int _dirtyCount;
+
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
         [DllImport("user32.dll")]
@@ -72,8 +162,16 @@ namespace RichTextGen
         private int resizeBand = 6;            // 拖拽边宽度（逻辑像素，按 DPI 放大）
         private int bandState = -1;            // 上次应用的边宽（-1=尚未应用），避免重复 Layout
 
-        public MainForm()
+        public MainForm() : this(false, null) { }
+
+        /// <param name="secondary">true = 拖拽标签分裂出的副窗口（同一进程、独立窗口）</param>
+        /// <param name="tearJson">副窗口要打开的文档（fileOpened JSON）</param>
+        internal MainForm(bool secondary, string tearJson)
         {
+            _secondary = secondary;
+            _pendingTear = tearJson;
+            if (!secondary) _mainWindow = this;
+
             Text = "彩色文本生成器 v" + Version;
             Font = new Font("Microsoft YaHei UI", 9f);
             // 用 exe 内嵌图标（csproj 的 ApplicationIcon），否则 WinForms 会显示系统默认图标
@@ -82,7 +180,8 @@ namespace RichTextGen
             ClientSize = new Size(1180, 800);
             MinimumSize = new Size(880, 600);
             StartPosition = FormStartPosition.CenterScreen;
-            LoadWindowState();                           // 还原上次关闭时的位置与大小
+            if (!secondary) LoadWindowState();           // 只让主窗口记住位置与大小，副窗口由撕裂点决定
+            if (WindowState == FormWindowState.Normal) _normBounds = Bounds;
             ApplyResizeBand();                           // 留出可拖拽缩放的边（WebView2 随 Padding 内缩）
             BackColor = Color.FromArgb(243, 243, 243);
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
@@ -100,25 +199,59 @@ namespace RichTextGen
             web.Dock = DockStyle.Fill;
             Controls.Add(web);
             web.CoreWebView2InitializationCompleted += OnWebReady;
-            try { web.EnsureCoreWebView2Async(null); } catch { }
-
-            // 更新检测：启动后 8 秒首次，之后每 60 秒一次（自动检测保持静默，仅发现新版本时才提示）
-            updateTimer = new System.Windows.Forms.Timer();
-            updateTimer.Interval = 60000;
-            updateTimer.Tick += delegate { CheckUpdate(false); };
-            updateTimer.Start();
-            SetTimeout(8000, delegate { CheckUpdate(false); });
-            SetTimeout(1500, ReportUpdateResult);
-
-            // 全局热键（Ctrl+F2 / Ctrl+Alt+O / Ctrl+Alt+G）：句柄创建后注册，见 OnHandleCreated
-            hotkeys = new HotkeyManager(this, OnHotkey);
-
-            // 命令行/右键传人的待打开文件（界面 ready 后逐个打开）
-            foreach (string f in Program.StartupFiles)
+            try
             {
-                string p = (f ?? "").Trim().Trim('"');
-                if (p.Length > 0) _pendingOpen.Add(p);
+                // 同一进程里多个窗口必须复用同一个 WebView2 环境（用户数据目录不能并行开两套）
+                if (secondary && WebEnv != null) web.EnsureCoreWebView2Async(WebEnv);
+                else web.EnsureCoreWebView2Async(null);
             }
+            catch { }
+
+            if (!secondary)
+            {
+                // 更新检测：启动后 8 秒首次，之后每 60 秒一次（自动检测保持静默，仅发现新版本时才提示）
+                updateTimer = new System.Windows.Forms.Timer();
+                updateTimer.Interval = 60000;
+                updateTimer.Tick += delegate { CheckUpdate(false); };
+                updateTimer.Start();
+                SetTimeout(8000, delegate { CheckUpdate(false); });
+                SetTimeout(1500, ReportUpdateResult);
+
+                // 全局热键（Ctrl+F2 / Ctrl+Alt+O / Ctrl+Alt+G）：句柄创建后注册，见 OnHandleCreated
+                hotkeys = new HotkeyManager(this, OnHotkey);
+                LoadCloseAction();                       // 关闭行为（询问 / 最小化 / 直接退出）
+
+                // 命令行/右键传人的待打开文件（界面 ready 后逐个打开）
+                foreach (string f in Program.StartupFiles)
+                {
+                    string p = (f ?? "").Trim().Trim('"');
+                    if (p.Length > 0) _pendingOpen.Add(p);
+                }
+            }
+        }
+
+        // ============================================================ 单实例转发（第二个进程 → 主窗口）
+        /// <summary>管道线程收到消息后切回 UI 线程处理。</summary>
+        internal static void ForwardToMain(List<string> msgs)
+        {
+            MainForm f = _mainWindow;
+            if (f == null || f.IsDisposed) return;
+            try
+            {
+                f.BeginInvoke((Action)delegate { f.HandleIpc(msgs); });
+            }
+            catch { }
+        }
+
+        private void HandleIpc(List<string> msgs)
+        {
+            bool activate = false;
+            foreach (string m in msgs)
+            {
+                if (m == "__ACTIVATE__") { activate = true; continue; }
+                if (File.Exists(m)) { OpenPath(m); activate = true; }
+            }
+            if (activate) RestoreWindow();
         }
 
         // ============================================================ 全局热键
@@ -219,7 +352,7 @@ namespace RichTextGen
                 if (w >= MinimumSize.Width && h >= MinimumSize.Height)
                 {
                     Rectangle r = new Rectangle(IntOf(t, "left"), IntOf(t, "top"), w, h);
-                    if (IsOnScreen(r)) { StartPosition = FormStartPosition.Manual; Bounds = r; }
+                    if (IsOnScreen(r)) { StartPosition = FormStartPosition.Manual; Bounds = r; _normBounds = r; }
                 }
                 if (Regex.IsMatch(t, "\"maximized\"\\s*:\\s*true")) WindowState = FormWindowState.Maximized;
             }
@@ -241,7 +374,10 @@ namespace RichTextGen
         {
             try
             {
-                Rectangle r = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+                // 最大化时用自己记下的「最大化前位置」，不能用 RestoreBounds：
+                // 动画最大化后 RestoreBounds 会被记成动画终点，保存下来窗口会越来越大。
+                Rectangle r = WindowState == FormWindowState.Normal ? Bounds : _normBounds;
+                if (r.Width < 200 || r.Height < 150) r = RestoreBounds;
                 if (r.Width < 200 || r.Height < 150) return;   // 最小化时 RestoreBounds 可能为空，跳过
                 File.WriteAllText(WindowStatePath,
                     "{" + Quote("left") + ":" + r.Left + "," + Quote("top") + ":" + r.Top + "," +
@@ -255,20 +391,113 @@ namespace RichTextGen
         protected override void OnResizeEnd(EventArgs e)
         {
             base.OnResizeEnd(e);
-            SaveWindowState();          // 鼠标拖完大小/移动到位就落盘
+            if (!_secondary) SaveWindowState();          // 鼠标拖完大小/移动到位就落盘
+            if (WindowState == FormWindowState.Normal) _normBounds = Bounds;
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            // 副窗口：关闭就是真关闭（不缩托盘、不覆盖主窗口的位置记忆）
+            if (_secondary)
+            {
+                if (_dirtyCount > 0 && !_allowClose)
+                {
+                    DialogResult ans = MessageBox.Show(this,
+                        "这个窗口里有 " + _dirtyCount + " 个标签页尚未保存，关闭后会丢失更改。\r\n\r\n仍要关闭吗？",
+                        "确认关闭", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (ans != DialogResult.Yes) { e.Cancel = true; Opacity = 1.0; return; }
+                }
+                base.OnFormClosing(e);
+                return;
+            }
             SaveWindowState();
-            // 除托盘菜单「退出」明确置位外，任何关闭（✕/Alt+F4/菜单关闭）都改为缩到托盘后台
+            // 未明确退出时：按「关闭行为」设置处理（询问 / 最小化 / 直接退出）
             if (!_allowClose)
             {
                 e.Cancel = true;
-                HideWindow();
+                RequestClose();
                 return;
             }
             base.OnFormClosing(e);
+        }
+
+        // ============================================================ 关闭行为（询问 / 最小化 / 直接退出）
+        /// <summary>ask = 每次询问；minimize = 最小化到托盘；exit = 直接退出。</summary>
+        private string _closeAction = "ask";
+
+        private static string CloseCfgPath
+        {
+            get { return Path.Combine(AiConfig.Dir, "close.json"); }
+        }
+
+        private void LoadCloseAction()
+        {
+            try
+            {
+                if (!File.Exists(CloseCfgPath)) return;
+                string s = File.ReadAllText(CloseCfgPath, Encoding.UTF8);
+                if (s.IndexOf("\"exit\"", StringComparison.Ordinal) >= 0) _closeAction = "exit";
+                else if (s.IndexOf("\"minimize\"", StringComparison.Ordinal) >= 0) _closeAction = "minimize";
+                else _closeAction = "ask";
+            }
+            catch { }
+        }
+
+        private void SaveCloseAction()
+        {
+            try
+            {
+                Directory.CreateDirectory(AiConfig.Dir);
+                File.WriteAllText(CloseCfgPath, "{\"action\":\"" + _closeAction + "\"}", new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        /// <summary>点关闭/Alt+F4 时：按设置决定询问、最小化还是真退出。</summary>
+        private void RequestClose()
+        {
+            string a = string.IsNullOrEmpty(_closeAction) ? "ask" : _closeAction;
+            if (a == "exit") { _allowClose = true; Close(); return; }
+            if (a == "minimize") { HideWindow(); return; }
+
+            using (CloseChoiceForm f = new CloseChoiceForm(IsDarkTheme()))
+            {
+                f.ShowDialog(this);
+                if (f.Cancelled) return;
+                if (f.Remember)
+                {
+                    _closeAction = f.Minimize ? "minimize" : "exit";
+                    SaveCloseAction();
+                    try { CallStr("closeAction", _closeAction); } catch { }
+                }
+                if (f.Minimize) HideWindow();
+                else { _allowClose = true; Close(); }
+            }
+        }
+
+        private static bool IsDarkTheme()
+        {
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                {
+                    object v = k != null ? k.GetValue("AppsUseLightTheme") : null;
+                    return (v is int) && ((int)v == 0);
+                }
+            }
+            catch { return false; }
+        }
+
+        /// <summary>快捷组件里点「执行」时调用（与热键触发走同一套动作）。</summary>
+        private void RunQuickAction(string action)
+        {
+            switch ((action ?? "").Trim().ToLowerInvariant())
+            {
+                case "quit": _allowClose = true; Close(); break;
+                case "minimize": MinimizeAnimated(); break;
+                case "theme": RunJs("toggleTheme()"); break;
+                case "hide": if (Visible) HideWindow(); else RestoreWindow(); break;
+            }
         }
 
         private void OnHotkey(string action)
@@ -282,6 +511,9 @@ namespace RichTextGen
                     break;
                 case "import": ImportTxt(); HideWindow(); break;        // 导入完自动收后台
                 case "generate": RunJs("gen()"); HideWindow(); break;   // 重新生成完自动收后台
+                case "quit": _allowClose = true; Close(); break;        // 快捷组件：退出应用
+                case "minimize": MinimizeAnimated(); break;             // 快捷组件：最小化
+                case "theme": RunJs("toggleTheme()"); break;            // 快捷组件：切换深浅色
             }
         }
 
@@ -289,7 +521,26 @@ namespace RichTextGen
         private void HideWindow()
         {
             if (!Visible) return;
+            if (!_secondary) SaveWindowState();      // 隐藏前落盘（隐藏不是 Close，不会走 OnFormClosing）
+            // 先淡出再隐藏，避免窗口「啪」地消失
+            if (_winAnim == null && Opacity > 0.02)
+            {
+                Rectangle cur = Bounds;
+                AnimateWindow(cur, cur, Opacity, 0.0, 140, delegate
+                {
+                    Hide();
+                    Opacity = 1.0;
+                    AfterHidden();
+                });
+                return;
+            }
             Hide();
+            Opacity = 1.0;
+            AfterHidden();
+        }
+
+        private void AfterHidden()
+        {
             EnsureTray();
             // 首次隐藏时提示一次，避免用户以为程序被关掉了
             if (!trayTipShown && tray != null)
@@ -307,10 +558,150 @@ namespace RichTextGen
 
         private void RestoreWindow()
         {
-            Show();
+            if (!Visible) { Opacity = 0.0; Show(); }
             WindowState = FormWindowState.Normal;
             Activate();
             BringToFront();
+            if (Opacity < 0.99) AnimateWindow(Bounds, Bounds, Opacity, 1.0, 140, null);
+        }
+
+        // ============================================================ 窗口动效（最小化 / 最大化 / 关闭）
+        private System.Windows.Forms.Timer _winAnim;
+        /// <summary>最大化之前的窗口位置（动画最大化后系统 RestoreBounds 会记成动画终点，必须自己记）。</summary>
+        private Rectangle _normBounds = Rectangle.Empty;
+
+        /// <summary>把窗口从 from 平滑过渡到 to，同时可带透明度变化；结束执行 done。</summary>
+        private void AnimateWindow(Rectangle from, Rectangle to, double fromO, double toO, int ms, Action done)
+        {
+            try { if (_winAnim != null) { _winAnim.Stop(); _winAnim.Dispose(); _winAnim = null; } } catch { }
+            int steps = Math.Max(1, ms / 12);
+            int step = 0;
+            _winAnim = new System.Windows.Forms.Timer();
+            _winAnim.Interval = 12;
+            _winAnim.Tick += delegate
+            {
+                step++;
+                double t = (double)step / steps; if (t > 1) t = 1;
+                double e = 1 - Math.Pow(1 - t, 3);   // easeOutCubic
+                try
+                {
+                    int l = (int)Math.Round(from.Left + (to.Left - from.Left) * e);
+                    int tp = (int)Math.Round(from.Top + (to.Top - from.Top) * e);
+                    int w = (int)Math.Round(from.Width + (to.Width - from.Width) * e);
+                    int h = (int)Math.Round(from.Height + (to.Height - from.Height) * e);
+                    Bounds = new Rectangle(l, tp, Math.Max(80, w), Math.Max(60, h));
+                    if (Math.Abs(fromO - toO) > 0.001) Opacity = fromO + (toO - fromO) * e;
+                }
+                catch { }
+                if (step >= steps)
+                {
+                    try { _winAnim.Stop(); _winAnim.Dispose(); } catch { }
+                    _winAnim = null;
+                    if (done != null) done();
+                }
+            };
+            _winAnim.Start();
+        }
+
+        /// <summary>最小化：向任务栏方向缩小并淡出，再真正最小化。</summary>
+        private void MinimizeAnimated()
+        {
+            if (_winAnim != null) return;
+            Rectangle cur = Bounds;
+            Rectangle wa = Screen.FromHandle(Handle).WorkingArea;
+            Rectangle to = new Rectangle(wa.Left + wa.Width / 2 - 60, wa.Bottom - 50, 120, 80);
+            Size oldMin = MinimumSize;
+            MinimumSize = new Size(1, 1);          // 临时解除最小尺寸限制，否则缩不下去
+            AnimateWindow(cur, to, 1.0, 0.0, 170, delegate
+            {
+                WindowState = FormWindowState.Minimized;
+                Opacity = 1.0;
+                Bounds = cur;
+                MinimumSize = oldMin;
+            });
+        }
+
+        /// <summary>最大化 / 还原：用 190ms 缓动过渡，代替瞬间跳变。</summary>
+        private void ToggleMaximizeAnimated()
+        {
+            if (_winAnim != null) return;
+            if (WindowState == FormWindowState.Maximized)
+            {
+                Rectangle target = _normBounds;
+                if (target.Width < MinimumSize.Width || target.Height < MinimumSize.Height) target = RestoreBounds;
+                if (target.Width < MinimumSize.Width || target.Height < MinimumSize.Height)
+                    target = new Rectangle(120, 80, 1180, 800);
+                Rectangle cur = Bounds;
+                WindowState = FormWindowState.Normal;   // 先退出最大化
+                Bounds = cur;                           // 仍从最大化时的位置开始动画
+                AnimateWindow(cur, target, 1.0, 1.0, 190, delegate { Bounds = target; SaveWindowState(); });
+            }
+            else
+            {
+                Rectangle cur = Bounds;
+                _normBounds = cur;                      // 记住还原目标
+                Rectangle target = Screen.FromHandle(Handle).WorkingArea;
+                AnimateWindow(cur, target, 1.0, 1.0, 190, delegate
+                {
+                    Bounds = target;
+                    WindowState = FormWindowState.Maximized;
+                    SaveWindowState();
+                });
+            }
+        }
+
+        /// <summary>关闭（副窗口）：先淡出，再走正常关闭流程（未保存会弹确认）。</summary>
+        private void CloseAnimated()
+        {
+            if (_winAnim != null) { Close(); return; }
+            Rectangle cur = Bounds;
+            AnimateWindow(cur, cur, 1.0, 0.0, 140, delegate { Close(); });
+        }
+
+        // ============================================================ 启动提示
+        private static string TipStatePath
+        {
+            get { return Path.Combine(AiConfig.Dir, "welcome.json"); }
+        }
+
+        private static bool TipDismissed()
+        {
+            try
+            {
+                if (!File.Exists(TipStatePath)) return false;
+                string s = File.ReadAllText(TipStatePath, Encoding.UTF8);
+                return Regex.IsMatch(s, "\"dontShow\"\\s*:\\s*true", RegexOptions.IgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>启动后弹一次使用提示（勾选「不再提示」后不再出现）。</summary>
+        private void ShowStartupTip()
+        {
+            if (_secondary || TipDismissed()) return;
+            bool dark = false;
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                {
+                    object v = k != null ? k.GetValue("AppsUseLightTheme") : null;
+                    dark = (v is int) && ((int)v == 0);
+                }
+            }
+            catch { }
+            try
+            {
+                using (StartupTipForm f = new StartupTipForm(dark))
+                {
+                    f.ShowDialog(this);
+                    if (f.DontShowAgain)
+                    {
+                        Directory.CreateDirectory(AiConfig.Dir);
+                        File.WriteAllText(TipStatePath, "{\"dontShow\":true}", new UTF8Encoding(false));
+                    }
+                }
+            }
+            catch { }
         }
 
         /// <summary>托盘图标：Ctrl+F2 隐藏后唯一的唤回入口，同时提供退出</summary>
@@ -384,6 +775,7 @@ namespace RichTextGen
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             // 释放全局热键与计时器，避免残留热键占用（否则重启程序会「注册失败（被占用）」）
+            try { if (_winAnim != null) { _winAnim.Stop(); _winAnim.Dispose(); _winAnim = null; } } catch { }
             try { if (hotkeys != null) hotkeys.UnregisterAll(); } catch { }
             try { if (updateTimer != null) { updateTimer.Stop(); updateTimer.Dispose(); } } catch { }
             try { if (_mediaListener != null) { _mediaListener.Stop(); _mediaListener = null; } } catch { }   // 关掉音乐本地服务
@@ -411,7 +803,34 @@ namespace RichTextGen
             web.CoreWebView2.Settings.IsStatusBarEnabled = false;
             try { WebEnv = web.CoreWebView2.Environment; } catch { }
             web.CoreWebView2.WebMessageReceived += OnMessage;
-            web.CoreWebView2.NavigateToString(LoadHtml());
+
+            // 用一个虚拟 https 源承载界面，而不是 NavigateToString。
+            // data:/about: 这类不透明源会被浏览器禁止访问 localStorage，
+            // 导致主题、背景图、侧栏宽度等「记住设置」全部静默失效。
+            // 这里拦截该源的请求，把内嵌 HTML 作为响应返回，即可获得可持久化的正常源。
+            const string origin = "https://richtextgen.local/";
+            try
+            {
+                web.CoreWebView2.AddWebResourceRequestedFilter(origin + "*", CoreWebView2WebResourceContext.All);
+                web.CoreWebView2.WebResourceRequested += delegate (object s2, CoreWebView2WebResourceRequestedEventArgs e2)
+                {
+                    try
+                    {
+                        if (e2.Request.Uri.StartsWith(origin, StringComparison.OrdinalIgnoreCase))
+                        {
+                            byte[] body = Encoding.UTF8.GetBytes(LoadHtml());
+                            e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                                new MemoryStream(body), 200, "OK", "Content-Type: text/html; charset=utf-8");
+                        }
+                    }
+                    catch { }
+                };
+                web.CoreWebView2.Navigate(origin);
+            }
+            catch
+            {
+                web.CoreWebView2.NavigateToString(LoadHtml());   // 兜底：极旧运行时走原方案
+            }
         }
 
         private static string LoadHtml()
@@ -528,7 +947,6 @@ namespace RichTextGen
                     CallStr("net", OnlineColors.IsOnline() ? "联网正常" : "网络断开");
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
                     CallStr("hotkeyDefs", hotkeys != null ? hotkeys.HotkeysJson() : "[]");
-                    CheckUpdate(false);
                     // 打开命令行/右键传入的文件（多标签逐个打开）
                     foreach (string p in _pendingOpen)
                     {
@@ -536,10 +954,29 @@ namespace RichTextGen
                         else CallStr("status", "文件不存在：" + p);
                     }
                     _pendingOpen.Clear();
-                    CheckShellRegistration();   // 首次启动自动注册右键菜单（HKCU 免管理员）
-                    AiConfig.Load();
+                    AiConfig.Load();            // 先读配置，下面的端口恢复才知道该不该启动
+                    if (!_secondary)
+                    {
+                        CheckUpdate(false);
+                        CheckShellRegistration();   // 首次启动自动注册右键菜单（HKCU 免管理员）
+                        StartAiServerIfEnabled();   // 上次开着端口则自动恢复
+                    }
                     CallStr("aiSettings", AiConfig.ToJson());
-                    StartAiServerIfEnabled();   // 上次开着端口则自动恢复
+                    LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
+
+                    // 启动提示：等界面稳定后再弹，避免和首屏渲染抢焦点
+                    if (!_secondary) SetTimeout(1200, ShowStartupTip);
+                    if (!_secondary) CallStr("closeAction", _closeAction);
+
+                    // 副窗口：把撕裂过来的文档作为首个标签打开
+                    if (_secondary && !string.IsNullOrEmpty(_pendingTear))
+                    {
+                        string j = _pendingTear.Trim();
+                        if (j.IndexOf("\"ok\"", StringComparison.Ordinal) < 0 && j.EndsWith("}"))
+                            j = j.Substring(0, j.Length - 1) + ",\"ok\":true}";
+                        _pendingTear = null;
+                        Call("fileOpened", j);
+                    }
                     break;
                 case "hotkeys":
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
@@ -579,9 +1016,20 @@ namespace RichTextGen
                 case "generate":
                     DoGenerate(arg);
                     break;
-                case "minimize": WindowState = FormWindowState.Minimized; break;
-                case "maximize": WindowState = (WindowState == FormWindowState.Maximized) ? FormWindowState.Normal : FormWindowState.Maximized; break;
-                case "close": HideWindow(); break;   // 关闭 = 缩到托盘后台（退出走托盘菜单）
+                case "minimize": MinimizeAnimated(); break;
+                case "maximize": ToggleMaximizeAnimated(); break;
+                case "close": if (_secondary) CloseAnimated(); else RequestClose(); break;   // 主窗口按「关闭行为」处理
+                case "runAction": RunQuickAction(arg); break;
+                case "setCloseAction":
+                {
+                    string v = (arg ?? "").Trim().ToLowerInvariant();
+                    if (v == "minimize" || v == "exit" || v == "ask") _closeAction = v;
+                    SaveCloseAction();
+                    CallStr("closeAction", _closeAction);
+                    CallStr("status", _closeAction == "exit" ? "关闭窗口 = 直接退出应用"
+                        : (_closeAction == "minimize" ? "关闭窗口 = 最小化到托盘" : "关闭窗口 = 每次询问"));
+                    break;
+                }
                 case "drag": DragWindow(); break;
                 case "theme": ApplyThemeColor(arg); break;   // 拖拽边跟随界面主题色
                 case "status": CallStr("status", arg); break;
@@ -591,6 +1039,8 @@ namespace RichTextGen
                 case "importTxt": ImportTxt(); break;
                 case "exportTxt": ExportTxt(Un(arg)); break;
                 case "dropFile": DropFile(Un(arg)); break;
+                case "tearTab": TearTab(Un(arg)); break;        // 标签拖出窗口 → 同进程新窗口
+                case "dirty": { int dn; if (int.TryParse(arg, out dn)) _dirtyCount = dn; break; }
                 case "musicHost": MusicHost(Un(arg)); break;    // 拖入音乐 → 生成本地 URL
                 case "musicPick": MusicPick(); break;           // 点按钮选音乐文件
                 case "checkUpdate": CheckUpdate(true); break;
@@ -598,8 +1048,12 @@ namespace RichTextGen
                 case "openUrl": OpenUrl(arg); break;
                 case "openLink": OpenBrowser(Un(arg)); break;   // 超链接点击 → 默认浏览器（Edge/Chrome）
                 case "openDoc": OpenDoc(arg); break;            // 在线文档联动
-                case "registerShell": RegisterShell(); CallStr("status", "已添加到右键菜单"); break;
+                case "registerShell": RegisterShell(); CallStr("status", "已注册：右键菜单 + 打开方式列表"); break;
                 case "unregisterShell": UnregisterShell(); CallStr("status", "已从右键菜单移除"); break;
+                case "openDefaultApps": OpenDefaultApps(); break;
+                case "pickBg": PickBgImage(arg); break;
+                case "clearBg": ClearBgImage(arg); break;
+                case "bgLoad": LoadBgImages(); break;
                 case "colorLib": FetchColorLibrary(); break;
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
@@ -672,6 +1126,17 @@ namespace RichTextGen
         }
         private void OpenBrowser(string url) { OpenUrl(url); }
 
+        /// <summary>打开 Windows「默认应用」设置页：把本程序设为 .txt 等格式的默认打开方式。</summary>
+        private void OpenDefaultApps()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start("ms-settings:defaultapps");
+                CallStr("status", "已打开系统「默认应用」设置，请为本程序选择要接管的格式");
+            }
+            catch (Exception ex) { CallStr("status", "打开系统设置失败：" + ex.Message); }
+        }
+
         /// <summary>探测 Edge / Chrome 可执行文件；找不到返回 null</summary>
         private static string FindBrowser()
         {
@@ -728,8 +1193,29 @@ namespace RichTextGen
                 : "该平台部分功能需登录/付费，已在浏览器打开");
         }
 
-        // ============================================================ 系统右键集成（Shell，HKCU 免管理员，5.8.0.2）
+        // ============================================================ 系统集成（HKCU 免管理员）
         private const string ShellKey = @"Software\Classes\*\shell\RichTextGenApp";
+        /// <summary>文本文件 ProgId：出现在「打开方式」列表里，并作为默认应用的候选。</summary>
+        private const string ProgId = "RichTextGen.TextFile";
+        /// <summary>注册表结构版本：扩展名列表一变就 +1，老用户下次启动会自动按新范围重注册。</summary>
+        private const string AssocMarker = "2";
+
+        /// <summary>
+        /// 支持作为「打开方式」的文本类扩展名（精简版，只保留最常用的 6 种）。
+        /// 之前一次注册 30 多个扩展名会在「打开方式」里堆一大片，太打扰系统，故收窄。
+        /// </summary>
+        private static readonly string[] TextExts = new string[]
+        {
+            ".txt", ".md", ".log", ".json", ".ini", ".csv"
+        };
+
+        /// <summary>历史上注册过、现在已收窄掉的扩展名：注册时顺手清掉自己的条目，避免残留。</summary>
+        private static readonly string[] LegacyExts = new string[]
+        {
+            ".markdown", ".xml", ".cfg", ".conf", ".tsv", ".yml", ".yaml", ".html", ".htm",
+            ".css", ".js", ".ts", ".cs", ".py", ".java", ".cpp", ".h", ".bat", ".cmd",
+            ".ps1", ".sh", ".sql", ".ahk", ".lua", ".toml", ".nfo", ".properties", ".gitignore"
+        };
 
         [DllImport("shell32.dll")]
         private static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
@@ -739,35 +1225,209 @@ namespace RichTextGen
             try { SHChangeNotify(0x08000000 /*SHCNE_ASSOCCHANGED*/, 0x0000, IntPtr.Zero, IntPtr.Zero); } catch { }
         }
 
+        private static string AppExeName { get { return Path.GetFileName(Application.ExecutablePath); } }
+
+        /// <summary>
+        /// 注册系统集成：
+        /// 1) 任意文件右键 →「用彩色文本生成器打开」（经典菜单）
+        /// 2) ProgId + Applications 注册 → 出现在「打开方式」列表
+        /// 3) 各类文本扩展名的 OpenWithProgids → 这些格式都能选本程序打开
+        /// 注意：Windows 10/11 的「默认应用」不允许程序静默篡改，需要用户在系统设置里选定一次。
+        /// </summary>
         private void RegisterShell()
         {
             try
             {
                 string exe = Application.ExecutablePath;
+                string quoted = "\"" + exe + "\"";
+
+                // 1) 通用右键项（经典菜单 / Win11「显示更多选项」）
                 using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey)) { k.SetValue("", "用彩色文本生成器打开"); }
-                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey + "\\command")) { k.SetValue("", "\"" + exe + "\" \"%1\""); }
-                // 图标用系统记事本图标（不自定义，避免显得突兀）
-                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey + "\\DefaultIcon")) { k.SetValue("", "%SystemRoot%\\System32\\notepad.exe"); }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey + "\\command")) { k.SetValue("", quoted + " \"%1\""); }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(ShellKey + "\\DefaultIcon")) { k.SetValue("", quoted + ",0"); }
+
+                // 2) ProgId：打开方式的显示名 / 图标 / 命令
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + ProgId)) { k.SetValue("", "文本文件（彩色文本生成器）"); k.SetValue("RegVersion", AssocMarker); }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + ProgId + "\\DefaultIcon")) { k.SetValue("", quoted + ",0"); }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + ProgId + "\\shell\\open\\command")) { k.SetValue("", quoted + " \"%1\""); }
+
+                // 3) 应用程序注册（「打开方式」里按程序名列出）
+                string appKey = @"Software\Classes\Applications\" + AppExeName;
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(appKey)) { k.SetValue("FriendlyAppName", "彩色文本生成器"); }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(appKey + "\\DefaultIcon")) { k.SetValue("", quoted + ",0"); }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(appKey + "\\shell\\open\\command")) { k.SetValue("", quoted + " \"%1\""); }
+                // SupportedTypes 先清空重建，避免旧版本注册的一大堆扩展名残留
+                try { Registry.CurrentUser.DeleteSubKeyTree(appKey + "\\SupportedTypes", false); } catch { }
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(appKey + "\\SupportedTypes"))
+                {
+                    foreach (string ext in TextExts) k.SetValue(ext, "");
+                }
+
+                // 4) 各扩展名的候选打开方式
+                foreach (string ext in TextExts)
+                {
+                    using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + ext + "\\OpenWithProgids"))
+                        k.SetValue(ProgId, new byte[0], RegistryValueKind.None);
+                }
+                // 顺手清掉收窄前登记过的旧扩展名，避免「打开方式」里残留
+                foreach (string ext in LegacyExts)
+                {
+                    try
+                    {
+                        using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Classes\" + ext + "\\OpenWithProgids", true))
+                            if (k != null) k.DeleteValue(ProgId, false);
+                    }
+                    catch { }
+                }
+
+                // 5) 纯文本类型（无扩展名也算文本）的右键项
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\SystemFileAssociations\text\shell\RichTextGenApp"))
+                    k.SetValue("", "用彩色文本生成器打开");
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\SystemFileAssociations\text\shell\RichTextGenApp\command"))
+                    k.SetValue("", quoted + " \"%1\"");
+
                 ShellNotifyChanged();
             }
             catch { }
         }
+
         private void UnregisterShell()
         {
-            try { Registry.CurrentUser.DeleteSubKeyTree(ShellKey, false); ShellNotifyChanged(); } catch { }
+            try
+            {
+                Registry.CurrentUser.DeleteSubKeyTree(ShellKey, false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\" + ProgId, false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Applications\" + AppExeName, false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\SystemFileAssociations\text\shell\RichTextGenApp", false);
+                foreach (string ext in TextExts)
+                {
+                    try
+                    {
+                        using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Classes\" + ext + "\\OpenWithProgids", true))
+                            if (k != null) k.DeleteValue(ProgId, false);
+                    }
+                    catch { }
+                }
+                foreach (string ext in LegacyExts)
+                {
+                    try
+                    {
+                        using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Classes\" + ext + "\\OpenWithProgids", true))
+                            if (k != null) k.DeleteValue(ProgId, false);
+                    }
+                    catch { }
+                }
+                ShellNotifyChanged();
+            }
+            catch { }
         }
-        /// <summary>启动时检测：未注册则自动注册（幂等）</summary>
+
+        /// <summary>启动时检测：未注册或注册范围是旧版本时，自动按当前范围重注册（幂等）</summary>
         private void CheckShellRegistration()
         {
             try
             {
-                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(ShellKey + "\\command"))
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Classes\" + ProgId))
                 {
-                    if (k != null) return;
+                    object v = k != null ? k.GetValue("RegVersion") : null;
+                    if (v != null && string.Equals(v.ToString(), AssocMarker, StringComparison.Ordinal)) return;
                 }
                 RegisterShell();
             }
             catch { }
+        }
+
+        // ============================================================ 背景水印图（深色 / 亮色可分别设置）
+        private static string BgFile(string kind)
+        {
+            try
+            {
+                if (!Directory.Exists(AiConfig.Dir)) return "";
+                string[] fs = Directory.GetFiles(AiConfig.Dir, "bg-" + kind + ".*");
+                return fs.Length > 0 ? fs[0] : "";
+            }
+            catch { return ""; }
+        }
+
+        private static string MimeOf(string path)
+        {
+            switch ((Path.GetExtension(path) ?? "").ToLowerInvariant())
+            {
+                case ".jpg":
+                case ".jpeg": return "image/jpeg";
+                case ".gif": return "image/gif";
+                case ".webp": return "image/webp";
+                case ".bmp": return "image/bmp";
+                default: return "image/png";
+            }
+        }
+
+        /// <summary>把某一张背景图读成 data URL 发给界面（文件不存在则发空）。</summary>
+        private void SendBgImage(string kind)
+        {
+            string path = BgFile(kind);
+            string url = "", name = "";
+            try
+            {
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    byte[] b = File.ReadAllBytes(path);
+                    url = "data:" + MimeOf(path) + ";base64," + Convert.ToBase64String(b);
+                    name = Path.GetFileName(path);
+                }
+            }
+            catch { }
+            Call("bgImage", "{\"kind\":" + Quote(kind) + ",\"url\":" + Quote(url) +
+                 ",\"name\":" + Quote(name) + "}");
+        }
+
+        /// <summary>启动时把已保存的背景图读回界面。</summary>
+        private void LoadBgImages()
+        {
+            SendBgImage("dark");
+            SendBgImage("light");
+        }
+
+        /// <summary>选择背景图（kind = dark / light），复制到 %APPDATA%\RichTextGen 后回传 data URL。</summary>
+        private void PickBgImage(string kind)
+        {
+            kind = (kind == "light") ? "light" : "dark";
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|所有文件|*.*";
+                d.Title = (kind == "dark" ? "选择深色模式背景图" : "选择亮色模式背景图");
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    FileInfo fi = new FileInfo(d.FileName);
+                    if (fi.Length > 8 * 1024 * 1024) { CallStr("status", "图片超过 8MB，请换一张小一点的"); return; }
+                    Directory.CreateDirectory(AiConfig.Dir);
+                    foreach (string old in Directory.GetFiles(AiConfig.Dir, "bg-" + kind + ".*"))
+                    {
+                        try { File.Delete(old); } catch { }
+                    }
+                    string dest = Path.Combine(AiConfig.Dir, "bg-" + kind + Path.GetExtension(d.FileName).ToLowerInvariant());
+                    File.Copy(d.FileName, dest, true);
+                    SendBgImage(kind);
+                    CallStr("status", "已设置" + (kind == "dark" ? "深色" : "亮色") + "背景图");
+                }
+                catch (Exception ex) { CallStr("status", "设置背景图失败：" + ex.Message); }
+            }
+        }
+
+        private void ClearBgImage(string kind)
+        {
+            kind = (kind == "light") ? "light" : "dark";
+            try
+            {
+                foreach (string old in Directory.GetFiles(AiConfig.Dir, "bg-" + kind + ".*"))
+                {
+                    try { File.Delete(old); } catch { }
+                }
+            }
+            catch { }
+            Call("bgImage", "{\"kind\":" + Quote(kind) + ",\"url\":\"\",\"name\":\"\"}");
+            CallStr("status", "已清除" + (kind == "dark" ? "深色" : "亮色") + "背景图");
         }
 
         /// <summary>JS 侧对含中文/换行的载荷统一做了 encodeURIComponent，这里还原</summary>
@@ -1008,7 +1668,7 @@ namespace RichTextGen
         {
             using (OpenFileDialog d = new OpenFileDialog())
             {
-                d.Filter = "文本文件|*.txt;*.md;*.log;*.csv|所有文件|*.*";
+                d.Filter = "文本文件|*.txt;*.md;*.markdown;*.log;*.json;*.xml;*.ini;*.cfg;*.conf;*.csv;*.tsv;*.yml;*.yaml;*.html;*.htm;*.css;*.js;*.ts;*.cs;*.py;*.java;*.cpp;*.h;*.bat;*.cmd;*.ps1;*.sh;*.sql;*.ahk;*.lua;*.toml;*.nfo|所有文件|*.*";
                 if (d.ShowDialog(this) != DialogResult.OK) return;
                 try
                 {
@@ -1016,7 +1676,7 @@ namespace RichTextGen
                     Call("fileOpened",
                         "{\"ok\":true,\"path\":" + Quote(d.FileName) +
                         ",\"name\":" + Quote(Path.GetFileName(d.FileName)) +
-                        ",\"text\":" + Quote(txt) + "}");
+                        ",\"text\":" + Quote(txt) + "," + MetaJson(d.FileName).Substring(1));
                     CallStr("status", "已打开 " + Path.GetFileName(d.FileName) + "（" + txt.Length + " 字符）");
                 }
                 catch (Exception ex)
@@ -1036,29 +1696,40 @@ namespace RichTextGen
             if (path.Length == 0) { SaveAs(text); return; }
             try
             {
-                WriteText(path, text);
+                string lab = WriteText(path, text);
                 Call("fileSaved", "{\"ok\":true,\"path\":" + Quote(path) +
-                     ",\"name\":" + Quote(Path.GetFileName(path)) + "}");
+                     ",\"name\":" + Quote(Path.GetFileName(path)) +
+                     ",\"encoding\":" + Quote(lab) + "}");
             }
             catch (Exception ex)
             {
                 Call("fileSaved", "{\"ok\":false,\"msg\":" + Quote("保存失败：" + ex.Message) + "}");
             }
         }
-        private void SaveAsFile(string text) { SaveAs(text); }
-        private void SaveAs(string text)
+        private void SaveAsFile(string arg)
+        {
+            // arg = encodeURIComponent(name) + "|" + encodeURIComponent(text)
+            string name = "", text;
+            int sep = arg.IndexOf('|');
+            if (sep < 0) { text = Un(arg); }
+            else { name = Un(arg.Substring(0, sep)); text = Un(arg.Substring(sep + 1)); }
+            SaveAs(text, name);
+        }
+        private void SaveAs(string text) { SaveAs(text, ""); }
+        private void SaveAs(string text, string name)
         {
             using (SaveFileDialog d = new SaveFileDialog())
             {
-                d.Filter = "文本文件|*.txt|所有文件|*.*";
+                d.Filter = "文本文件|*.txt|Markdown|*.md|日志|*.log|所有文件|*.*";
                 d.FilterIndex = 1;
-                d.FileName = "无标题.txt";
+                d.FileName = string.IsNullOrEmpty(name) ? "无标题.txt" : name;
                 if (d.ShowDialog(this) != DialogResult.OK) { Call("fileSaved", "{\"ok\":false,\"msg\":\"已取消\"}"); return; }
                 try
                 {
-                    WriteText(d.FileName, text);
+                    string lab = WriteText(d.FileName, text);
                     Call("fileSaved", "{\"ok\":true,\"path\":" + Quote(d.FileName) +
-                         ",\"name\":" + Quote(Path.GetFileName(d.FileName)) + "}");
+                         ",\"name\":" + Quote(Path.GetFileName(d.FileName)) +
+                         ",\"encoding\":" + Quote(lab) + "}");
                 }
                 catch (Exception ex)
                 {
@@ -1066,15 +1737,52 @@ namespace RichTextGen
                 }
             }
         }
-        private static void WriteText(string path, string text)
+        /// <summary>
+        /// 保存文本：已打开过的文件沿用原编码与原换行符（GBK 文件不会被悄悄改成 UTF-8）；
+        /// 新文件统一 UTF-8（不带 BOM），换行符保持界面里的实际内容。返回编码标签供状态栏显示。
+        /// </summary>
+        private static string WriteText(string path, string text)
         {
-            File.WriteAllText(path, text, new UTF8Encoding(true));
+            text = text ?? "";
+            FileMeta m;
+            string full;
+            try { full = Path.GetFullPath(path); } catch { full = path; }
+            if (!_fileMeta.TryGetValue(full, out m) || m == null)
+            {
+                m = new FileMeta();
+                m.Enc = new UTF8Encoding(false);
+                m.Bom = false;
+                m.Label = "UTF-8";
+                m.Eol = text.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "CRLF" : "LF";
+            }
+
+            // 换行符回写成原文件的风格
+            string body = text.Replace("\r\n", "\n").Replace('\r', '\n');
+            if (m.Eol == "CRLF") body = body.Replace("\n", "\r\n");
+            else if (m.Eol == "CR") body = body.Replace('\n', '\r');
+
+            Encoding enc = m.Enc ?? new UTF8Encoding(false);
+            if (m.Bom)
+            {
+                byte[] preamble = enc.GetPreamble();
+                byte[] data = enc.GetBytes(body);
+                byte[] all = new byte[preamble.Length + data.Length];
+                Buffer.BlockCopy(preamble, 0, all, 0, preamble.Length);
+                Buffer.BlockCopy(data, 0, all, preamble.Length, data.Length);
+                File.WriteAllBytes(path, all);
+            }
+            else
+            {
+                File.WriteAllBytes(path, enc.GetBytes(body));
+            }
+            try { _fileMeta[full] = m; } catch { }
+            return m.Label;
         }
         private void ImportTxt()
         {
             using (OpenFileDialog d = new OpenFileDialog())
             {
-                d.Filter = "文本文件|*.txt;*.md;*.log;*.csv|所有文件|*.*";
+                d.Filter = "文本文件|*.txt;*.md;*.markdown;*.log;*.json;*.xml;*.ini;*.cfg;*.conf;*.csv;*.tsv;*.yml;*.yaml;*.html;*.htm;*.css;*.js;*.ts;*.cs;*.py;*.java;*.cpp;*.h;*.bat;*.cmd;*.ps1;*.sh;*.sql;*.ahk;*.lua;*.toml;*.nfo|所有文件|*.*";
                 if (d.ShowDialog(this) != DialogResult.OK) return;
                 SendText(d.FileName);
             }
@@ -1095,6 +1803,27 @@ namespace RichTextGen
             }
             catch (Exception ex) { CallStr("status", "导入失败：" + ex.Message); }
         }
+        /// <summary>把某个标签从当前窗口「撕」出来，在本进程里新建一个独立窗口承载它。</summary>
+        private void TearTab(string json)
+        {
+            try
+            {
+                json = (json ?? "").Trim();
+                if (json.Length < 2 || !json.StartsWith("{")) return;
+
+                Point cursorPos = Cursor.Position;
+                MainForm w = new MainForm(true, json);
+                Rectangle wa = Screen.FromPoint(cursorPos).WorkingArea;
+                w.StartPosition = FormStartPosition.Manual;
+                int x = Math.Min(cursorPos.X + 28, wa.Right - w.Width);
+                int y = Math.Min(cursorPos.Y + 28, wa.Bottom - w.Height);
+                w.Location = new Point(Math.Max(wa.Left, x), Math.Max(wa.Top, y));
+                w.Show();
+                w.Activate();
+            }
+            catch (Exception ex) { CallStr("status", "新建窗口失败：" + ex.Message); }
+        }
+
         /// <summary>按路径打开文件为记事本新标签（Shell 右键/命令行；无对话框）</summary>
         private void OpenPath(string path)
         {
@@ -1107,19 +1836,69 @@ namespace RichTextGen
                 Call("fileOpened",
                     "{\"ok\":true,\"path\":" + Quote(path) +
                     ",\"name\":" + Quote(Path.GetFileName(path)) +
-                    ",\"text\":" + Quote(txt) + "}");
+                    ",\"text\":" + Quote(txt) + "," + MetaJson(path).Substring(1));
                 CallStr("status", "已打开 " + Path.GetFileName(path) + "（" + txt.Length + " 字符）");
             }
             catch (Exception ex) { CallStr("status", "打开失败：" + ex.Message); }
         }
+        /// <summary>已打开文件的编码/换行信息：保存时原样写回，避免 GBK 文件被悄悄改成 UTF-8。</summary>
+        private sealed class FileMeta
+        {
+            public Encoding Enc = new UTF8Encoding(false);
+            public bool Bom;
+            public string Eol = "LF";
+            public string Label = "UTF-8";
+        }
+        private static readonly Dictionary<string, FileMeta> _fileMeta =
+            new Dictionary<string, FileMeta>(StringComparer.OrdinalIgnoreCase);
+
         private static string ReadText(string path)
         {
             byte[] b = File.ReadAllBytes(path);
-            if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) return Encoding.UTF8.GetString(b, 3, b.Length - 3);
-            if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE) return Encoding.Unicode.GetString(b, 2, b.Length - 2);
-            if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF) return Encoding.BigEndianUnicode.GetString(b, 2, b.Length - 2);
-            try { return new UTF8Encoding(false, true).GetString(b); }
-            catch { return Encoding.GetEncoding(936).GetString(b); }
+            FileMeta m = new FileMeta();
+            string text;
+            if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF)
+            {
+                m.Enc = new UTF8Encoding(false); m.Bom = true; m.Label = "UTF-8 BOM";
+                text = Encoding.UTF8.GetString(b, 3, b.Length - 3);
+            }
+            else if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE)
+            {
+                m.Enc = Encoding.Unicode; m.Bom = true; m.Label = "UTF-16 LE";
+                text = Encoding.Unicode.GetString(b, 2, b.Length - 2);
+            }
+            else if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF)
+            {
+                m.Enc = Encoding.BigEndianUnicode; m.Bom = true; m.Label = "UTF-16 BE";
+                text = Encoding.BigEndianUnicode.GetString(b, 2, b.Length - 2);
+            }
+            else
+            {
+                try
+                {
+                    text = new UTF8Encoding(false, true).GetString(b);
+                    m.Enc = new UTF8Encoding(false); m.Label = "UTF-8";
+                }
+                catch
+                {
+                    text = Encoding.GetEncoding(936).GetString(b);
+                    m.Enc = Encoding.GetEncoding(936); m.Label = "GBK";
+                }
+            }
+            m.Eol = text.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "CRLF"
+                  : (text.IndexOf('\r') >= 0 ? "CR" : "LF");
+            try { _fileMeta[Path.GetFullPath(path)] = m; } catch { }
+            return text;
+        }
+
+        /// <summary>取某个已打开文件的编码信息（供界面状态栏显示）。</summary>
+        private static string MetaJson(string path)
+        {
+            FileMeta m;
+            try { if (!_fileMeta.TryGetValue(Path.GetFullPath(path), out m)) m = null; }
+            catch { m = null; }
+            if (m == null) return "{\"encoding\":\"UTF-8\",\"eol\":\"LF\"}";
+            return "{\"encoding\":" + Quote(m.Label) + ",\"eol\":" + Quote(m.Eol) + "}";
         }
         private void ExportTxt(string text)
         {
@@ -1678,6 +2457,132 @@ namespace RichTextGen
                 }
                 catch (Exception ex) { CallStr("status", "翻译失败：" + ex.Message); }
             });
+        }
+    }
+
+    /// <summary>关闭选择窗：这次是「最小化到后台」还是「退出应用」。</summary>
+    internal class CloseChoiceForm : Form
+    {
+        private readonly CheckBox _remember;
+
+        public bool Minimize { get; private set; }
+        public bool Cancelled { get; private set; }
+        public bool Remember { get { return _remember.Checked; } }
+
+        public CloseChoiceForm(bool dark)
+        {
+            Cancelled = true;
+            Text = "关闭窗口";
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterParent;
+            ClientSize = new Size(430, 205);
+            Font = new Font("Microsoft YaHei UI", 9f);
+            BackColor = dark ? Color.FromArgb(43, 43, 43) : Color.White;
+            ForeColor = dark ? Color.White : Color.FromArgb(27, 27, 27);
+
+            Label title = new Label();
+            title.Text = "要关闭应用，还是最小化到后台？";
+            title.Font = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold);
+            title.AutoSize = true;
+            title.Location = new Point(20, 18);
+
+            Label tip = new Label();
+            tip.Text = "最小化后程序仍在后台运行，可从托盘图标唤回；\r\n以后想直接退出，可在「设置 → 关闭行为」里改。";
+            tip.AutoSize = false;
+            tip.Size = new Size(390, 48);
+            tip.Location = new Point(20, 56);
+
+            _remember = new CheckBox();
+            _remember.Text = "记住我的选择（以后不再询问）";
+            _remember.AutoSize = true;
+            _remember.Location = new Point(20, 118);
+
+            Button min = new Button();
+            min.Text = "最小化到后台";
+            min.Size = new Size(126, 34);
+            min.Location = new Point(20, 150);
+            min.Click += delegate { Minimize = true; Cancelled = false; Close(); };
+
+            Button quit = new Button();
+            quit.Text = "退出应用";
+            quit.Size = new Size(100, 34);
+            quit.Location = new Point(156, 150);
+            quit.Click += delegate { Minimize = false; Cancelled = false; Close(); };
+
+            Button cancel = new Button();
+            cancel.Text = "取消";
+            cancel.Size = new Size(80, 34);
+            cancel.Location = new Point(266, 150);
+            cancel.Click += delegate { Cancelled = true; Close(); };
+
+            Controls.Add(title);
+            Controls.Add(tip);
+            Controls.Add(_remember);
+            Controls.Add(min);
+            Controls.Add(quit);
+            Controls.Add(cancel);
+            AcceptButton = min;
+            CancelButton = cancel;
+        }
+    }
+
+    /// <summary>启动提示窗口：说明后台常驻、标签拆分与系统集成的收窄范围。</summary>
+    internal class StartupTipForm : Form
+    {
+        private readonly CheckBox _noMore;
+
+        public bool DontShowAgain { get { return _noMore.Checked; } }
+
+        public StartupTipForm(bool dark)
+        {
+            Text = "使用提示";
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterParent;
+            ClientSize = new Size(520, 330);
+            Font = new Font("Microsoft YaHei UI", 9f);
+            BackColor = dark ? Color.FromArgb(43, 43, 43) : Color.White;
+            ForeColor = dark ? Color.White : Color.FromArgb(27, 27, 27);
+
+            Label title = new Label();
+            title.Text = "欢迎使用 彩色文本生成器";
+            title.Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
+            title.AutoSize = true;
+            title.Location = new Point(22, 18);
+
+            Label body = new Label();
+            body.Text =
+                "· 程序已在后台常驻：再次双击程序不会新开进程，只会唤回本窗口并打开你选的文件。\r\n" +
+                "  不同版本可以各开一个，互不影响。\r\n\r\n" +
+                "· 拖动任意标签到窗口外，可以把它拆成一个独立窗口（和记事本一样）。\r\n\r\n" +
+                "· 系统集成只登记 TXT / MD / LOG / JSON / INI / CSV 六种格式；\r\n" +
+                "  不需要时可在「设置 → 系统集成」里一键移除。";
+            body.AutoSize = false;
+            body.Size = new Size(476, 190);
+            body.Location = new Point(22, 60);
+
+            _noMore = new CheckBox();
+            _noMore.Text = "不再提示";
+            _noMore.AutoSize = true;
+            _noMore.Location = new Point(22, 268);
+
+            Button ok = new Button();
+            ok.Text = "知道了";
+            ok.DialogResult = DialogResult.OK;
+            ok.Size = new Size(110, 34);
+            ok.Location = new Point(388, 262);
+
+            Controls.Add(title);
+            Controls.Add(body);
+            Controls.Add(_noMore);
+            Controls.Add(ok);
+            AcceptButton = ok;
+            CancelButton = ok;
         }
     }
 }

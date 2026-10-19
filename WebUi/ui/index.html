@@ -8,18 +8,36 @@
     --bg:#f3f3f3; --card:#ffffff; --text:#1b1b1b; --sub:#5d5d5d; --line:#e5e5e5;
     --input:#ffffff; --inputLine:#d6d6d6; --accent:#0067c0; --accentText:#ffffff;
     --hover:#f0f0f0; --shadow:0 1px 3px rgba(0,0,0,.08);
+    --cardA:rgba(255,255,255,.70); --inputA:rgba(255,255,255,.78);
     --r8:8px; --r4:4px;
   }
   body.dark{
     --bg:#202020; --card:#2b2b2b; --text:#ffffff; --sub:#c5c5c5; --line:#3a3a3a;
     --input:#262626; --inputLine:#454545; --accent:#4cc2ff; --accentText:#10222e;
     --hover:#333333; --shadow:0 1px 3px rgba(0,0,0,.4);
+    --cardA:rgba(43,43,43,.74); --inputA:rgba(38,38,38,.80);
   }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--text);
        font:14px/1.6 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif;
        display:flex;flex-direction:column;overflow:hidden;user-select:none}
+  /* 背景图：铺在内容「下面」，像水印一样从半透明面板里透出来，绝不覆盖文字 */
+  #bgLayer{position:fixed;inset:0;z-index:-1;pointer-events:none;display:none;
+           background-position:center center;background-repeat:no-repeat;background-size:cover;
+           transition:opacity .18s ease}
+  body.bg-on #menubar,
+  body.bg-on #tabBar,
+  body.bg-on .tab{background:transparent}
+  body.bg-on #titlebar,
+  body.bg-on #menubar,
+  body.bg-on nav,
+  body.bg-on #statusbar{background:var(--cardA)}
+  body.bg-on .tab.on,
+  body.bg-on .card,
+  body.bg-on nav button.on{background:var(--cardA)}
+  body.bg-on #edSrc,
+  body.bg-on #edRich{background:var(--inputA)}
   /* 标题栏 */
   #titlebar{height:40px;display:flex;align-items:center;padding:0 6px 0 14px;gap:8px;flex:0 0 auto}
   #titlebar .logo{width:18px;height:18px;border-radius:var(--r4);
@@ -69,6 +87,43 @@
   button.b:hover{background:var(--hover)}
   button.b.hkkey{min-width:130px;font-variant-numeric:tabular-nums}
   button.b.hkkey.rec{background:var(--accent);color:var(--accentText);border-color:transparent}
+  /* ---- 滑块 / 滚动条跟随主题强调色 ---- */
+  input[type=range]{-webkit-appearance:none;appearance:none;height:20px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--inputLine)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;
+    border-radius:50%;background:var(--accent);border:2px solid var(--card);box-shadow:0 0 0 1px var(--inputLine)}
+  input[type=range]:focus{outline:none}
+  input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 2px var(--accent)}
+  *::-webkit-scrollbar{width:10px;height:10px}
+  *::-webkit-scrollbar-track{background:transparent}
+  *::-webkit-scrollbar-thumb{background:var(--inputLine);border-radius:6px;border:2px solid transparent;background-clip:content-box}
+  *::-webkit-scrollbar-thumb:hover{background:var(--sub);background-clip:content-box}
+  *::-webkit-scrollbar-corner{background:transparent}
+  /* ---- 快捷组件 ---- */
+  .qk-row{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--line)}
+  .qk-row:last-child{border-bottom:0}
+  .qk-ico{flex:0 0 auto;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    background:var(--hover);color:var(--accent);font-size:16px}
+  .qk-txt{flex:1;min-width:0}
+  .qk-t{font-size:13.5px;font-weight:600}
+  .qk-d{color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* ---- 小窗口下防止文字溢出 / 互相压住 ---- */
+  #tabBar{min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  #tabBar::-webkit-scrollbar{height:0}
+  .tab{flex:0 1 auto;min-width:72px;max-width:200px}
+  #edToolbar{min-width:0;overflow:hidden}
+  #mdHint{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #statusbar{min-width:0;overflow:hidden;white-space:nowrap}
+  nav{min-width:0}
+  nav button{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card{min-width:0}
+  @media (max-width:1150px){ #mdHint{display:none} }
+  @media (max-width:1000px){ .qk-row{flex-wrap:wrap} }
+  /* 工作台变窄时：左侧导航改成横向排布，把宽度让给内容卡片 */
+  #ws.narrow #wsBody{flex-direction:column;min-width:0;padding:0 10px 10px}
+  #ws.narrow nav{width:100%!important;flex-direction:row;flex-wrap:wrap;gap:2px;padding-top:2px}
+  #ws.narrow nav button{flex:0 0 auto;max-height:none;padding:6px 9px;font-size:12px}
+  #ws.narrow #navSplit{display:none}
   button.p{background:var(--accent);color:var(--accentText);border-color:transparent;font-weight:600}
   button.p:hover{filter:brightness(1.06)}
   .chk{display:inline-flex;align-items:center;gap:6px;margin-right:12px;font-size:13px;cursor:pointer}
@@ -220,6 +275,7 @@
   #newTab:hover{background:var(--hover)}
   .tab{display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;height:31px;min-width:120px;max-width:220px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--bg);color:var(--sub);font-size:12.5px;cursor:pointer;white-space:nowrap;overflow:hidden}
   .tab.on{background:var(--card);color:var(--text);font-weight:600}
+  .tab{touch-action:none}
   .tab .tbt{overflow:hidden;text-overflow:ellipsis}
   .tab .tbx{flex:0 0 auto;width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:.7}
   .tab .tbx:hover{background:var(--hover);opacity:1}
@@ -279,6 +335,7 @@
 </style>
 </head>
 <body>
+<div id="bgLayer"></div>
 
 <div id="titlebar">
   <div class="logo"></div>
@@ -332,6 +389,7 @@
     <button data-p="img"><span class="g">▦</span>图片系统</button>
     <button data-p="trans"><span class="g">⇄</span>在线翻译</button>
     <button data-p="chatwin"><span class="g">✦</span>AI 对话</button>
+    <button data-p="quick"><span class="g">⚡</span>快捷组件</button>
     <button data-p="set"><span class="g">⚙</span>设置</button>
   </nav>
 
@@ -475,13 +533,55 @@
       </div>
     </section>
 
+    <!-- 快捷组件 -->
+    <section class="page" id="p-quick">
+      <div class="card"><h3>⚡ 快捷组件</h3>
+        <div class="row"><span class="hint">这些组件既可以直接点「执行」，也可以绑定全局热键——热键在任何程序位于前台时都生效（例如把「退出应用」绑到 Ctrl+E，按下即退出）。</span></div>
+        <div id="quickList"></div>
+        <div class="row" style="margin-top:8px"><span class="hint">点 ✕ 的行为可在「设置 → 关闭行为」里调整。</span></div>
+      </div>
+    </section>
+
     <!-- 设置 -->
     <section class="page" id="p-set">
       <div class="card"><h3>外观</h3>
         <div class="row"><label class="f">主题</label>
           <select id="theme" onchange="setTheme(this.value)">
-            <option value="light">亮色（Win11）</option><option value="dark">深色（Win11）</option></select>
-          <span class="hint">圆角 8px / 控件 4px · Segoe UI Variable · Fluent 配色</span></div>
+            <option value="auto">跟随系统</option>
+            <option value="light">亮色（Win11）</option>
+            <option value="dark">深色（Win11）</option></select>
+          <span class="hint">选「跟随系统」后会随 Windows 的浅色/深色设置自动切换</span></div>
+
+        <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+          <label class="f">背景水印</label>
+          <label class="chk"><input type="checkbox" id="bgEnable" onchange="bgToggle()"> 启用</label>
+          <label class="chk"><input type="checkbox" id="bgShared" onchange="bgToggle()"> 深浅色共用一张</label>
+          <label class="f">透明度</label>
+          <input type="range" id="bgOpacity" min="0" max="80" step="1" value="20" style="width:130px" oninput="bgToggle()">
+          <span class="hint" id="bgOpacityVal">20%</span>
+          <label class="f">模糊</label>
+          <input type="range" id="bgBlur" min="0" max="20" step="1" value="0" style="width:90px" oninput="bgToggle()">
+          <span class="hint" id="bgBlurVal">0px</span>
+          <label class="f">显示方式</label>
+          <select id="bgFit" onchange="bgToggle()">
+            <option value="cover">铺满</option>
+            <option value="contain">完整显示</option>
+            <option value="tile">平铺</option>
+          </select>
+        </div>
+        <div class="row">
+          <label class="f">深色图</label>
+          <button class="b" onclick="host('pickBg|dark')">选择图片…</button>
+          <span class="hint" id="bgDarkName">未选择</span>
+          <button class="b" onclick="host('clearBg|dark')">清除</button>
+        </div>
+        <div class="row">
+          <label class="f">亮色图</label>
+          <button class="b" onclick="host('pickBg|light')">选择图片…</button>
+          <span class="hint" id="bgLightName">未选择</span>
+          <button class="b" onclick="host('clearBg|light')">清除</button>
+        </div>
+        <div class="row"><span class="hint">开启后背景图铺在内容下方，通过半透明面板像水印一样透出来，不会盖住文字；图片保存在本机 <code>%APPDATA%\RichTextGen</code>，不会上传。</span></div>
       </div>
       <div class="card"><h3>全局热键</h3>
         <div class="row"><span class="hint" id="hotkeyInfo">热键状态读取中…</span>
@@ -490,12 +590,25 @@
         <div id="hkList"></div>
         <div class="row"><span class="hint">点击右侧快捷键即可录制修改（需含 Ctrl / Alt / Shift 加功能键），设置自动保存；组合冲突或被占用会提示</span></div>
       </div>
-      <div class="card"><h3>系统集成（右键菜单）</h3>
-        <div class="row">
-          <button class="b" onclick="host('registerShell')">添加到右键菜单</button>
-          <button class="b" onclick="host('unregisterShell')">从右键菜单移除</button>
-          <span class="hint">注册后可在任意文件上右键 →「用彩色文本生成器打开」；仅写入当前用户（免管理员），首次启动自动注册，卸载时自动清理。</span>
+      <div class="card"><h3>关闭行为</h3>
+        <div class="row"><label class="f">点 ✕ 时</label>
+          <select id="closeAction" onchange="host('setCloseAction|' + this.value)">
+            <option value="ask">每次询问（最小化 / 退出）</option>
+            <option value="minimize">最小化到后台</option>
+            <option value="exit">直接退出应用</option>
+          </select>
+          <span class="hint" id="closeActionTip">选「直接退出应用」后，点 ✕ 或按 Alt+F4 会真正结束程序。</span>
         </div>
+        <div class="row"><span class="hint">选「最小化到后台」时程序仍在运行；想彻底退出，可把这里改成「直接退出应用」，或用「快捷组件 → 退出应用」。</span></div>
+      </div>
+      <div class="card"><h3>系统集成（打开方式 / 右键菜单）</h3>
+        <div class="row">
+          <button class="b" onclick="host('registerShell')">注册到右键菜单与打开方式</button>
+          <button class="b" onclick="host('unregisterShell')">移除注册</button>
+          <button class="b p" onclick="host('openDefaultApps')">打开系统默认应用设置</button>
+        </div>
+        <div class="row"><span class="hint">注册后会写入：① 任意文件右键 →「用彩色文本生成器打开」；②「打开方式」列表中出现本程序；③ 只接管最常用的 6 种文本格式：TXT / MD / LOG / JSON / INI / CSV（不再一次性塞进三十多个扩展名）。</span></div>
+        <div class="row"><span class="hint">Windows 10/11 不允许程序静默抢默认打开方式：想双击 TXT 直接进本程序，请点上面的「打开系统默认应用设置」，把 <b>.txt</b> 的默认应用选成本程序（只需设置一次）。之后资源管理器右键菜单里也会像记事本一样出现本程序入口。</span></div>
       </div>
       <div class="card"><h3>更新</h3>
         <div class="row"><button class="b" onclick="host('checkUpdate')">立即检测更新</button>
@@ -693,6 +806,10 @@
   <span class="badge" id="net" title="点击有惊喜（联网 5 次）">● 检测中</span>
   <span id="status">就绪</span>
   <span style="flex:1"></span>
+  <span id="sbPos">行 1，列 1</span>
+  <span id="sbChars">0 个字符</span>
+  <span id="sbEnc">UTF-8</span>
+  <span id="sbEol">LF</span>
   <span class="badge">Unity 6 / TextMeshPro</span>
 </div>
 <div id="updatedMask" onclick="this.classList.remove('on')">
@@ -771,6 +888,13 @@ function fmtKeys(k){
   return s.join('+');
 }
 let hkCapture = null;
+function startHotkeyRecord(btn, action, keys){
+  if (hkCapture) { hkCapture.textContent = fmtKeys(hkCapture._keys); hkCapture.classList.remove('rec'); }
+  hkCapture = btn;
+  btn._keys = keys;
+  btn.textContent = '请按组合键…（Esc 取消）';
+  btn.classList.add('rec');
+}
 function renderHotkeys(defs){
   const box = $('hkList'); if (!box) return;
   box.innerHTML = '';
@@ -782,16 +906,50 @@ function renderHotkeys(defs){
     sp.textContent = d.desc;
     const btn = document.createElement('button');
     btn.className = 'b hkkey';
-    btn.textContent = fmtKeys(d.keys);
+    btn.textContent = d.keys ? fmtKeys(d.keys) : '未绑定';
     btn.dataset.action = d.action;
-    btn.onclick = () => {
-      if (hkCapture) { hkCapture.textContent = fmtKeys(hkCapture._keys); hkCapture.classList.remove('rec'); }
-      hkCapture = btn;
-      btn._keys = d.keys;
-      btn.textContent = '请按组合键…（Esc 取消）';
-      btn.classList.add('rec');
-    };
+    btn.onclick = () => startHotkeyRecord(btn, d.action, d.keys);
     row.appendChild(sp); row.appendChild(btn);
+    box.appendChild(row);
+  });
+  renderQuick(defs);
+}
+
+/* 快捷组件：执行 + 热键绑定（复用同一套录制逻辑） */
+const QUICK_ITEMS = [
+  { a: 'quit',     ico: '⏻', t: '退出应用',         d: '结束整个程序（含所有拆分窗口）' },
+  { a: 'minimize', ico: '▁', t: '最小化窗口',       d: '收起到任务栏' },
+  { a: 'theme',    ico: '◐', t: '切换深色 / 浅色',  d: '在深色与亮色之间切换' },
+  { a: 'hide',     ico: '▾', t: '隐藏 / 显示窗口',  d: '收进托盘，再按一次唤回' }
+];
+function renderQuick(defs){
+  const box = $('quickList'); if (!box) return;
+  box.innerHTML = '';
+  const map = {};
+  (defs || []).forEach(d => { map[d.action] = d; });
+  QUICK_ITEMS.forEach(q => {
+    const d = map[q.a] || { keys: 0, desc: q.d };
+    const row = document.createElement('div');
+    row.className = 'qk-row';
+
+    const ico = document.createElement('span'); ico.className = 'qk-ico'; ico.textContent = q.ico;
+    const txt = document.createElement('div'); txt.className = 'qk-txt';
+    const t = document.createElement('div'); t.className = 'qk-t'; t.textContent = q.t;
+    const desc = document.createElement('div'); desc.className = 'qk-d'; desc.textContent = q.d;
+    txt.appendChild(t); txt.appendChild(desc);
+
+    const hb = document.createElement('button');
+    hb.className = 'b hkkey';
+    hb.textContent = d.keys ? fmtKeys(d.keys) : '未绑定';
+    hb.title = '点击后按下新的组合键即可改绑';
+    hb.onclick = () => startHotkeyRecord(hb, q.a, d.keys);
+
+    const run = document.createElement('button');
+    run.className = 'b p';
+    run.textContent = '执行';
+    run.onclick = () => host('runAction|' + q.a);
+
+    row.appendChild(ico); row.appendChild(txt); row.appendChild(hb); row.appendChild(run);
     box.appendChild(row);
   });
 }
@@ -818,6 +976,7 @@ window.ui = {
   version: v => { if(!v) return; $('ver').textContent = "v" + v; $('ver2').textContent = v; },
   hotkeys: s => { const e = $('hotkeyInfo'); if(e) e.textContent = s || ""; },
   hotkeyDefs: s => { try { renderHotkeys(JSON.parse(s || "[]")); } catch(_) {} },
+  closeAction: s => { const el = $('closeAction'); if (el && s) el.value = s; },
   updated: o => {
     const badge = (o.type === "security") ? "安全更新" : (o.type === "fix" ? "问题修复" : "功能更新");
     const color = (o.type === "security") ? "#c42b1c" : (o.type === "fix" ? "#8a6d00" : "#0f7b3f");
@@ -922,8 +1081,117 @@ quick.forEach(c=>{
   $('quick').appendChild(b);
 });
 
-/* ---------- 主题（记住选择） ---------- */
-function setTheme(v){ document.body.classList.toggle('dark', v==='dark'); try{ localStorage.setItem('rtgTheme', v); }catch(e){} try{ host('theme|'+v); }catch(e){} }
+/* ---------- 主题（亮色 / 深色 / 跟随系统） ---------- */
+function systemDark(){
+  try{ return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
+  catch(e){ return false; }
+}
+function resolvedTheme(v){
+  if (v === 'auto') return systemDark() ? 'dark' : 'light';
+  return v === 'dark' ? 'dark' : 'light';
+}
+function setTheme(v){
+  if (v !== 'auto' && v !== 'dark' && v !== 'light') v = 'auto';
+  try{ localStorage.setItem('rtgTheme', v); }catch(e){}
+  const eff = resolvedTheme(v);
+  document.body.classList.toggle('dark', eff === 'dark');
+  const sel = $('theme'); if (sel && sel.value !== v) sel.value = v;
+  try{ if (typeof bgApply === 'function') bgApply(); }catch(e){}
+  try{ host('theme|' + eff); }catch(e){}
+}
+/* 快捷组件用：在深色 / 亮色之间切换 */
+function toggleTheme(){
+  const dark = document.body.classList.contains('dark');
+  setTheme(dark ? 'light' : 'dark');
+}
+/* 系统在浅色/深色之间切换时，如果当前选的是「跟随系统」，自动跟着变 */
+try{
+  const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  if (mq){
+    const onSys = function(){ if ((localStorage.getItem('rtgTheme') || 'auto') === 'auto') setTheme('auto'); };
+    if (mq.addEventListener) mq.addEventListener('change', onSys);
+    else if (mq.addListener) mq.addListener(onSys);
+  }
+}catch(e){}
+
+/* ---------- 背景水印（深色 / 亮色可分别设置，也可共用一张） ---------- */
+const BG_KEY = 'rtgBg';
+const bgImgs = { dark: '', light: '' };
+const bgNames = { dark: '', light: '' };
+
+function bgCfg(){
+  try{ return JSON.parse(localStorage.getItem(BG_KEY) || '{}') || {}; }catch(e){ return {}; }
+}
+function bgState(){
+  const c = bgCfg();
+  return {
+    enable: !!c.enable,
+    shared: c.shared !== false,
+    opacity: (c.opacity == null ? 20 : +c.opacity),
+    blur: (+c.blur || 0),
+    fit: c.fit || 'cover'
+  };
+}
+function bgSave(){
+  const c = bgCfg();
+  const s = {
+    enable: $('bgEnable') ? $('bgEnable').checked : !!c.enable,
+    shared: $('bgShared') ? $('bgShared').checked : (c.shared !== false),
+    opacity: $('bgOpacity') ? +$('bgOpacity').value : (c.opacity == null ? 20 : +c.opacity),
+    blur: $('bgBlur') ? +$('bgBlur').value : (+c.blur || 0),
+    fit: $('bgFit') ? $('bgFit').value : (c.fit || 'cover')
+  };
+  try{ localStorage.setItem(BG_KEY, JSON.stringify(s)); }catch(e){}
+  return s;
+}
+function bgApply(){
+  const el = $('bgLayer'); if (!el) return;
+  const s = bgState();
+  const dark = document.body.classList.contains('dark');
+  const url = s.shared ? (bgImgs.dark || bgImgs.light) : (dark ? bgImgs.dark : bgImgs.light);
+  const on = s.enable && !!url;
+  el.style.display = on ? 'block' : 'none';
+  document.body.classList.toggle('bg-on', on);   // 面板转为半透明，让背景图从下面透出来
+  if (!on) return;
+  el.style.backgroundImage = 'url("' + url + '")';
+  el.style.opacity = String(Math.max(0, Math.min(100, s.opacity)) / 100);
+  el.style.filter = s.blur > 0 ? ('blur(' + s.blur + 'px)') : 'none';
+  if (s.fit === 'tile'){
+    el.style.backgroundSize = 'auto';
+    el.style.backgroundRepeat = 'repeat';
+  }else{
+    el.style.backgroundSize = s.fit;
+    el.style.backgroundRepeat = 'no-repeat';
+  }
+}
+function bgToggle(){
+  bgSave();
+  const s = bgState();
+  if ($('bgOpacityVal')) $('bgOpacityVal').textContent = s.opacity + '%';
+  if ($('bgBlurVal')) $('bgBlurVal').textContent = s.blur + 'px';
+  bgApply();
+}
+function bgInit(){
+  const s = bgState();
+  if ($('bgEnable')) $('bgEnable').checked = s.enable;
+  if ($('bgShared')) $('bgShared').checked = s.shared;
+  if ($('bgOpacity')) $('bgOpacity').value = s.opacity;
+  if ($('bgBlur')) $('bgBlur').value = s.blur;
+  if ($('bgFit')) $('bgFit').value = s.fit;
+  if ($('bgOpacityVal')) $('bgOpacityVal').textContent = s.opacity + '%';
+  if ($('bgBlurVal')) $('bgBlurVal').textContent = s.blur + 'px';
+  bgApply();
+  try{ host('bgLoad'); }catch(e){}   // 让宿主把已保存的图片读回来
+}
+/* 宿主回传背景图（data URL） */
+window.ui.bgImage = function(o){
+  if (!o || (o.kind !== 'dark' && o.kind !== 'light')) return;
+  bgImgs[o.kind] = o.url || '';
+  bgNames[o.kind] = o.name || '';
+  if ($('bgDarkName')) $('bgDarkName').textContent = bgNames.dark || '未选择';
+  if ($('bgLightName')) $('bgLightName').textContent = bgNames.light || '未选择';
+  bgApply();
+};
 
 /* ---------- 翻译（预装免费服务） ---------- */
 const TR_PRESETS = {
@@ -2106,7 +2374,9 @@ window.addEventListener('drop', e=>{
 });
 
 /* ---------- 启动 ---------- */
-try{ setTheme(localStorage.getItem('rtgTheme') === 'dark' ? 'dark' : 'light'); }catch(e){ setTheme('light'); }
+try{ setTheme(localStorage.getItem('rtgTheme') || 'auto'); }catch(e){ setTheme('auto'); }
+try{ bgInit(); }catch(e){}
+try{ renderQuick([]); }catch(e){}
 host('ready');
 </script>
 <script>
@@ -2901,7 +3171,8 @@ const DocM = (function(){
   function byId(id){ for (const d of docs) if (d.id === id) return d; return null; }
   function addDoc(name, path, buffer, activate){
     seq++;
-    const d = { id: seq, name: name || '无标题', path: path || '', buffer: buffer || '', dirty: false };
+    const d = { id: seq, name: name || '无标题', path: path || '', buffer: buffer || '', dirty: false,
+                enc: 'UTF-8', eol: 'LF' };
     docs.push(d);
     if (activate !== false){ activeId = d.id; loadEditor(d); }
     render();
@@ -2913,12 +3184,14 @@ const DocM = (function(){
     for (const d of docs){
       const tab = document.createElement('div');
       tab.className = 'tab' + (d.id === activeId ? ' on' : '');
+      tab.title = '拖动到窗口外可拆分为新窗口';
       const sp = document.createElement('span'); sp.className = 'tbt';
       sp.textContent = (d.dirty ? '● ' : '') + d.name;
       const x = document.createElement('span'); x.className = 'tbx'; x.textContent = '✕';
       x.title = '关闭';
       x.onclick = ev => { ev.stopPropagation(); closeTab(d.id); };
-      tab.onclick = () => switchTab(d.id);
+      tab.onclick = () => { if (d.__tearing) return; switchTab(d.id); };
+      tab.addEventListener('pointerdown', ev => startTabDrag(ev, d.id, tab));
       tab.appendChild(sp); tab.appendChild(x);
       bar.appendChild(tab);
     }
@@ -2926,6 +3199,8 @@ const DocM = (function(){
     // 标签页增删/切换/改名后立即把最新状态同步给 AI 与端口服务，
     // 否则独立对话窗口里的 AI 读到的还是旧快照（会答"没有标签页"）。
     try { if (typeof aiPushState === 'function') aiPushState(); } catch(e){}
+    try { if (typeof updateSb === 'function') updateSb(); } catch(e){}
+    try { host('dirty|' + docs.filter(function(x){ return x.dirty; }).length); } catch(e){}
   }
   function loadEditor(d){ edSrc().value = d.buffer; if (viewHook) viewHook(); }
   /* 当前编辑区的真实文本：渲染模式下 contenteditable 里可能是最新，从这里统一取 */
@@ -2985,7 +3260,7 @@ const DocM = (function(){
   function saveAs(){
     const a = byId(activeId); if (!a) return;
     a.buffer = getActiveText();
-    host('saveAsFile|' + encodeURIComponent(a.buffer));
+    host('saveAsFile|' + encodeURIComponent(a.name || '无标题.txt') + '|' + encodeURIComponent(a.buffer));
   }
   function openFromHost(o){
     const msg = (o && o.msg) || '';
@@ -2996,15 +3271,43 @@ const DocM = (function(){
         switchTab(d.id); status('已切换到已打开的 ' + d.name); return;
       }
     }
+    // 只有一个空白未命名标签时直接复用，避免「打开文件后还留一个空标签页」
+    const cur = byId(activeId);
+    if (docs.length === 1 && cur && !cur.path && !cur.dirty && !(cur.buffer || '')){
+      cur.name = o.name || '无标题';
+      cur.path = path;
+      cur.buffer = o.text || '';
+      cur.dirty = !!o.dirty;
+      cur.enc = o.encoding || 'UTF-8';
+      cur.eol = o.eol || 'LF';
+      loadEditor(cur);
+      render();
+      status(msg || '已打开 ' + (o.name || ''));
+      try{ if (typeof updateSb === 'function') updateSb(); }catch(e){}
+      return;
+    }
     addDoc(o.name || '无标题', path, o.text || '', true);
+    const d = docs[docs.length - 1];
+    if (d){
+      if (o.encoding) d.enc = o.encoding;
+      if (o.eol) d.eol = o.eol;
+      if (o.dirty) { d.dirty = true; render(); }
+    }
     status(msg || '已打开 ' + (o.name || ''));
+    try{ if (typeof updateSb === 'function') updateSb(); }catch(e){}
   }
   function saved(o){
     if (!o || !o.ok){ status((o && o.msg) || '保存未完成'); return; }
     const a = byId(activeId); if (!a) return;
     a.path = o.path; a.name = o.name; a.dirty = false;
+    if (o.encoding) a.enc = o.encoding;
     render();
     status('已保存 ' + (o.name || ''));
+    try{ if (typeof updateSb === 'function') updateSb(); }catch(e){}
+  }
+  function activeMeta(){
+    const a = byId(activeId);
+    return a ? { enc: a.enc || 'UTF-8', eol: a.eol || 'LF' } : { enc: 'UTF-8', eol: 'LF' };
   }
   function markDirty(){
     const a = byId(activeId); if (!a) return;
@@ -3064,6 +3367,52 @@ const DocM = (function(){
   }
   function closeActive(){ if (activeId) closeTab(activeId); }
   function tabNames(){ return docs.map(d => d.name); }
+
+  /* 把标签拖到窗口外 → 交给宿主在本进程里开一个新窗口（像记事本一样） */
+  function tearTab(id){
+    const d = byId(id); if (!d) return;
+    const text = (d.id === activeId) ? getActiveText() : (d.buffer || '');
+    const payload = { ok: true, path: d.path || '', name: d.name || '无标题', text: text,
+                      encoding: d.enc || 'UTF-8', eol: d.eol || 'LF', dirty: !!d.dirty };
+    d.__tearing = true;
+    host('tearTab|' + encodeURIComponent(JSON.stringify(payload)));
+    const at = docs.indexOf(d);
+    if (at >= 0) docs.splice(at, 1);
+    if (!docs.length){ addDoc('无标题', '', '', true); return; }
+    if (activeId === id){
+      const next = docs[Math.min(at, docs.length - 1)];
+      activeId = next.id;
+      syncEditor();
+    }
+    render();
+    try{ if (typeof updateSb === 'function') updateSb(); }catch(e){}
+  }
+  function startTabDrag(ev, id, tab){
+    if (ev.button !== 0) return;
+    if (ev.target && ev.target.classList && ev.target.classList.contains('tbx')) return;
+    try { tab.setPointerCapture(ev.pointerId); } catch(e){}
+    const sx = ev.clientX, sy = ev.clientY;
+    let moved = false;
+    function pm(e){
+      if (Math.abs(e.clientX - sx) > 6 || Math.abs(e.clientY - sy) > 6) moved = true;
+    }
+    function cleanup(){
+      tab.removeEventListener('pointermove', pm);
+      tab.removeEventListener('pointerup', pu);
+      tab.removeEventListener('pointercancel', cleanup);
+    }
+    function pu(e){
+      cleanup();
+      if (!moved) return;
+      // 指针跑到窗口外（含负坐标 / 超出内宽高）→ 分裂成新窗口
+      const out = e.clientX < 0 || e.clientY < 0 ||
+                  e.clientX > window.innerWidth || e.clientY > window.innerHeight;
+      if (out) tearTab(id);
+    }
+    tab.addEventListener('pointermove', pm);
+    tab.addEventListener('pointerup', pu);
+    tab.addEventListener('pointercancel', cleanup);
+  }
   /* 所有已打开标签页的正文（AI 需要看非当前标签页的内容时用）。
      单个标签最多 15000 字符、合计最多 30000 字符，避免把请求撑爆。 */
   function allTabs(){
@@ -3083,10 +3432,34 @@ const DocM = (function(){
   return { newTab, switchTab, closeTab, save, saveAs, addDoc, openFromHost, saved, markDirty,
            setActiveBuffer, setViewHook: f => { viewHook = f; },
            activeText, activeName, setActiveText, setActiveName,
-           switchByName, closeActive, tabNames, allTabs };
+           switchByName, closeActive, tabNames, allTabs, activeMeta };
 })();
 /* 启动：创建第一个「无标题」标签 */
 DocM.addDoc('无标题', '', '', true);
+
+/* ---------- 状态栏：行/列、字符数、编码、换行符 ---------- */
+function updateSb(){
+  const el = document.getElementById('edSrc'); if (!el) return;
+  const v = el.value || '';
+  const s = el.selectionStart || 0;
+  const before = v.slice(0, s);
+  const line = (before.match(/\n/g) || []).length + 1;
+  const col = s - (before.lastIndexOf('\n') + 1) + 1;
+  const p = document.getElementById('sbPos');
+  const c = document.getElementById('sbChars');
+  const e = document.getElementById('sbEnc');
+  const l = document.getElementById('sbEol');
+  if (p) p.textContent = '行 ' + line + '，列 ' + col;
+  if (c) c.textContent = v.length.toLocaleString() + ' 个字符';
+  const m = (typeof DocM !== 'undefined' && DocM.activeMeta) ? DocM.activeMeta() : { enc: 'UTF-8', eol: 'LF' };
+  if (e) e.textContent = m.enc || 'UTF-8';
+  if (l) l.textContent = m.eol || 'LF';
+}
+(function(){
+  const el = document.getElementById('edSrc'); if (!el) return;
+  ['click','keyup','input','select','focus'].forEach(function(ev){ el.addEventListener(ev, updateSb); });
+  updateSb();
+})();
 </script>
 <script>
 /* ================= 追加：编辑器双模式（源码 / 渲染所见即所得）+ 标签↔HTML 双向转换（概念设计 M3） ================= */
@@ -3578,7 +3951,8 @@ const EdMode = (function(){
   const splitter = () => document.getElementById('splitter');
   if (splitter() && ws()){
     const MIN_W = 250, DEF_W = 540;
-    const MAX_W = () => Math.round(window.innerWidth * 0.7);
+    // 工作台最多占窗口一半宽：窗口缩小时自动收窄，避免把编辑区挤没、内容被裁掉
+    const MAX_W = () => Math.round(Math.min(560, window.innerWidth * 0.5));
     const getW = () => {
       try { const v = localStorage.getItem('rtgWsW'); const n = parseInt(v, 10); if (n > 0) return n; } catch(e) {}
       return DEF_W;
@@ -3586,6 +3960,7 @@ const EdMode = (function(){
     const setW = w => {
       w = Math.max(MIN_W, Math.min(MAX_W(), w));
       ws().style.flexBasis = w + 'px';
+      ws().classList.toggle('narrow', w < 520);   // 窄时导航横排，给内容让位
       try { localStorage.setItem('rtgWsW', String(w)); } catch(e) {}
     };
     // 折叠态不恢复用户宽度（.cold 的 flex-basis 覆盖）
@@ -3612,6 +3987,8 @@ const EdMode = (function(){
       splitter().classList.remove('dragging');
     });
     splitter().addEventListener('dblclick', () => { setW(DEF_W); });
+    // 窗口变窄时重新夹一次宽度，避免工作台超过一半、把编辑区挤没
+    window.addEventListener('resize', function(){ if (!ws().classList.contains('cold')) setW(getW()); });
   }
 })();
 
