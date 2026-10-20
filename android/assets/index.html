@@ -27,7 +27,7 @@
   header .v{color:var(--sub);font-size:11.5px}
   header .sp{flex:1}
   .iconbtn{background:var(--chip);border:1px solid var(--line);color:var(--text);border-radius:var(--r4);
-    min-width:38px;height:34px;font-size:15px;display:flex;align-items:center;justify-content:center;padding:0 8px}
+    min-width:42px;height:38px;font-size:15px;display:flex;align-items:center;justify-content:center;padding:0 8px}
   .scroll{overflow:auto;-webkit-overflow-scrolling:touch}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r8);padding:8px}
   .lbl{font-size:11.5px;color:var(--sub);margin:0 0 5px}
@@ -50,7 +50,7 @@
     word-break:break-word;overflow:auto}
   #preview sub,#preview sup{font-size:.72em}
   #out{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:pre-wrap;word-break:break-all;
-    overflow:auto;margin:0}
+    overflow:auto;margin:0;min-height:34px}
   .actions{display:flex;gap:8px;padding:8px var(--pad);flex:0 0 auto;
     background:var(--bg);border-top:1px solid var(--line)}
   .btn{flex:1 1 0;min-width:0;border:0;border-radius:var(--r8);min-height:46px;font-size:15px;font-weight:600;color:#fff;background:var(--accent)}
@@ -62,10 +62,44 @@
     padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s}
   .pop.on{opacity:1}
 
+  /* ---------- 背景图（水印层，铺在内容下面，不遮挡文字） ---------- */
+  #bgLayer{position:fixed;left:0;top:0;right:0;bottom:0;z-index:-1;opacity:0;pointer-events:none;
+    background-position:center;background-size:cover;background-repeat:no-repeat;transition:opacity .2s}
+  #bgLayer.on{opacity:1}
+  body.hasbg{background:transparent}
+  body.hasbg .card{background:rgba(255,255,255,.74)}
+  body.dark.hasbg .card{background:rgba(43,43,43,.76)}
+  body.hasbg header,body.hasbg .actions,body.hasbg .meta{background:rgba(243,243,243,.55)}
+  body.dark.hasbg header,body.dark.hasbg .actions,body.dark.hasbg .meta{background:rgba(32,32,32,.55)}
+
+  /* ---------- 设置面板 ---------- */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;
+    transition:opacity .2s;z-index:19}
+  .mask.on{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);
+    border-top:1px solid var(--line);border-radius:14px 14px 0 0;
+    padding:12px var(--pad) calc(12px + env(safe-area-inset-bottom));
+    transform:translateY(105%);transition:transform .22s ease;max-height:82vh;overflow:auto}
+  .sheet.on{transform:none}
+  .sheet h4{margin:2px 0 10px;font-size:14px}
+  .sheet .grp{margin:12px 0}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{flex:1;border:0;background:transparent;color:var(--text);padding:9px 4px;font:inherit;font-size:13px}
+  .seg button.on{background:var(--accent);color:#fff;font-weight:600}
+  .sbtn{border:1px solid var(--line);background:var(--chip);color:var(--text);border-radius:8px;
+    padding:9px 12px;font:inherit;font-size:13px;min-height:38px;flex:0 0 auto}
+  .sbtn.p{background:var(--accent);color:#fff;border-color:transparent}
+  .upd{display:none;margin-top:8px;padding:9px 10px;border:1px solid var(--accent);
+    border-radius:8px;font-size:12.5px;line-height:1.5}
+  .upd.on{display:block}
+  .upd button{margin-top:6px;border:0;border-radius:6px;background:var(--accent);color:#fff;
+    padding:7px 14px;font:inherit;font-size:13px}
+
   /* ---------------- 竖屏：功能精简（无文本编辑区，整列可滚动） ---------------- */
   @media (orientation:portrait){
     .only-landscape{display:none !important}
     main{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:var(--pad);padding:0 var(--pad)}
+    #preview{max-height:120px}       /* 长文本只在框内滚动，不把页脚顶出屏幕 */
     #pOut{max-height:112px}
   }
   /* ---------------- 横屏：功能更多（左右两列各自滚动，内容永不丢） ---------------- */
@@ -80,11 +114,13 @@
 </style>
 </head>
 <body>
+<div id="bgLayer"></div>
 
 <header>
   <span class="t">彩色文本生成器</span>
-  <span class="v" id="ver">v1.0.0</span>
+  <span class="v" id="ver">v1.1.0</span>
   <span class="sp"></span>
+  <button class="iconbtn" id="setBtn" title="设置">⚙</button>
   <button class="iconbtn" id="themeBtn" title="切换主题">◐</button>
 </header>
 
@@ -184,6 +220,59 @@
   <button class="btn ghost" id="clearBtn">清空</button>
 </div>
 
+<div class="mask" id="mask"></div>
+<div class="sheet" id="sheet">
+  <h4>设置</h4>
+
+  <div class="grp">
+    <div class="lbl">主题</div>
+    <div class="seg" id="themeSeg">
+      <button data-tm="light">浅色</button>
+      <button data-tm="dark">深色</button>
+      <button data-tm="auto">跟随系统</button>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="lbl">背景图（水印层，铺在文字下面，不遮挡内容）</div>
+    <div class="row">
+      <button class="sbtn grow" id="pickBg">从相册选择</button>
+      <button class="sbtn" id="clearBg">清除</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span class="lbl" style="margin:0;white-space:nowrap">透明度</span>
+      <input type="range" class="grow" id="bgOpacity" min="0" max="60" value="20">
+      <span class="v" id="bgOpacityV" style="color:var(--sub);width:38px;text-align:right">20%</span>
+    </div>
+  </div>
+
+  <div class="grp">
+    <div class="lbl">文本文件</div>
+    <div class="row">
+      <button class="sbtn grow" id="openTxt">打开文本</button>
+      <button class="sbtn grow" id="saveTxt">保存为文件</button>
+    </div>
+    <div class="lbl" id="fileName" style="margin-top:6px">未打开文件</div>
+  </div>
+
+  <div class="grp">
+    <div class="lbl">版本</div>
+    <div class="row">
+      <span class="v" id="aboutVer">v1.1.0</span>
+      <span class="grow"></span>
+      <button class="sbtn" id="checkUpd">检查更新</button>
+    </div>
+    <div class="upd" id="updBox"></div>
+  </div>
+
+  <div class="grp" style="color:var(--sub);font-size:12px">
+    彩色文本生成器 · 安卓版<br>
+    支持 Unity / TextMeshPro 富文本标签；复制后可直接贴进游戏或聊天框。
+  </div>
+
+  <button class="sbtn p" style="width:100%;margin-top:4px" id="closeSheet">完成</button>
+</div>
+
 <div class="pop" id="pop"></div>
 
 <script>
@@ -195,13 +284,17 @@
    标签按 Unity/TextMeshPro 规则生成；预览把标签映射成 HTML 显示。
    ============================================================ */
 
-var APP_VERSION = "1.0.0";
+var APP_VERSION = "1.1.0";
 var MIN = 30;                                  // TMP 默认字号基准，用于预览换算
 
 /* ---------- 原生桥（浏览器里打开时自动降级） ---------- */
 var RTG = window.RTG || null;
 function bridge(name, arg) {
   try { if (RTG && typeof RTG[name] === "function") { RTG[name](arg); return true; } } catch (e) {}
+  return false;
+}
+function bridge2(name, a, b) {
+  try { if (RTG && typeof RTG[name] === "function") { RTG[name](a, b); return true; } } catch (e) {}
   return false;
 }
 function pop(msg) {
@@ -409,23 +502,147 @@ $("shareBtn").addEventListener("click", function () {
 });
 $("clearBtn").addEventListener("click", function () { setText(""); stat("已清空"); });
 
-/* ---------- 主题 ---------- */
-$("themeBtn").addEventListener("click", function () { setTheme(S.theme === "dark" ? "light" : "dark"); });
-function setTheme(v) {
-  S.theme = v === "dark" ? "dark" : "light";
-  document.body.classList.toggle("dark", S.theme === "dark");
-  try { localStorage.setItem("rtgTheme", S.theme); } catch (e) {}
-  try { if (RTG && RTG.theme) RTG.theme(S.theme); } catch (e) {}
-  try { if (window.chrome && chrome.webview) chrome.webview.postMessage("theme|" + S.theme); } catch (e) {}
+/* ---------- 主题：浅色 / 深色 / 跟随系统 ---------- */
+var themeMode = "auto";
+function systemDark() {
+  try { if (RTG && typeof RTG.systemTheme === "function") return RTG.systemTheme() === "dark"; } catch (e) {}
+  try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); } catch (e) {}
+  return false;
 }
+function applyTheme() {
+  var dark = themeMode === "dark" || (themeMode === "auto" && systemDark());
+  document.body.classList.toggle("dark", dark);
+  Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"), function (b) {
+    b.classList.toggle("on", b.dataset.tm === themeMode);
+  });
+}
+function setThemeMode(m) {
+  themeMode = (m === "dark" || m === "light") ? m : "auto";
+  try { localStorage.setItem("rtgThemeMode", themeMode); } catch (e) {}
+  applyTheme();
+}
+window.onSystemTheme = function () { if (themeMode === "auto") applyTheme(); };
+$("themeBtn").addEventListener("click", function () {
+  setThemeMode(document.body.classList.contains("dark") ? "light" : "dark");
+});
+Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"), function (b) {
+  b.addEventListener("click", function () { setThemeMode(b.dataset.tm); });
+});
+
+/* ---------- 背景图 ---------- */
+var BG = { path: "", opacity: 20 };
+function applyBg() {
+  var layer = $("bgLayer");
+  if (BG.path) {
+    layer.style.backgroundImage = 'url("file://' + BG.path.replace(/\\/g, "/") + '")';
+    layer.style.opacity = BG.opacity / 100;
+    layer.classList.add("on");
+    document.body.classList.add("hasbg");
+  } else {
+    layer.style.backgroundImage = "";
+    layer.classList.remove("on");
+    document.body.classList.remove("hasbg");
+  }
+  $("bgOpacity").value = BG.opacity;
+  $("bgOpacityV").textContent = BG.opacity + "%";
+}
+window.onBgPicked = function (p) {
+  BG.path = p || "";
+  try { localStorage.setItem("rtgBgPath", BG.path); } catch (e) {}
+  applyBg(); pop("背景图已设置");
+};
+window.onBgPickFailed = function (m) { pop("选择失败：" + m); };
+$("pickBg").addEventListener("click", function () {
+  if (!bridge("pickImage")) pop("仅手机端可用");
+});
+$("clearBg").addEventListener("click", function () {
+  BG.path = "";
+  try { localStorage.removeItem("rtgBgPath"); } catch (e) {}
+  bridge("clearBg"); applyBg(); pop("已清除背景图");
+});
+$("bgOpacity").addEventListener("input", function () {
+  BG.opacity = parseInt(this.value, 10) || 0;
+  try { localStorage.setItem("rtgBgOpacity", String(BG.opacity)); } catch (e) {}
+  applyBg();
+});
+
+/* ---------- 文本文件 ---------- */
+window.onTextOpened = function (name, text) {
+  setText(text || "");
+  $("fileName").textContent = "已打开：" + name;
+  pop("已打开 " + name);
+};
+window.onTextOpenFailed = function (m) { pop("打开失败：" + m); };
+window.onTextSaved = function (name) {
+  $("fileName").textContent = "已保存：" + name;
+  pop("已保存 " + name);
+};
+window.onTextSaveFailed = function (m) { pop("保存失败：" + m); };
+$("openTxt").addEventListener("click", function () {
+  if (!bridge("openText")) pop("仅手机端可用");
+});
+$("saveTxt").addEventListener("click", function () {
+  var d = new Date();
+  function p2(n) { return (n < 10 ? "0" : "") + n; }
+  var name = "彩色文本_" + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + ".txt";
+  if (!bridge2("saveText", name, S.text || "")) pop("仅手机端可用");
+});
+
+/* ---------- 检查更新 ---------- */
+function showUpd(text, url) {
+  var box = $("updBox");
+  box.innerHTML = "";
+  box.style.whiteSpace = "pre-wrap";
+  box.classList.add("on");
+  box.appendChild(document.createTextNode(text));
+  if (url) {
+    var b = document.createElement("button");
+    b.textContent = "下载新版本";
+    b.addEventListener("click", function () { bridge("openUrl", url); });
+    box.appendChild(document.createElement("br"));
+    box.appendChild(b);
+  }
+}
+window.onUpdateInfo = function (ver, code, url, notes) {
+  var cur = 0;
+  try { cur = (RTG && RTG.versionCode) ? parseInt(RTG.versionCode(), 10) : 0; } catch (e) {}
+  if (parseInt(code, 10) > cur) {
+    showUpd("发现新版本 v" + ver + (notes ? "\n" + notes : ""), url);
+  } else {
+    showUpd("已是最新版本（v" + APP_VERSION + "）", "");
+  }
+};
+window.onUpdateFailed = function (m) { showUpd("检查失败：" + m, ""); };
+$("checkUpd").addEventListener("click", function () {
+  showUpd("正在检查…", "");
+  if (!bridge("checkUpdate")) showUpd("仅手机端可用", "");
+});
+
+/* ---------- 设置面板 ---------- */
+function openSheet(on) {
+  $("sheet").classList.toggle("on", on);
+  $("mask").classList.toggle("on", on);
+}
+$("setBtn").addEventListener("click", function () { openSheet(true); });
+$("closeSheet").addEventListener("click", function () { openSheet(false); });
+$("mask").addEventListener("click", function () { openSheet(false); });
 
 /* ---------- 启动 ---------- */
 (function init() {
-  try { S.theme = localStorage.getItem("rtgTheme") === "dark" ? "dark" : "light"; } catch (e) {}
-  setTheme(S.theme);
+  try {
+    themeMode = localStorage.getItem("rtgThemeMode")
+      || (localStorage.getItem("rtgTheme") === "dark" ? "dark" : "auto");
+  } catch (e) { themeMode = "auto"; }
+  applyTheme();
+  try { BG.path = localStorage.getItem("rtgBgPath") || ""; } catch (e) {}
+  try { BG.opacity = parseInt(localStorage.getItem("rtgBgOpacity") || "20", 10); } catch (e) {}
+  if (isNaN(BG.opacity)) BG.opacity = 20;
+  applyBg();
+
   var ver = APP_VERSION;
   try { if (RTG && RTG.version) ver = RTG.version(); } catch (e) {}
   $("ver").textContent = "v" + ver;
+  $("aboutVer").textContent = "v" + ver;
   syncColorInputs();
   refresh();
   var o = "竖屏精简版";

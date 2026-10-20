@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   彩色文本生成器 · 安卓版
-  纯离线：不申请任何权限（无网络、无存储、无定位）。
+  1.1.0 起仅新增「检查更新」需要的网络权限；仍然不申请存储、定位、相机等权限
+  （打开/保存文件走系统文件选择器 SAF，不需要存储权限）。
   旋转屏幕不重建 Activity（configChanges），由 HTML 的 CSS 媒体查询切换 竖屏/横屏 两套界面。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.richtextgen.android"
-    android:versionCode="1"
-    android:versionName="1.0.0">
+    android:versionCode="2"
+    android:versionName="1.1.0">
+
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="30" />
 
