@@ -23,6 +23,7 @@
 #include <wincrypt.h>
 #include <gdiplus.h>
 #include <tlhelp32.h>
+#include <winhttp.h>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -37,6 +38,7 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "crypt32.lib")
+#pragma comment(lib, "winhttp.lib")
 
 using namespace Gdiplus;
 
@@ -49,7 +51,7 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.9.0.8";
+    const wchar_t* const kVersion   = L"5.9.0.9";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
@@ -363,6 +365,82 @@ namespace
     // 注意：本程序的"卸载"刻意保留代码签名证书（保持本机始终有证书的状态），
     // 只有独立发布的「彻底卸载」工具（RichTextGen-FullUninstall.exe）才会移除它。
 
+    // ---- 安装量上报 --------------------------------------------------------
+    // 只在安装成功后上报一次（同一版本只报一次），代表「安装量 +1」。
+    // 点击下载不计入，因此统计页上的数字是真实安装数。
+    // 上报失败、超时都不影响安装流程。
+    std::string ToUtf8(const std::wstring& w)
+    {
+        if (w.empty()) return std::string();
+        int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), NULL, 0, NULL, NULL);
+        if (n <= 0) return std::string();
+        std::string s((size_t)n, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &s[0], n, NULL, NULL);
+        return s;
+    }
+
+    bool PostJson(const wchar_t* host, const wchar_t* path, const std::string& body)
+    {
+        HINTERNET s = WinHttpOpen(L"RichTextGen-Setup/" L"1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                  WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!s) return false;
+        WinHttpSetTimeouts(s, 3000, 3000, 3000, 4000);
+        bool ok = false;
+        HINTERNET c = WinHttpConnect(s, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+        if (c)
+        {
+            HINTERNET r = WinHttpOpenRequest(c, L"POST", path, NULL, WINHTTP_NO_REFERER,
+                                             WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+            if (r)
+            {
+                LPCWSTR hdr = L"Content-Type: application/json; charset=utf-8\r\n";
+                BOOL sent = WinHttpSendRequest(r, hdr, (DWORD)-1L,
+                                               (LPVOID)body.c_str(), (DWORD)body.size(), (DWORD)body.size(), 0);
+                if (sent && WinHttpReceiveResponse(r, NULL))
+                {
+                    DWORD code = 0, len = sizeof(code);
+                    WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                        WINHTTP_HEADER_NAME_BY_INDEX, &code, &len, WINHTTP_NO_HEADER_INDEX);
+                    ok = (code >= 200 && code < 300);
+                }
+                WinHttpCloseHandle(r);
+            }
+            WinHttpCloseHandle(c);
+        }
+        WinHttpCloseHandle(s);
+        return ok;
+    }
+
+    DWORD WINAPI ReportInstallProc(LPVOID)
+    {
+        HKEY k = NULL;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\RichTextGen", 0, NULL, 0,
+                            KEY_READ | KEY_WRITE, NULL, &k, NULL) == ERROR_SUCCESS)
+        {
+            wchar_t seen[64] = { 0 };
+            DWORD sz = sizeof(seen), type = 0;
+            bool already = (RegQueryValueExW(k, L"ReportedVersion", NULL, &type,
+                                             (BYTE*)seen, &sz) == ERROR_SUCCESS)
+                           && _wcsicmp(seen, kVersion) == 0;
+            if (already) { RegCloseKey(k); return 0; }
+            RegSetValueExW(k, L"ReportedVersion", 0, REG_SZ,
+                           (const BYTE*)kVersion, (DWORD)((wcslen(kVersion) + 1) * 2));
+            RegCloseKey(k);
+        }
+
+        std::wstring json = std::wstring(L"{\"file\":\"setup\",\"event\":\"install\",\"version\":\"")
+                            + kVersion + L"\",\"os\":\"win\"}";
+        PostJson(L"richtextgen-dl.pages.dev", L"/api/count", ToUtf8(json));
+        return 0;
+    }
+
+    // 后台线程上报，不阻塞安装向导
+    void ReportInstallAsync()
+    {
+        HANDLE th = CreateThread(NULL, 0, ReportInstallProc, NULL, 0, NULL);
+        if (th) CloseHandle(th);
+    }
+
     // 安装主体。progress 可空（静默模式）。任何一步失败都返回 false，避免「半成品却提示完成」。
     bool Install(const std::wstring& target, bool desktop, bool startMenu,
                  void (*progress)(void*, int, const wchar_t*), void* ctx)
@@ -408,6 +486,7 @@ namespace
         WriteUninstallInfo(target, exe);
 
         if (progress) progress(ctx, 100, L"完成");
+        ReportInstallAsync();   // 安装量 +1（后台线程，失败静默）
         return true;
     }
 

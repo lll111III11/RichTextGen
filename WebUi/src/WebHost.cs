@@ -2013,12 +2013,20 @@ namespace RichTextGen
         }
 
         // ============================================================ 更新
-        /// <summary>自有下载站（Cloudflare Pages 双线路）；清单与安装包优先从这里取，失败才退回 GitHub</summary>
+        // 双通道：Cloudflare 下载站（双线路）与 GitHub Releases。
+        // 自动检查时两条通道并发计时，谁快用谁；用户手动点「立即检测更新」时默认直接走 Cloudflare。
         private const string UpdateSite = "https://richtextgen-dl.pages.dev/";
         private static readonly string[] UpdateMirrors = { "https://richtextgen-dl.pages.dev/", "https://richtextgen-dl2.pages.dev/" };
-        private const string SetupFallback = "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe";
+        private static readonly string[] GithubManifests =
+        {
+            "https://raw.githubusercontent.com/lll111III11/RichTextGen/main/version.json",
+            "https://cdn.jsdelivr.net/gh/lll111III11/RichTextGen@main/version.json"
+        };
+        private const string GithubSetup = "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe";
         private static string _mirror;
         private static DateTime _mirrorAt;
+        /// <summary>安装包候选地址，第一个是当前通道，后面的按优先级兜底</summary>
+        private static string[] _setupCandidates = { GithubSetup };
 
         /// <summary>对每条镜像的 files/probe.txt 计时，取最快的一条；结果缓存 10 分钟</summary>
         private static string PickMirror()
@@ -2037,57 +2045,79 @@ namespace RichTextGen
             return best;
         }
 
+        private sealed class UpdateProbe
+        {
+            public string Channel;   // cloudflare / github
+            public string Body;
+            public int Ms;
+        }
+
+        /// <summary>拉取指定通道的更新清单并计时；不可达时返回 null</summary>
+        private static UpdateProbe ProbeChannel(string channel)
+        {
+            string[] urls = channel == "cloudflare" ? new[] { UpdateSite + "releases.json" } : GithubManifests;
+            foreach (string raw in urls)
+            {
+                string url = raw + (raw.IndexOf('?') >= 0 ? "&" : "?") + "t=" + DateTime.Now.Ticks;
+                DateTime t0 = DateTime.UtcNow;
+                string body = Http(url, 6000);
+                int ms = (int)(DateTime.UtcNow - t0).TotalMilliseconds;
+                if (string.IsNullOrEmpty(body) || body.IndexOf("\"version\"", StringComparison.Ordinal) < 0) continue;
+                return new UpdateProbe { Channel = channel, Body = body, Ms = ms };
+            }
+            return null;
+        }
+
         /// <param name="manual">true = 用户点击「立即检测更新」，无论结果如何都要在界面上给出可见反馈</param>
         private void CheckUpdate(bool manual)
         {
             if (manual) CallStr("upInfo", "正在检测更新…");
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
-                string ver = "", url = "", notes = "", type = "";
-                bool mandatory = false;
-                try
-                {
-                    // 第 1 条路：自有下载站的 releases.json（带双线路清单）
-                    string txt = Http(UpdateSite + "releases.json?t=" + DateTime.Now.Ticks, 8000);
-                    bool fromSite = !string.IsNullOrEmpty(txt)
-                        && txt.IndexOf("\"version\"", StringComparison.Ordinal) >= 0
-                        && txt.IndexOf("\"files\"", StringComparison.Ordinal) >= 0;
-                    if (fromSite)
-                    {
-                        ver = Field(txt, "version");
-                        notes = Field(txt, "notes");
-                        type = Field(txt, "type");
-                        mandatory = Regex.IsMatch(txt, "\"mandatory\"\\s*:\\s*true", RegexOptions.IgnoreCase);
-                        url = PickMirror() + "files/RichTextGen-Setup.exe";
-                    }
-                    else
-                    {
-                        // 兜底：GitHub 上的 version.json（直连不通时再试 jsDelivr）
-                        txt = Http("https://raw.githubusercontent.com/lll111III11/RichTextGen/main/version.json", 8000);
-                        if (string.IsNullOrEmpty(txt) || txt.IndexOf("\"version\"", StringComparison.Ordinal) < 0)
-                            txt = Http("https://cdn.jsdelivr.net/gh/lll111III11/RichTextGen@main/version.json", 8000);
-                        if (string.IsNullOrEmpty(txt)) { FailUpdate(manual, "更新检查失败（网络不可达）"); return; }
-                        ver = Field(txt, "version");
-                        url = Field(txt, "installer");
-                        notes = Field(txt, "notes");
-                        type = Field(txt, "type");
-                    }
-                    if (type.Length == 0) type = "feature";
-                }
-                catch { }
-                if (ver.Length == 0) { FailUpdate(manual, "更新检查失败"); return; }
+                UpdateProbe cf = null, gh = null;
+                Thread tCf = new Thread(new ThreadStart(delegate { cf = ProbeChannel("cloudflare"); }));
+                Thread tGh = new Thread(new ThreadStart(delegate { gh = ProbeChannel("github"); }));
+                tCf.IsBackground = true; tGh.IsBackground = true;
+                tCf.Start(); tGh.Start();
+                tCf.Join(8000); tGh.Join(8000);
+
+                // 手动检测默认 Cloudflare；自动检测按实测延迟取快的一条；只有一条可用时用它
+                UpdateProbe best;
+                if (manual) best = cf ?? gh;
+                else if (cf != null && gh != null) best = cf.Ms <= gh.Ms ? cf : gh;
+                else best = cf ?? gh;
+
+                if (best == null) { FailUpdate(manual, "更新检查失败（两条通道都不可达）"); return; }
+
+                string ver = Field(best.Body, "version");
+                string notes = Field(best.Body, "notes");
+                string type = Field(best.Body, "type");
+                if (type.Length == 0) type = "feature";
+                bool mandatory = Regex.IsMatch(best.Body, "\"mandatory\"\\s*:\\s*true", RegexOptions.IgnoreCase);
+                if (ver.Length == 0) { FailUpdate(manual, "更新检查失败（清单格式异常）"); return; }
+
+                string cfSetup = PickMirror() + "files/RichTextGen-Setup.exe";
+                string ghSetup = Field(best.Body, "installer");
+                if (ghSetup.Length == 0) ghSetup = GithubSetup;
+                // 选中通道排第一，另一条留作下载失败时的兜底
+                _setupCandidates = best.Channel == "cloudflare"
+                    ? new[] { cfSetup, GithubSetup }
+                    : new[] { ghSetup, cfSetup };
+                string url = _setupCandidates[0];
+                string via = (best.Channel == "cloudflare" ? "Cloudflare" : "GitHub") + " " + best.Ms + "ms";
+
                 if (Newer(ver, Version))
                 {
                     // 记下清单内容：更新成功后要写进 pending_update.json，供下次启动弹「更新内容」
                     pendingVer = ver; pendingNotes = notes; pendingType = type; pendingUrl = url;
                     Call("update", "{" + Quote("version") + ":" + Quote(ver) + "," + Quote("url") + ":" + Quote(url) + "," + Quote("notes") + ":" + Quote(notes) + "," + Quote("type") + ":" + Quote(type) + "," + Quote("mandatory") + ":" + (mandatory ? "true" : "false") + "}");
-                    CallStr("status", "发现新版本 " + ver + "（当前 " + Version + "）");
-                    if (manual) CallStr("upInfo", "发现新版本 " + ver + "（当前 " + Version + "）");
+                    CallStr("status", "发现新版本 " + ver + "（当前 " + Version + "，走 " + via + "）");
+                    if (manual) CallStr("upInfo", "发现新版本 " + ver + "（当前 " + Version + "，走 " + via + " 通道）");
                 }
                 else
                 {
                     CallStr("status", "已是最新版本 " + Version);
-                    if (manual) CallStr("upInfo", "已是最新版本 v" + Version + "（" + DateTime.Now.ToString("HH:mm:ss") + " 检测）");
+                    if (manual) CallStr("upInfo", "已是最新版本 v" + Version + "（" + DateTime.Now.ToString("HH:mm:ss") + " 检测，走 " + via + "）");
                 }
             });
         }
@@ -2113,24 +2143,28 @@ namespace RichTextGen
         private void DoUpdate()
         {
             if (pendingVer.Length == 0) { CallStr("status", "请先「检查更新」，确认有新版本后再更新"); return; }
-            string url = pendingUrl.Length > 0 ? pendingUrl : SetupFallback;
+            // 按通道优先级依次尝试：选中的通道排第一，另一条兜底
+            string[] urls = (_setupCandidates != null && _setupCandidates.Length > 0)
+                ? _setupCandidates
+                : new[] { pendingUrl.Length > 0 ? pendingUrl : GithubSetup };
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
                     CallStr("status", "正在下载更新包…");
                     string path = Path.Combine(Path.GetTempPath(), "RichTextGen-Setup-" + DateTime.Now.ToString("HHmmss") + ".exe");
+                    Exception last = null;
                     using (WebClient wc = new WebClient())
                     {
                         wc.Headers.Add("User-Agent", "RichTextGen/" + Version);
-                        try { wc.DownloadFile(url, path); }
-                        catch
+                        foreach (string u in urls)
                         {
-                            // 自有下载站不可达时退回 GitHub Releases，避免更新链路单点
-                            if (url.IndexOf("pages.dev", StringComparison.Ordinal) >= 0) wc.DownloadFile(SetupFallback, path);
-                            else throw;
+                            if (u == null || u.Length == 0) continue;
+                            try { wc.DownloadFile(u, path); last = null; break; }
+                            catch (Exception ex) { last = ex; }
                         }
                     }
+                    if (last != null) throw last;
                     try
                     {
                         string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen");

@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.8",
+    "version":  "5.9.0.9",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.8/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.8/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.9/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.9/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.8 更新（Live2D + 更新链路）：\n· 【Live2D】设置页新增角色模型：支持 PNG / GIF 立绘（自动抠图）、Cubism .moc3、GLB / VRM 3D 模型；可选择仅在窗口内显示，或拆成独立透明窗口\n· 【互动】角色支持 model.json 配置：点击 / 悬停区域触发动作、台词与待机闲聊，也可以交给 AI 角色工坊生成\n· 【运行时】three.js 与 Cubism Web SDK 按需下载，安装包不内置，首次使用会提示下载\n· 【更新链路】检查更新与安装包下载优先走自有双线路下载站（自动测速选最快），GitHub Releases 作为备用，下载失败会自动回退\n· 【快捷组件】热键绑定修复，并统一收纳进设置页\n· 【下载页】新增累计下载与分文件统计，双线路可手动切换",
+    "notes":  "v5.9.0.9 更新（双通道更新 + 安装量统计 + 网页工作区）：\n· 【双通道更新】检查更新时同时探测 Cloudflare 下载站与 GitHub，哪条快就用哪条；手动点「立即检测更新」默认直接走 Cloudflare\n· 【下载兜底】选中的通道下载失败会自动换另一条，不再有单点\n· 【安装量统计】点击下载不再计数，改为安装成功后由安装器上报，统计页显示真实安装数\n· 【网页工作区】新增网页版编辑工作区（试验）：多标签、富文本上色、源码模式、复制与导出，数据存在本地浏览器\n· 【下载页】双线路可手动切换，页面底部可进入安装统计与网页工作区",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

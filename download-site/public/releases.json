@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.9.0.8",
+  "version": "5.9.0.9",
   "updated": "2026-10-24",
-  "notes": "v5.9.0.8：Live2D / Cubism / VRM 角色模型与互动、更新链路切换到双线路下载站（自动测速 + GitHub 兜底）。",
+  "notes": "v5.9.0.9：更新改为双通道自动测速（Cloudflare / GitHub 取快），安装量由安装器上报，新增网页工作区试验版。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,20 +10,20 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.9.0.8",
-      "size": 2104200,
-      "sha256": "cdcfccaeb5ec4e6ae8ad132fe5300c2f6f96f2e6dfda0f99d900a44303ba9298",
+      "version": "5.9.0.9",
+      "size": 2107784,
+      "sha256": "c134e7f642028dc58f56b3fcc084dd6bda0d83ab3b9a2470d2cf7aaf2dbac4c0",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
-      "desc": "标准安装向导，写入开始菜单与卸载项，适合长期使用。"
+      "desc": "标准安装向导，写入开始菜单与卸载项，适合长期使用。安装成功后自动计入安装量。"
     },
     {
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.9.0.8",
-      "size": 437046,
-      "sha256": "56fb9e09495355f2e9e2b24988c580573283e6be12a215ce1fee2601147f3369",
+      "version": "5.9.0.9",
+      "size": 437469,
+      "sha256": "8278b80f09e57f94c2092c3cf4a506fe148f4970d0e31387acdf2677875cbac7",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

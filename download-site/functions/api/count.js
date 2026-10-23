@@ -22,6 +22,7 @@ export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
+/** 读取安装计数。total = 全部安装次数，files = 各安装包次数 */
 export async function onRequestGet({ request, env }) {
   if (!env.DOWNLOADS) return json({ ok: false, reason: 'kv-not-bound' }, 503);
 
@@ -33,11 +34,16 @@ export async function onRequestGet({ request, env }) {
     .slice(0, 20);
 
   const files = {};
-  for (const id of list) files[id] = await readCount(env.DOWNLOADS, `file:${id}`);
+  for (const id of list) files[id] = await readCount(env.DOWNLOADS, `install:file:${id}`);
 
-  return json({ ok: true, total: await readCount(env.DOWNLOADS, 'total'), files });
+  return json({ ok: true, total: await readCount(env.DOWNLOADS, 'install:total'), files });
 }
 
+/**
+ * 只在安装成功后由安装器调用，代表「安装量 +1」。
+ * 点击下载不计入，避免误点与重复下载把数字刷高。
+ * body: { file: "setup", event: "install", version: "5.9.0.9", os: "win" }
+ */
 export async function onRequestPost({ request, env }) {
   if (!env.DOWNLOADS) return json({ ok: false, reason: 'kv-not-bound' }, 503);
 
@@ -48,18 +54,27 @@ export async function onRequestPost({ request, env }) {
     body = {};
   }
 
-  const file = String(body.file || 'unknown').slice(0, 40).replace(/[^\w.-]/g, '');
-  const mirror = String(body.mirror || '').slice(0, 32).replace(/[^\w.-]/g, '');
+  if (String(body.event || '') !== 'install') {
+    return json({ ok: false, reason: 'install-only' }, 400);
+  }
 
-  const total = (await readCount(env.DOWNLOADS, 'total')) + 1;
-  const fileCount = (await readCount(env.DOWNLOADS, `file:${file}`)) + 1;
+  const file = String(body.file || 'unknown').slice(0, 40).replace(/[^\w.-]/g, '') || 'unknown';
+  const version = String(body.version || '').slice(0, 24).replace(/[^\w.-]/g, '');
+  const os = String(body.os || '').slice(0, 12).replace(/[^\w.-]/g, '');
 
-  await env.DOWNLOADS.put('total', String(total));
-  await env.DOWNLOADS.put(`file:${file}`, String(fileCount));
-  if (mirror) {
-    const key = `mirror:${mirror}`;
+  const total = (await readCount(env.DOWNLOADS, 'install:total')) + 1;
+  const fileCount = (await readCount(env.DOWNLOADS, `install:file:${file}`)) + 1;
+
+  await env.DOWNLOADS.put('install:total', String(total));
+  await env.DOWNLOADS.put(`install:file:${file}`, String(fileCount));
+  if (version) {
+    const key = `install:ver:${version}`;
+    await env.DOWNLOADS.put(key, String((await readCount(env.DOWNLOADS, key)) + 1));
+  }
+  if (os) {
+    const key = `install:os:${os}`;
     await env.DOWNLOADS.put(key, String((await readCount(env.DOWNLOADS, key)) + 1));
   }
 
-  return json({ ok: true, total, file, count: fileCount, mirror });
+  return json({ ok: true, total, file, count: fileCount, version, os });
 }

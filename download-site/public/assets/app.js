@@ -186,7 +186,7 @@
 
       var bottom = el('div', 'dl-bottom');
       var count = el('div', 'count');
-      count.innerHTML = '已下载 <b data-count="' + f.id + '">—</b> 次';
+      count.innerHTML = '已安装 <b data-count="' + f.id + '">—</b> 次';
       var btn = el('button', 'btn', '下载');
       btn.type = 'button';
       btn.dataset.dl = f.id;
@@ -241,10 +241,10 @@
     var nodes = document.querySelectorAll('[data-count]');
     for (var i = 0; i < nodes.length; i++) {
       var id = nodes[i].dataset.count;
-      nodes[i].textContent = state.counts.files[id] != null ? state.counts.files[id] : 0;
+      nodes[i].textContent = state.mode === 'offline' ? '—' : (state.counts.files[id] != null ? state.counts.files[id] : 0);
     }
-    $('#statTotal').textContent = state.counts.total || 0;
-    $('#statMode').textContent = state.mode === 'remote' ? '线上统计' : '本地离线';
+    $('#statTotal').textContent = state.mode === 'offline' ? '—' : (state.counts.total || 0);
+    $('#statMode').textContent = state.mode === 'remote' ? '线上统计' : '统计不可用';
     $('#statMode').style.color = state.mode === 'remote' ? '' : 'var(--warn)';
   }
 
@@ -277,48 +277,12 @@
         state.mode = 'remote';
       })
       .catch(function () {
-        state.counts = readLocal();
-        state.mode = 'local';
+        state.counts = { total: 0, files: {} };
+        state.mode = 'offline';
       })
       .then(function () {
         paintCounts();
       });
-  }
-
-  function readLocal() {
-    try {
-      var raw = localStorage.getItem('rtg.downloads');
-      if (!raw) return { total: 0, files: {} };
-      var j = JSON.parse(raw);
-      return { total: j.total || 0, files: j.files || {} };
-    } catch (e) {
-      return { total: 0, files: {} };
-    }
-  }
-
-  function writeLocal() {
-    try { localStorage.setItem('rtg.downloads', JSON.stringify(state.counts)); } catch (e) {}
-  }
-
-  function sendCount(file, mirror) {
-    var payload = JSON.stringify({ file: file.id, mirror: mirror ? mirror.id : '' });
-    var beacons = false;
-    try {
-      beacons = navigator.sendBeacon(state.cfg.counter, new Blob([payload], { type: 'text/plain;charset=UTF-8' }));
-    } catch (e) {}
-    if (!beacons) {
-      fetch(state.cfg.counter, {
-        method: 'POST',
-        body: payload,
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        keepalive: true
-      }).catch(function () {});
-    }
-    state.counts.total = (state.counts.total || 0) + 1;
-    state.counts.files[file.id] = (state.counts.files[file.id] || 0) + 1;
-    if (state.mode === 'local') writeLocal();
-    paintCounts();
-    setTimeout(loadCounts, 1600);
   }
 
   /* ---------- 下载 ---------- */
@@ -332,8 +296,6 @@
     }
     if (!mirror) return;
 
-    sendCount(file, mirror);
-
     var url = mirror.base + 'files/' + encodeURIComponent(file.file);
     var a = document.createElement('a');
     a.href = url;
@@ -342,6 +304,16 @@
     document.body.appendChild(a);
     a.click();
     a.remove();
+
+    // 点击下载不计入统计：只有安装成功后由安装器上报，数字才 +1
+    var node = document.querySelector('[data-count="' + file.id + '"]');
+    if (node) {
+      var card = node.closest('.dl');
+      if (card && !card.querySelector('.after-dl')) {
+        var tip = el('p', 'after-dl', '已开始下载。安装完成后会自动计入安装量。');
+        card.appendChild(tip);
+      }
+    }
   }
 
   /* ---------- 启动 ---------- */

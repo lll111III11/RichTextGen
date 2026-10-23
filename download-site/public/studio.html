@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>工作区 · 彩色文本生成器</title>
+<link rel="stylesheet" href="assets/style.css" />
+<link rel="stylesheet" href="assets/studio.css" />
+</head>
+<body>
+<div class="bg" aria-hidden="true"><span class="glow g1"></span><span class="glow g2"></span></div>
+
+<header class="top">
+  <a class="brand" href="./">
+    <span class="mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ea8ff"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><rect x="2" y="2" width="28" height="28" rx="9" fill="url(#g)" opacity=".16"/><path d="M9 21.5 13 10h2l4 11.5M10.6 17.4h6.8" stroke="url(#g)" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+    </span>
+    <span class="brand-text">彩色文本生成器 · 工作区</span>
+  </a>
+  <div class="top-right">
+    <span class="pill" id="verPill">Web 预览</span>
+    <a class="ghost" href="stats">安装统计</a>
+    <a class="ghost" href="./">下载页</a>
+  </div>
+</header>
+
+<main class="studio">
+  <div class="tabs" id="tabs" role="tablist"></div>
+
+  <div class="toolbar" id="toolbar">
+    <div class="group">
+      <button class="tb" data-cmd="bold" title="加粗 Ctrl+B"><b>B</b></button>
+      <button class="tb" data-cmd="italic" title="斜体 Ctrl+I"><i>I</i></button>
+      <button class="tb" data-cmd="underline" title="下划线 Ctrl+U"><u>U</u></button>
+      <button class="tb" data-cmd="strikeThrough" title="删除线"><s>S</s></button>
+    </div>
+    <span class="sep"></span>
+    <div class="group" id="swatches"></div>
+    <span class="sep"></span>
+    <div class="group">
+      <label class="tb color-pick" title="自定义颜色">
+        <input type="color" id="colorPick" value="#6ea8ff" />
+        <span>更多</span>
+      </label>
+      <select class="tb select" id="fontSize" title="字号">
+        <option value="2">小</option>
+        <option value="3" selected>正常</option>
+        <option value="4">大</option>
+        <option value="5">较大</option>
+        <option value="6">标题</option>
+      </select>
+    </div>
+    <span class="sep"></span>
+    <div class="group">
+      <button class="tb" data-cmd="removeFormat" title="清除格式">清格式</button>
+      <button class="tb" id="toggleSource" title="切换源码 / 富文本">源码</button>
+    </div>
+    <span class="spacer"></span>
+    <div class="group">
+      <button class="tb" id="btnCopy" title="复制富文本">复制</button>
+      <button class="tb" id="btnDownload" title="导出文件">导出</button>
+    </div>
+  </div>
+
+  <div class="editor-wrap">
+    <div class="editor" id="editor" contenteditable="true" spellcheck="false"></div>
+    <textarea class="source" id="source" spellcheck="false" hidden></textarea>
+  </div>
+
+  <div class="statusbar">
+    <span id="stFile">未命名</span>
+    <span id="stMode">富文本</span>
+    <span class="spacer"></span>
+    <span id="stCount">0 字</span>
+    <span id="stSaved">已保存</span>
+  </div>
+</main>
+
+<script src="assets/studio.js"></script>
+</body>
+</html>
