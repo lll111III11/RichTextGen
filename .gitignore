@@ -18,3 +18,7 @@ android/rtg.keystore
 signing/
 # MER 安装器载荷（作为 RCDATA 嵌入安装器，不进版本库）
 installer/mer_payload.bin
+# download site: local dev caches and the generated backup deployment copy
+download-site/node_modules/
+download-site/.wrangler/
+download-site/backup/

@@ -1,0 +1,18 @@
+{
+    "counter":  "https://richtextgen-dl.pages.dev/api/count",
+    "probePath":  "files/probe.txt",
+    "mirrors":  [
+                    {
+                        "label":  "Cloudflare 主线路",
+                        "id":  "cf",
+                        "tag":  "pages.dev",
+                        "base":  "https://richtextgen-dl.pages.dev/"
+                    },
+                    {
+                        "label":  "Cloudflare 备用线路",
+                        "id":  "cf2",
+                        "tag":  "pages.dev",
+                        "base":  "https://richtextgen-dl2.pages.dev/"
+                    }
+                ]
+}

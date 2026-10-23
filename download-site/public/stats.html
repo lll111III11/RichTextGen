@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>下载统计 · 彩色文本生成器</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<div class="bg" aria-hidden="true"><span class="glow g1"></span><span class="glow g2"></span></div>
+
+<header class="top">
+  <a class="brand" href="./">
+    <span class="mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ea8ff"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><rect x="2" y="2" width="28" height="28" rx="9" fill="url(#g)" opacity=".16"/><path d="M9 21.5 13 10h2l4 11.5M10.6 17.4h6.8" stroke="url(#g)" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+    </span>
+    <span class="brand-text">彩色文本生成器</span>
+  </a>
+  <div class="top-right">
+    <span class="pill" id="verPill">v—</span>
+    <a class="ghost" href="./">下载页</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>下载统计</h1>
+    <p class="sub">数据来自 Cloudflare Pages Functions + KV，每次下载点实时累计，页面每 30 秒自动刷新。</p>
+  </section>
+
+  <section class="card total-card">
+    <span class="total-label">累计下载</span>
+    <b class="total-num" id="total">—</b>
+    <span class="total-updated" id="updated">读取中…</span>
+  </section>
+
+  <section class="card stat-list" id="list" aria-live="polite"></section>
+
+  <footer class="foot">
+    <p>接口：<a class="link" id="apiLink" href="#" target="_blank" rel="noopener">/api/count</a></p>
+    <p class="dim">© 2026 彩色文本生成器 · 静态分发站点</p>
+  </footer>
+</main>
+
+<script src="assets/stats.js"></script>
+</body>
+</html>

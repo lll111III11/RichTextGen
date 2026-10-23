@@ -1,0 +1,40 @@
+{
+  "product": "彩色文本生成器",
+  "version": "5.9.0.7",
+  "updated": "2026-10-19",
+  "files": [
+    {
+      "id": "setup",
+      "label": "Windows 安装版",
+      "file": "RichTextGen-Setup.exe",
+      "version": "5.9.0.7",
+      "size": 2034568,
+      "sha256": "2cf802ac3cb02f76d1bb8bf578e89204311630ec734fff9d802b91e2f2c99ed9",
+      "icon": "win",
+      "platform": "Windows 7 / 10 / 11",
+      "desc": "标准安装向导，写入开始菜单与卸载项，适合长期使用。"
+    },
+    {
+      "id": "portable",
+      "label": "Windows 免安装版",
+      "file": "RichTextGen-Portable.zip",
+      "version": "5.9.0.7",
+      "size": 410666,
+      "sha256": "140bc95ff1f1dfd8f10666c0734792a9435c7b49056f55aa9d0fc4e352eda15c",
+      "icon": "zip",
+      "platform": "Windows 7 / 10 / 11",
+      "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"
+    },
+    {
+      "id": "android",
+      "label": "Android 版",
+      "file": "RichTextGen.apk",
+      "version": "1.1.0",
+      "size": 41822,
+      "sha256": "ec7faaba33d8423e7b31ef6ee583b4101242a49b00d9e1b09b64643270b0ea7c",
+      "icon": "android",
+      "platform": "Android 7.0+",
+      "desc": "移动端精简版本，安装前请在系统中允许未知来源应用。"
+    }
+  ]
+}

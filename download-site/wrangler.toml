@@ -1,0 +1,7 @@
+name = "richtextgen-dl"
+compatibility_date = "2025-07-18"
+pages_build_output_dir = "public"
+
+[[kv_namespaces]]
+binding = "DOWNLOADS"
+id = "b819423f386949b69dca991d2e19919e"

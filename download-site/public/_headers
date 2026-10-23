@@ -1,0 +1,15 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: SAMEORIGIN
+
+/assets/*
+  Cache-Control: public, max-age=3600
+
+/files/*
+  Cache-Control: public, max-age=86400
+  Content-Disposition: attachment
+  Access-Control-Allow-Origin: *
+
+/api/*
+  Cache-Control: no-store
