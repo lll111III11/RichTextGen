@@ -22,6 +22,15 @@
   body{background:var(--bg);color:var(--text);
        font:14px/1.6 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif;
        display:flex;flex-direction:column;overflow:hidden;user-select:none}
+  /* 主题切换过渡：只过渡颜色类属性，深浅色切换不再「硬切」 */
+  body, body *{
+    transition: background-color .26s ease, color .26s ease, border-color .26s ease,
+                box-shadow .26s ease, fill .26s ease, stroke .26s ease;
+  }
+  input[type=range]::-webkit-slider-thumb{transition:background-color .26s ease, box-shadow .26s ease}
+  @media (prefers-reduced-motion: reduce){
+    body, body *{ transition: none !important }
+  }
   /* 背景图：铺在内容「下面」，像水印一样从半透明面板里透出来，绝不覆盖文字 */
   #bgLayer{position:fixed;inset:0;z-index:-1;pointer-events:none;display:none;
            background-position:center center;background-repeat:no-repeat;background-size:cover;
@@ -107,6 +116,30 @@
   .qk-txt{flex:1;min-width:0}
   .qk-t{font-size:13.5px;font-weight:600}
   .qk-d{color:var(--sub);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* ---- Live2D 窗口内悬浮层 ---- */
+  #l2dWrap{position:fixed;right:20px;bottom:36px;z-index:12;pointer-events:none;display:none}
+  #l2dInner{position:relative;transform-origin:50% 100%;will-change:transform;
+            filter:drop-shadow(0 6px 16px rgba(0,0,0,.26))}
+  #l2dInner.hit{pointer-events:auto;cursor:pointer}
+  #l2dImg{display:block;max-height:52vh;width:auto;user-select:none;-webkit-user-drag:none}
+  #l2dBlink{position:absolute;left:0;top:0;width:100%;height:100%;display:none;user-select:none}
+  #l2d3d{display:none;width:300px;height:460px;pointer-events:auto;cursor:pointer}
+  #l2dcv{display:none;width:320px;height:460px;pointer-events:auto;cursor:pointer;background:transparent}
+  #l2dWrap.m3d #l2dInner{display:none}
+  #l2dWrap.m3d #l2d3d{display:block}
+  #l2dWrap.mcub #l2dInner{display:none}
+  #l2dWrap.mcub #l2d3d{display:none}
+  #l2dWrap.mcub #l2dcv{display:block}
+  #l2dSay{position:fixed;z-index:13;max-width:280px;padding:8px 12px;border-radius:12px;
+          background:rgba(32,32,38,.94);color:#fff;font-size:13px;line-height:1.5;
+          box-shadow:0 6px 20px rgba(0,0,0,.28);pointer-events:none;display:none;
+          word-break:break-word;user-select:none}
+  #l2dSay.on{display:block}
+  .l2dHelp{margin-top:8px}
+  .l2dHelp summary{cursor:pointer;color:var(--sub);font-size:12.5px}
+  .l2dHelp pre{margin:8px 0 0;padding:10px;background:var(--input);border:1px solid var(--inputLine);
+               border-radius:var(--r4);font-size:12px;line-height:1.55;max-height:240px;overflow:auto;
+               white-space:pre-wrap;user-select:text}
   /* ---- 小窗口下防止文字溢出 / 互相压住 ---- */
   #tabBar{min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
   #tabBar::-webkit-scrollbar{height:0}
@@ -336,6 +369,9 @@
 </head>
 <body>
 <div id="bgLayer"></div>
+<!-- Live2D（窗口内悬浮层）：不接收鼠标，不会挡住任何操作 -->
+<div id="l2dWrap" aria-hidden="true"><div id="l2dInner"><img id="l2dImg" alt=""><img id="l2dBlink" alt=""></div><canvas id="l2d3d"></canvas><canvas id="l2dcv"></canvas></div>
+<div id="l2dSay" aria-hidden="true"></div>
 
 <div id="titlebar">
   <div class="logo"></div>
@@ -389,7 +425,6 @@
     <button data-p="img"><span class="g">▦</span>图片系统</button>
     <button data-p="trans"><span class="g">⇄</span>在线翻译</button>
     <button data-p="chatwin"><span class="g">✦</span>AI 对话</button>
-    <button data-p="quick"><span class="g">⚡</span>快捷组件</button>
     <button data-p="set"><span class="g">⚙</span>设置</button>
   </nav>
 
@@ -533,15 +568,6 @@
       </div>
     </section>
 
-    <!-- 快捷组件 -->
-    <section class="page" id="p-quick">
-      <div class="card"><h3>⚡ 快捷组件</h3>
-        <div class="row"><span class="hint">这些组件既可以直接点「执行」，也可以绑定全局热键——热键在任何程序位于前台时都生效（例如把「退出应用」绑到 Ctrl+E，按下即退出）。</span></div>
-        <div id="quickList"></div>
-        <div class="row" style="margin-top:8px"><span class="hint">点 ✕ 的行为可在「设置 → 关闭行为」里调整。</span></div>
-      </div>
-    </section>
-
     <!-- 设置 -->
     <section class="page" id="p-set">
       <div class="card"><h3>外观</h3>
@@ -583,12 +609,80 @@
         </div>
         <div class="row"><span class="hint">开启后背景图铺在内容下方，通过半透明面板像水印一样透出来，不会盖住文字；图片保存在本机 <code>%APPDATA%\RichTextGen</code>，不会上传。</span></div>
       </div>
-      <div class="card"><h3>全局热键</h3>
+      <div class="card"><h3>⚡ 快捷组件与全局热键</h3>
         <div class="row"><span class="hint" id="hotkeyInfo">热键状态读取中…</span>
           <button class="b" onclick="host('registerHotkeys')">重新注册</button>
           <button class="b" onclick="resetHotkeys()">恢复默认</button></div>
-        <div id="hkList"></div>
-        <div class="row"><span class="hint">点击右侧快捷键即可录制修改（需含 Ctrl / Alt / Shift 加功能键），设置自动保存；组合冲突或被占用会提示</span></div>
+        <div id="quickList"></div>
+        <div class="row"><span class="hint">点右侧快捷键即可录制（需含 Ctrl / Alt / Shift 加功能键，Esc 取消），设置自动保存；热键在任何程序位于前台时都生效，例如把「退出应用」绑到 Ctrl+E，按下即退出。带「执行」的组件也能直接点按钮触发。</span></div>
+      </div>
+      <div class="card"><h3>🧩 Live2D 角色 <span class="badge" style="background:var(--hover);color:var(--sub);border-color:var(--line)">Beta</span></h3>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="l2dEnable" onchange="l2dApply()"> 启用 Live2D</label>
+          <label class="f">模型</label>
+          <select id="l2dModel" onchange="l2dApply()" style="min-width:170px"></select>
+          <button class="b" onclick="host('live2dScan')">刷新</button>
+          <button class="b" onclick="host('live2dImport')">导入图片 / 3D…</button>
+          <button class="b" onclick="host('live2dImportFolder')">导入模型文件夹…</button>
+          <button class="b" onclick="host('live2dOpenFolder')">打开模型文件夹</button>
+        </div>
+        <div class="row">
+          <label class="f">显示方式</label>
+          <select id="l2dMode" onchange="l2dApply()">
+            <option value="inwin">仅在窗口内（右下角悬浮）</option>
+            <option value="detached">拎出来（独立透明窗口，可拖到桌面任意位置）</option>
+          </select>
+          <label class="chk"><input type="checkbox" id="l2dTopmost" onchange="l2dApply()"> 独立窗口置顶</label>
+          <label class="chk"><input type="checkbox" id="l2dClick" onchange="l2dApply()"> 鼠标可穿透</label>
+        </div>
+        <div class="row">
+          <label class="f">大小</label>
+          <input type="range" id="l2dScale" min="30" max="250" step="5" value="100" style="width:140px" oninput="l2dApply()">
+          <span class="hint" id="l2dScaleVal">100%</span>
+          <label class="f">不透明度</label>
+          <input type="range" id="l2dOpacity" min="20" max="100" step="5" value="100" style="width:120px" oninput="l2dApply()">
+          <span class="hint" id="l2dOpacityVal">100%</span>
+        </div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="l2dActivity" onchange="l2dApply()"> 允许活动（呼吸 / 眨眼 / 轻微摆动）</label>
+          <label class="chk"><input type="checkbox" id="l2dFollow" onchange="l2dApply()"> 跟随鼠标倾斜</label>
+          <span class="hint" id="l2dInfo">Live2D 未启用</span>
+        </div>
+        <div class="row">
+          <button class="b" onclick="host('live2dOpenConfig')">编辑互动配置</button>
+          <button class="b p" onclick="host('live2dAi')">✦ AI 生成角色配置…</button>
+          <button class="b" onclick="l2dFindModel()">联网找模型…</button>
+          <button class="b" id="l2d3dBtn" onclick="host('live2dInstall3D')">下载 3D 组件</button>
+          <button class="b" id="l2dCubBtn" onclick="host('live2dInstallCubism')">下载 Cubism 组件</button>
+        </div>
+        <div class="row"><span class="hint">互动由模型目录里的 <code>model.json</code> 驱动：点击 / 悬停不同部位会触发台词和动作，闲置时会自己闲聊。可以直接改文件，也可以让 AI 根据角色图片生成整套配置（需先在「AI 接入」里填好 Key；视觉模型还能看图猜性格）。</span></div>
+        <details class="l2dHelp">
+          <summary>配置写法（regions / actions / idle）与模型格式说明</summary>
+          <pre>{
+  "name": "角色显示名",
+  "regions": [
+    {"x": 0.30, "y": 0.03, "w": 0.40, "h": 0.30,
+     "click": ["pat"], "hover": ["notice"]}
+  ],
+  "actions": {
+    "pat": {
+      "say": ["别摸头啦～", "再摸一下也可以…"],
+      "anim": {"bounce": 8, "spin": 0, "wobble": 5},
+      "duration": 600, "cooldown": 1200
+    }
+  },
+  "idle": {"chatter": ["今天也要加油哦～"], "every": 150}
+}
+
+· x / y / w / h 都是 0~1 的相对位置，左上角为原点。
+· say 是台词（字符串或数组，随机抽一句）；bounce 弹跳像素，spin / wobble 旋转角度。
+· cooldown 冷却毫秒，防止连点刷屏；idle.every 是闲聊间隔秒数。
+· 3D 模型：目录里放 model.glb 或 model.vrm（单文件，VRM 按 glTF 渲染）。
+  首次使用先点「下载 3D 组件」（three.js，约 700KB），之后可离线使用。
+· Cubism（.moc3）：用「导入模型文件夹…」选整个模型包（含 .model3.json / .moc3 / textures）。
+  首次先点「下载 Cubism 组件」（Cubism Core + PIXI，约 1.5MB）。Core 由 Live2D 官方提供，
+  使用即表示同意其许可条款；本程序不内嵌这些组件。</pre>
+        </details>
       </div>
       <div class="card"><h3>关闭行为</h3>
         <div class="row"><label class="f">点 ✕ 时</label>
@@ -599,7 +693,7 @@
           </select>
           <span class="hint" id="closeActionTip">选「直接退出应用」后，点 ✕ 或按 Alt+F4 会真正结束程序。</span>
         </div>
-        <div class="row"><span class="hint">选「最小化到后台」时程序仍在运行；想彻底退出，可把这里改成「直接退出应用」，或用「快捷组件 → 退出应用」。</span></div>
+        <div class="row"><span class="hint">选「最小化到后台」时程序仍在运行；想彻底退出，可把这里改成「直接退出应用」，或用上面的「快捷组件 → 退出应用」。</span></div>
       </div>
       <div class="card"><h3>系统集成（打开方式 / 右键菜单）</h3>
         <div class="row">
@@ -888,81 +982,76 @@ function fmtKeys(k){
   return s.join('+');
 }
 let hkCapture = null;
+function keyText(k){ return k ? fmtKeys(k) : '未绑定'; }
 function startHotkeyRecord(btn, action, keys){
-  if (hkCapture) { hkCapture.textContent = fmtKeys(hkCapture._keys); hkCapture.classList.remove('rec'); }
+  if (hkCapture && hkCapture !== btn){
+    hkCapture.textContent = keyText(hkCapture._keys);
+    hkCapture.classList.remove('rec');
+  }
   hkCapture = btn;
-  btn._keys = keys;
+  btn._keys = keys || 0;
   btn.textContent = '请按组合键…（Esc 取消）';
   btn.classList.add('rec');
 }
+/* 快捷组件 / 全局热键：合并成一份列表（带 run 的动作可直接点「执行」） */
+const ACT_META = {
+  quit:     { ico: '⏻', t: '退出应用',        d: '结束整个程序（含所有拆分窗口）', run: true  },
+  minimize: { ico: '▁', t: '最小化窗口',      d: '收起到任务栏',                   run: true  },
+  theme:    { ico: '◐', t: '切换深色 / 浅色', d: '在深色与亮色之间切换',           run: true  },
+  hide:     { ico: '▾', t: '隐藏 / 显示窗口', d: '收进托盘，再按一次唤回',         run: true  },
+  import:   { ico: '⇩', t: '导入 TXT',        d: '',                                run: false },
+  generate: { ico: '✎', t: '重新生成',        d: '',                                run: false }
+};
+const ACT_ORDER = ['quit', 'minimize', 'theme', 'hide', 'import', 'generate'];
 function renderHotkeys(defs){
-  const box = $('hkList'); if (!box) return;
-  box.innerHTML = '';
-  (defs || []).forEach(d => {
-    const row = document.createElement('div');
-    row.className = 'row';
-    const sp = document.createElement('span');
-    sp.className = 'hint';
-    sp.textContent = d.desc;
-    const btn = document.createElement('button');
-    btn.className = 'b hkkey';
-    btn.textContent = d.keys ? fmtKeys(d.keys) : '未绑定';
-    btn.dataset.action = d.action;
-    btn.onclick = () => startHotkeyRecord(btn, d.action, d.keys);
-    row.appendChild(sp); row.appendChild(btn);
-    box.appendChild(row);
-  });
-  renderQuick(defs);
-}
-
-/* 快捷组件：执行 + 热键绑定（复用同一套录制逻辑） */
-const QUICK_ITEMS = [
-  { a: 'quit',     ico: '⏻', t: '退出应用',         d: '结束整个程序（含所有拆分窗口）' },
-  { a: 'minimize', ico: '▁', t: '最小化窗口',       d: '收起到任务栏' },
-  { a: 'theme',    ico: '◐', t: '切换深色 / 浅色',  d: '在深色与亮色之间切换' },
-  { a: 'hide',     ico: '▾', t: '隐藏 / 显示窗口',  d: '收进托盘，再按一次唤回' }
-];
-function renderQuick(defs){
   const box = $('quickList'); if (!box) return;
+  const list = (defs || []).slice();
+  list.sort((a, b) => {
+    const ia = ACT_ORDER.indexOf(a.action), ib = ACT_ORDER.indexOf(b.action);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
   box.innerHTML = '';
-  const map = {};
-  (defs || []).forEach(d => { map[d.action] = d; });
-  QUICK_ITEMS.forEach(q => {
-    const d = map[q.a] || { keys: 0, desc: q.d };
-    const row = document.createElement('div');
-    row.className = 'qk-row';
+  if (!list.length){ box.innerHTML = '<div class="hint">热键定义读取中…</div>'; return; }
+  list.forEach(d => {
+    const m = ACT_META[d.action] || { ico: '•', t: d.desc || d.action, run: false };
+    const row = document.createElement('div'); row.className = 'qk-row';
 
-    const ico = document.createElement('span'); ico.className = 'qk-ico'; ico.textContent = q.ico;
+    const ico = document.createElement('span'); ico.className = 'qk-ico'; ico.textContent = m.ico;
     const txt = document.createElement('div'); txt.className = 'qk-txt';
-    const t = document.createElement('div'); t.className = 'qk-t'; t.textContent = q.t;
-    const desc = document.createElement('div'); desc.className = 'qk-d'; desc.textContent = q.d;
+    const t = document.createElement('div'); t.className = 'qk-t'; t.textContent = m.t;
+    const sub = m.d || d.desc || '';
+    const desc = document.createElement('div'); desc.className = 'qk-d';
+    desc.textContent = (sub === m.t) ? '' : sub;
     txt.appendChild(t); txt.appendChild(desc);
 
     const hb = document.createElement('button');
     hb.className = 'b hkkey';
-    hb.textContent = d.keys ? fmtKeys(d.keys) : '未绑定';
-    hb.title = '点击后按下新的组合键即可改绑';
-    hb.onclick = () => startHotkeyRecord(hb, q.a, d.keys);
+    hb.dataset.action = d.action;                     // 录制完成后按这个回写（缺了就会绑定失败）
+    hb.textContent = keyText(d.keys);
+    hb.title = '点击后按下新的组合键即可改绑（Esc 取消）';
+    hb.onclick = () => startHotkeyRecord(hb, d.action, d.keys);
 
-    const run = document.createElement('button');
-    run.className = 'b p';
-    run.textContent = '执行';
-    run.onclick = () => host('runAction|' + q.a);
-
-    row.appendChild(ico); row.appendChild(txt); row.appendChild(hb); row.appendChild(run);
+    row.appendChild(ico); row.appendChild(txt); row.appendChild(hb);
+    if (m.run){
+      const run = document.createElement('button');
+      run.className = 'b p';
+      run.textContent = '执行';
+      run.onclick = () => host('runAction|' + d.action);
+      row.appendChild(run);
+    }
     box.appendChild(row);
   });
 }
 function resetHotkeys(){ host('resetHotkeys'); }
 document.addEventListener('keydown', e => {
   if (!hkCapture) return;
-  if (e.key === 'Escape') { hkCapture.textContent = fmtKeys(hkCapture._keys); hkCapture.classList.remove('rec'); hkCapture = null; return; }
+  if (e.key === 'Escape') { hkCapture.textContent = keyText(hkCapture._keys); hkCapture.classList.remove('rec'); hkCapture = null; return; }
   e.preventDefault(); e.stopPropagation();
   const mods = (e.ctrlKey ? 0x20000 : 0) | (e.altKey ? 0x40000 : 0) | (e.shiftKey ? 0x10000 : 0);
   let kc = 0;
   const f = /^F([1-9]|1[0-9]|2[0-4])$/.exec(e.key);
   if (f) kc = 112 + parseInt(f[1], 10) - 1;
-  else if (e.key.length === 1) kc = e.key.toUpperCase().charCodeAt(0);
+  else if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) kc = e.key.toUpperCase().charCodeAt(0);
   if (!kc || !mods) { ui.status('需同时包含修饰键（Ctrl / Alt / Shift）与功能键'); return; }
   const keys = mods | kc;
   hkCapture._keys = keys;
@@ -971,12 +1060,560 @@ document.addEventListener('keydown', e => {
   host('setHotkey|' + hkCapture.dataset.action + '|' + keys);
   hkCapture = null;
 });
+
+/* ---------- Live2D 角色（窗口内悬浮层 + 3D） ---------- */
+const L2D = {
+  st: null, models: [], cfg: {}, raf: 0, t0: 0, nextBlink: 0, blinkUntil: 0,
+  anim: null, nextChat: 0, hoverKey: '', hoverAt: 0, sayTimer: 0
+};
+const L3 = { ready: false, renderer: null, scene: null, camera: null, model: null,
+             raf: 0, t0: 0, loaded: '', hop: 0, size: 1, baseY: 0,
+             baseYaw: Math.PI, loading: false, waiters: [] };
+
+function l2dCfg(){
+  const g = id => document.getElementById(id);
+  return {
+    enabled: !!(g('l2dEnable') && g('l2dEnable').checked),
+    model: (g('l2dModel') || {}).value || '',
+    mode: (g('l2dMode') || {}).value || 'inwin',
+    scale: parseInt((g('l2dScale') || {}).value || '100', 10) || 100,
+    opacity: parseInt((g('l2dOpacity') || {}).value || '100', 10) || 100,
+    activity: !!(g('l2dActivity') && g('l2dActivity').checked),
+    follow: !!(g('l2dFollow') && g('l2dFollow').checked),
+    topmost: !!(g('l2dTopmost') && g('l2dTopmost').checked),
+    clickThrough: !!(g('l2dClick') && g('l2dClick').checked)
+  };
+}
+let l2dSaveTimer = null;
+function l2dApply(){
+  const c = l2dCfg();
+  const sv = $('l2dScaleVal'); if (sv) sv.textContent = c.scale + '%';
+  const ov = $('l2dOpacityVal'); if (ov) ov.textContent = c.opacity + '%';
+  // 先本地即时预览，再防抖提交给宿主（拖滑块时不会刷爆消息）
+  if (L2D.st){
+    L2D.st.scale = c.scale; L2D.st.opacity = c.opacity;
+    L2D.st.activity = c.activity; L2D.st.follow = c.follow;
+    const im = $('l2dImg'); if (im) im.style.opacity = c.opacity / 100;
+  }
+  if (l2dSaveTimer) clearTimeout(l2dSaveTimer);
+  l2dSaveTimer = setTimeout(function(){
+    l2dSaveTimer = null;
+    host('live2dApply|' + encodeURIComponent(JSON.stringify(c)));
+  }, 200);
+}
+
+/* ---- 互动：台词气泡 / 动作 ---- */
+function l2dSay(text){
+  const el = $('l2dSay'); if (!el || !text) return;
+  const wrap = $('l2dWrap'); if (!wrap) return;
+  el.textContent = text;
+  el.classList.add('on');
+  el.style.left = '0px'; el.style.top = '0px';
+  const r = wrap.getBoundingClientRect();
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let x = r.left + r.width / 2 - w / 2;
+  let y = r.top - h - 8;
+  if (y < 6) y = r.bottom + 8;
+  x = Math.max(6, Math.min(window.innerWidth - w - 6, x));
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+  clearTimeout(L2D.sayTimer);
+  L2D.sayTimer = setTimeout(function(){ el.classList.remove('on'); }, 3600);
+}
+function l2dRun(ids){
+  if (!ids || !ids.length) return;
+  const acts = (L2D.cfg && L2D.cfg.actions) || {};
+  ids.forEach(function(id){
+    const a = acts[id]; if (!a) return;
+    const say = Array.isArray(a.say) ? a.say : (a.say ? [a.say] : []);
+    if (say.length) l2dSay(say[Math.floor(Math.random() * say.length)]);
+    const an = a.anim || {};
+    if (an.bounce || an.spin || an.wobble){
+      L2D.anim = {
+        bounce: an.bounce || 0, spin: an.spin || 0, wobble: an.wobble || 0,
+        start: performance.now(), dur: a.duration || 600
+      };
+      if (L2D.st && L2D.st.type !== 'sprite') L3.hop = 1;
+    }
+  });
+}
+function l2dAnimNow(now){
+  if (!L2D.anim) return { dy: 0, rot: 0 };
+  const p = (now - L2D.anim.start) / Math.max(120, L2D.anim.dur);
+  if (p >= 1){ L2D.anim = null; return { dy: 0, rot: 0 }; }
+  const e = Math.sin(Math.PI * p);
+  return {
+    dy: -L2D.anim.bounce * e,
+    rot: L2D.anim.spin * e + L2D.anim.wobble * Math.sin(p * Math.PI * 4) * (1 - p)
+  };
+}
+function l2dFindModel(){
+  const cur = (L2D.st && L2D.st.name) || '';
+  const q = prompt('要联网找哪个角色的模型？（会打开浏览器搜索 Live2D / VRM 资源）', cur);
+  if (q === null) return;
+  host('live2dFindModel|' + encodeURIComponent((q || cur || '').trim()));
+}
+function l2dHitRegion(nx, ny, field){
+  const regs = (L2D.cfg && L2D.cfg.regions) || [];
+  let ids = [];
+  for (let i = 0; i < regs.length; i++){
+    const r = regs[i];
+    if (nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h){
+      const list = r[field] || [];
+      if (list.length) ids = ids.concat(list);
+    }
+  }
+  return ids;
+}
+
+/* 立绘点击 / 悬停 */
+(function(){
+  const inner = $('l2dInner'); if (!inner) return;
+  inner.addEventListener('click', function(e){
+    const st = L2D.st || {};
+    if (!st.enabled || st.mode !== 'inwin' || st.type !== 'sprite') return;
+    const r = inner.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    let ids = l2dHitRegion((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, 'click');
+    if (!ids.length) ids = (L2D.cfg && L2D.cfg.click) || [];
+    l2dRun(ids);
+  });
+  inner.addEventListener('mousemove', function(e){
+    const st = L2D.st || {};
+    if (!st.enabled || st.mode !== 'inwin' || st.type !== 'sprite') return;
+    const now = performance.now();
+    if (now - L2D.hoverAt < 900) return;
+    const r = inner.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const nx = (e.clientX - r.left) / r.width, ny = (e.clientY - r.top) / r.height;
+    const regs = (L2D.cfg && L2D.cfg.regions) || [];
+    for (let i = 0; i < regs.length; i++){
+      const rg = regs[i];
+      if (!(rg.hover && rg.hover.length)) continue;
+      if (nx >= rg.x && nx <= rg.x + rg.w && ny >= rg.y && ny <= rg.y + rg.h){
+        const key = rg.id || (rg.x + ',' + rg.y);
+        if (key !== L2D.hoverKey){ L2D.hoverKey = key; L2D.hoverAt = now; l2dRun(rg.hover); }
+        return;
+      }
+    }
+    L2D.hoverKey = '';
+  });
+})();
+
+/* 3D 点击 */
+(function(){
+  const cv = $('l2d3d'); if (!cv) return;
+  cv.addEventListener('click', function(){
+    const st = L2D.st || {};
+    if (!st.enabled || st.type === 'sprite') return;
+    l2dRun((L2D.cfg && L2D.cfg.click) || ['pat']);
+  });
+})();
+
+/* 闲置闲聊（3~5 秒检查一次） */
+setInterval(function(){
+  const st = L2D.st || {};
+  if (!st.enabled) return;
+  const now = performance.now();
+  if (now < L2D.nextChat) return;
+  const idle = (L2D.cfg && L2D.cfg.idle) || {};
+  const ch = idle.chatter || [];
+  L2D.nextChat = now + Math.max(20, idle.every || 120) * 1000;
+  if (ch.length) l2dSay(ch[Math.floor(Math.random() * ch.length)]);
+}, 4000);
+
+/* ---- 3D 渲染（three.js 运行时按需从本地 _runtime 加载） ---- */
+function l3dScript(src, done){
+  const s = document.createElement('script');
+  s.src = src;
+  s.onload = done;
+  s.onerror = done;
+  document.head.appendChild(s);
+}
+function l3dInit(cb){
+  if (window.THREE && THREE.GLTFLoader){ L3.ready = true; cb(true); return; }
+  L3.waiters.push(cb);
+  if (L3.loading) return;
+  L3.loading = true;
+  const done = function(ok){
+    L3.loading = false;
+    L3.ready = ok;
+    const list = L3.waiters.splice(0);
+    list.forEach(function(f){ try { f(ok); } catch(e) {} });
+  };
+  if (window.THREE){
+    l3dScript('/__l2d/_runtime/GLTFLoader.js', function(){ done(!!(window.THREE && THREE.GLTFLoader)); });
+    return;
+  }
+  l3dScript('/__l2d/_runtime/three.min.js', function(){
+    if (!window.THREE){ done(false); return; }
+    l3dScript('/__l2d/_runtime/GLTFLoader.js', function(){ done(!!(window.THREE && THREE.GLTFLoader)); });
+  });
+}
+function l3dStart(st){
+  const cv = $('l2d3d'); if (!cv) return;
+  l3dInit(function(ok){
+    if (!ok){
+      const inf = $('l2dInfo');
+      if (inf) inf.textContent = '3D 组件未安装：点下方「下载 3D 组件」后重试';
+      host('status|3D 组件未安装：请在 Live2D 设置里点「下载 3D 组件」');
+      return;
+    }
+    if (!L3.renderer){
+      L3.renderer = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true });
+      L3.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      L3.renderer.setClearColor(0x000000, 0);
+      L3.scene = new THREE.Scene();
+      L3.camera = new THREE.PerspectiveCamera(32, 1, 0.01, 500);
+      L3.scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+      const d1 = new THREE.DirectionalLight(0xffffff, 0.85); d1.position.set(1, 2, 3); L3.scene.add(d1);
+      const d2 = new THREE.DirectionalLight(0xbcd4ff, 0.55); d2.position.set(-2, 1, -2); L3.scene.add(d2);
+    }
+    if (st.url && L3.loaded !== st.url){
+      L3.loaded = st.url;
+      if (L3.model){ L3.scene.remove(L3.model); L3.model = null; }
+      const loader = new THREE.GLTFLoader();
+      loader.load(st.url, function(g){
+        const obj = g.scene || (g.scenes && g.scenes[0]);
+        if (!obj) return;
+        // VRM 1.0 面向 +Z，VRM 0.x / 普通 GLB 面向 -Z，按扩展自动选朝向
+        let ext = {};
+        try { ext = (g.parser && g.parser.json && g.parser.json.extensions) || {}; } catch(e) {}
+        L3.baseYaw = ext.VRMC_vrm ? 0 : Math.PI;
+        obj.traverse(function(n){ if (n.isMesh) n.frustumCulled = false; });
+        L3.model = obj;
+        L3.scene.add(obj);
+        const box = new THREE.Box3().setFromObject(obj);
+        const size = new THREE.Vector3(); box.getSize(size);
+        const center = new THREE.Vector3(); box.getCenter(center);
+        obj.position.sub(center);
+        L3.baseY = obj.position.y;
+        L3.size = Math.max(size.y, 0.01);
+        L3.camera.position.set(0, 0, L3.size * 1.75);
+        L3.camera.lookAt(0, 0, 0);
+        L3.t0 = performance.now();
+        host('status|3D 角色已载入：' + (st.name || ''));
+      }, undefined, function(){
+        L3.loaded = '';
+        const inf = $('l2dInfo');
+        if (inf) inf.textContent = '3D 模型加载失败：只支持单文件 .glb / .vrm（外部贴图的 .gltf 不支持）';
+        host('status|3D 模型加载失败：只支持单文件 .glb / .vrm');
+      });
+    }
+    l3dLoop();
+  });
+}
+function l3dLoop(){
+  if (L3.raf) return;
+  const cv = $('l2d3d');
+  function frame(now){
+    const st = L2D.st || {};
+    if (!cv || !L3.renderer || !st.enabled || st.mode !== 'inwin' ||
+        (st.type !== 'glb' && st.type !== 'vrm')){
+      L3.raf = 0; return;
+    }
+    L3.raf = requestAnimationFrame(frame);
+    const w = cv.clientWidth || 300, h = cv.clientHeight || 460;
+    L3.renderer.setSize(w, h, false);
+    L3.camera.aspect = w / h;
+    L3.camera.updateProjectionMatrix();
+    const t = (now - L3.t0) / 1000;
+    if (L3.model){
+      let yaw = L3.baseYaw;
+      L3.model.position.y = L3.baseY;
+      if (st.activity){
+        yaw += Math.sin(t * 0.45) * 0.10;
+        L3.model.position.y = L3.baseY + Math.sin(t * 0.9) * L3.size * 0.006;
+      }
+      if (st.follow){
+        const cx = window.innerWidth / 2;
+        const dx = Math.max(-1, Math.min(1, ((window.__l2dMx || cx) - cx) / cx));
+        yaw += dx * 0.30;
+      }
+      L3.model.rotation.y = yaw;
+      if (L3.hop > 0){
+        L3.model.position.y += Math.sin(Math.PI * (1 - L3.hop)) * L3.size * 0.06;
+        L3.hop = Math.max(0, L3.hop - 0.03);
+      }
+    }
+    L3.renderer.render(L3.scene, L3.camera);
+  }
+  L3.raf = requestAnimationFrame(frame);
+}
+
+/* ---- Cubism（.moc3）渲染：Cubism Core + PIXI + pixi-live2d-display ---- */
+const LC = { app: null, model: null, loaded: '', loading: false, waiters: [],
+             ready: false, idleStopped: false };
+function l2dcInit(cb){
+  if (window.Live2DCubismCore && window.PIXI && PIXI.live2d){ LC.ready = true; cb(true); return; }
+  LC.waiters.push(cb);
+  if (LC.loading) return;
+  LC.loading = true;
+  const done = function(ok){
+    LC.loading = false;
+    LC.ready = ok;
+    const list = LC.waiters.splice(0);
+    list.forEach(function(f){ try { f(ok); } catch(e) {} });
+  };
+  const step3 = function(){
+    if (window.PIXI && PIXI.live2d && window.Live2DCubismCore){ done(true); return; }
+    l3dScript('/__l2d/_runtime/cubism4.min.js', function(){
+      done(!!(window.PIXI && PIXI.live2d && window.Live2DCubismCore));
+    });
+  };
+  const step2 = function(){
+    if (!window.PIXI){ done(false); return; }
+    if (window.Live2DCubismCore){ step3(); return; }
+    l3dScript('/__l2d/_runtime/live2dcubismcore.min.js', step3);
+  };
+  if (!window.PIXI) l3dScript('/__l2d/_runtime/pixi.min.js', step2);
+  else step2();
+}
+function l2dcLayout(){
+  if (!LC.app) return;
+  const cv = $('l2dcv'); if (!cv) return;
+  const st = L2D.st || {};
+  const w = cv.clientWidth || 320, h = cv.clientHeight || 460;
+  LC.app.renderer.resize(w, h);
+  if (!LC.model) return;
+  const bw = LC.model.width || w, bh = LC.model.height || h;
+  const s = Math.min(w / bw, h / bh) * 0.95 * ((st.scale || 100) / 100);
+  LC.model.scale.set(s);
+  LC.model.position.set((w - bw * s) / 2, (h - bh * s) / 2);
+  LC.model.alpha = (st.opacity || 100) / 100;
+  if (!st.activity && !LC.idleStopped){
+    LC.idleStopped = true;
+    try { LC.model.internalModel.motionManager.stopAllMotions(); } catch(e) {}
+  } else if (st.activity && LC.idleStopped){
+    LC.idleStopped = false;
+    try { LC.model.motion('Idle'); } catch(e) {}
+  }
+}
+function l2dcStart(st){
+  const cv = $('l2dcv'); if (!cv) return;
+  l2dcInit(function(ok){
+    if (!ok){
+      host('status|Cubism 组件未安装：请在 Live2D 设置里点「下载 Cubism 组件」');
+      return;
+    }
+    if (!LC.app){
+      LC.app = new PIXI.Application({
+        view: cv,
+        width: cv.clientWidth || 320,
+        height: cv.clientHeight || 460,
+        transparent: true,
+        antialias: true,
+        autoDensity: true,
+        resolution: Math.min(2, window.devicePixelRatio || 1)
+      });
+    }
+    if (st.url && LC.loaded !== st.url){
+      LC.loaded = st.url;
+      if (LC.model){
+        try { LC.app.stage.removeChild(LC.model); LC.model.destroy(); } catch(e) {}
+        LC.model = null;
+      }
+      PIXI.live2d.Live2DModel.from(st.url, { autoInteract: false }).then(function(m){
+        LC.model = m;
+        LC.app.stage.addChild(m);
+        LC.idleStopped = false;
+        l2dcLayout();
+        if (st.activity){ try { m.motion('Idle'); } catch(e) {} }
+        host('status|Cubism 角色已载入：' + (st.name || ''));
+      }).catch(function(err){
+        LC.loaded = '';
+        host('status|Cubism 模型加载失败：' + (err && err.message ? err.message : err));
+      });
+    }
+    l2dcLayout();
+    try { LC.app.ticker.start(); } catch(e) {}
+  });
+}
+(function(){
+  const cv = $('l2dcv'); if (!cv) return;
+  cv.addEventListener('click', function(){
+    const st = L2D.st || {};
+    if (!st.enabled || st.type !== 'cubism') return;
+    if (LC.model){ try { LC.model.motion('Tap'); } catch(e) {} }
+    l2dRun((L2D.cfg && L2D.cfg.click) || ['pat']);
+  });
+  cv.addEventListener('mousemove', function(e){
+    const st = L2D.st || {};
+    if (!LC.model || !st.enabled || st.type !== 'cubism') return;
+    const r = cv.getBoundingClientRect();
+    if (st.activity && st.follow) LC.model.focus(e.clientX - r.left, e.clientY - r.top);
+    else LC.model.focus(r.width / 2, r.height / 2);
+  });
+})();
+window.addEventListener('resize', function(){
+  const st = L2D.st || {};
+  if (st.type === 'cubism') l2dcLayout();
+});
+
+function l2dRender(){
+  const st = L2D.st || {};
+  const wrap = $('l2dWrap'), img = $('l2dImg'), bl = $('l2dBlink'), inner = $('l2dInner');
+  if (!wrap || !img) return;
+  const show = !!st.enabled && st.mode === 'inwin' && !!st.url;
+  const is3d = st.type === 'glb' || st.type === 'vrm';
+  const isCub = st.type === 'cubism';
+  wrap.style.display = show ? 'block' : 'none';
+  wrap.classList.toggle('m3d', is3d);
+  wrap.classList.toggle('mcub', isCub);
+  if (!show){
+    if (L2D.raf){ cancelAnimationFrame(L2D.raf); L2D.raf = 0; }
+    if (L3.raf){ cancelAnimationFrame(L3.raf); L3.raf = 0; }
+    if (LC.app){ try { LC.app.ticker.stop(); } catch(e) {} }
+    const say = $('l2dSay'); if (say) say.classList.remove('on');
+    return;
+  }
+  if (isCub){ l2dcStart(st); return; }
+  if (is3d){ l3dStart(st); return; }
+  if (img.getAttribute('data-src') !== st.url){ img.setAttribute('data-src', st.url); img.src = st.url; }
+  if (bl){
+    const bsrc = st.blink || '';
+    if (bl.getAttribute('data-src') !== bsrc){ bl.setAttribute('data-src', bsrc); bl.src = bsrc; }
+    bl.style.display = 'none';
+  }
+  img.style.opacity = (st.opacity || 100) / 100;
+  if (inner){
+    const has = !!((L2D.cfg && ((L2D.cfg.regions || []).length || (L2D.cfg.click || []).length)));
+    inner.classList.toggle('hit', has);
+  }
+  L2D.t0 = performance.now();
+  L2D.nextBlink = L2D.t0 + 2500 + Math.random() * 3500;
+  L2D.blinkUntil = 0;
+  if (!L2D.raf) L2D.raf = requestAnimationFrame(l2dTick);
+}
+function l2dTick(now){
+  const st = L2D.st || {};
+  const inner = $('l2dInner'), bl = $('l2dBlink');
+  if (!inner || !st.enabled || st.mode !== 'inwin' || st.type !== 'sprite' || !st.url){
+    L2D.raf = 0; return;
+  }
+  L2D.raf = requestAnimationFrame(l2dTick);
+  const t = (now - L2D.t0) / 1000;
+  const k = (st.scale || 100) / 100;
+  let sx = 1, sy = 1, rot = 0, dy = 0;
+  if (st.activity){
+    const b = Math.sin(t * 1.7);
+    sx = 1 - 0.004 * b; sy = 1 + 0.010 * b;
+    rot = 0.9 * Math.sin(t * 0.55);
+    dy = 2.5 * Math.sin(t * 0.9);
+    if (bl && st.blink){
+      if (!L2D.blinkUntil && now > L2D.nextBlink) L2D.blinkUntil = now + 120;
+      else if (L2D.blinkUntil && now > L2D.blinkUntil){
+        L2D.blinkUntil = 0; L2D.nextBlink = now + 2800 + Math.random() * 4200;
+      }
+      bl.style.display = L2D.blinkUntil ? 'block' : 'none';
+    }
+  } else if (bl && bl.style.display !== 'none') bl.style.display = 'none';
+  if (st.activity && st.follow){
+    const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+    const dx = Math.max(-1, Math.min(1, ((window.__l2dMx || cx) - cx) / cx));
+    const vy = Math.max(-1, Math.min(1, ((window.__l2dMy || cy) - cy) / cy));
+    rot += dx * 2.4;
+    dy += -vy * 4;
+  }
+  const an = l2dAnimNow(now);
+  rot += an.rot;
+  dy += an.dy;
+  inner.style.transform = 'translateY(' + dy.toFixed(2) + 'px) rotate(' + rot.toFixed(2) +
+    'deg) scale(' + (k * sx).toFixed(4) + ',' + (k * sy).toFixed(4) + ')';
+  const im = $('l2dImg');
+  if (im) im.style.opacity = (st.opacity || 100) / 100;
+}
+window.addEventListener('mousemove', function(e){
+  window.__l2dMx = e.clientX; window.__l2dMy = e.clientY;
+});
+
 /* ---------- C# 回调 ---------- */
 window.ui = {
   version: v => { if(!v) return; $('ver').textContent = "v" + v; $('ver2').textContent = v; },
   hotkeys: s => { const e = $('hotkeyInfo'); if(e) e.textContent = s || ""; },
   hotkeyDefs: s => { try { renderHotkeys(JSON.parse(s || "[]")); } catch(_) {} },
   closeAction: s => { const el = $('closeAction'); if (el && s) el.value = s; },
+  live2dModels: s => {
+    let arr = []; try { arr = JSON.parse(s || "[]"); } catch(_) {}
+    L2D.models = arr;
+    const sel = $('l2dModel'); if (!sel) return;
+    const cur = (L2D.st && L2D.st.model) || sel.value || '';
+    sel.innerHTML = '';
+    if (!arr.length){
+      const o = document.createElement('option');
+      o.value = ''; o.textContent = '（还没有模型，点「导入图片…」）';
+      sel.appendChild(o);
+      return;
+    }
+    arr.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.id;
+      const tag = m.type === 'cubism' ? ' · Cubism'
+        : (m.type === 'glb' || m.type === 'vrm') ? ' · 3D'
+        : (m.w ? ' · ' + m.w + '×' + m.h : '');
+      o.textContent = m.name + tag;
+      sel.appendChild(o);
+    });
+    sel.value = (cur && arr.some(m => m.id === cur)) ? cur : arr[0].id;
+  },
+  live2dState: s => {
+    let st = {}; try { st = JSON.parse(s || "{}"); } catch(_) {}
+    try { L2D.cfg = JSON.parse(st.cfgJson || "{}"); } catch(_) { L2D.cfg = {}; }
+    L2D.st = st;
+
+    const is3d = st.type === 'glb' || st.type === 'vrm';
+    const isCub = st.type === 'cubism';
+    const isSprite = !is3d && !isCub;
+    const modeSel = $('l2dMode');
+    if (modeSel){
+      const opt = modeSel.querySelector('option[value="detached"]');
+      if (opt) opt.disabled = !isSprite;
+      if (!isSprite) modeSel.value = 'inwin';
+    }
+
+    const set = (id, v) => { const e = $(id); if (!e) return; if (e.type === 'checkbox') e.checked = !!v; else e.value = v; };
+    set('l2dEnable', st.enabled); set('l2dMode', !isSprite ? 'inwin' : (st.mode || 'inwin'));
+    set('l2dScale', st.scale || 100); set('l2dOpacity', st.opacity || 100);
+    set('l2dActivity', st.activity); set('l2dFollow', st.follow);
+    set('l2dTopmost', st.topmost); set('l2dClick', st.clickThrough);
+    const sel = $('l2dModel');
+    if (sel && st.model && !Array.prototype.some.call(sel.options, o => o.value === st.model)){
+      const o = document.createElement('option');
+      o.value = st.model; o.textContent = st.name || st.model;
+      sel.appendChild(o);
+    }
+    if (sel && st.model) sel.value = st.model;
+    const sv = $('l2dScaleVal'); if (sv) sv.textContent = (st.scale || 100) + '%';
+    const ov = $('l2dOpacityVal'); if (ov) ov.textContent = (st.opacity || 100) + '%';
+
+    const btn = $('l2d3dBtn');
+    if (btn){
+      btn.style.display = is3d ? '' : 'none';
+      btn.textContent = st.threeReady ? '3D 组件已就绪' : '下载 3D 组件（约 700KB）';
+    }
+    const cb = $('l2dCubBtn');
+    if (cb){
+      cb.style.display = isCub ? '' : 'none';
+      cb.textContent = st.cubismReady ? 'Cubism 组件已就绪' : '下载 Cubism 组件（约 1.5MB）';
+    }
+
+    const inf = $('l2dInfo');
+    if (inf){
+      if (!st.enabled) inf.textContent = 'Live2D 未启用';
+      else if (is3d) inf.textContent = st.threeReady
+        ? '3D 模型在窗口右下角渲染（点击角色可互动）'
+        : '3D 模型需要先下载 3D 组件';
+      else if (isCub) inf.textContent = st.cubismReady
+        ? 'Cubism（.moc3）在窗口右下角渲染，支持动作与视线跟随'
+        : 'Cubism 模型需要先下载 Cubism 组件';
+      else if (st.mode === 'detached') inf.textContent = '角色已在独立透明窗口中显示（可拖到桌面任意位置）';
+      else inf.textContent = '角色显示在窗口右下角（点击不同部位有互动）';
+    }
+
+    L2D.anim = null;
+    L2D.hoverKey = '';
+    L2D.nextChat = performance.now() + 45000;
+    l2dRender();
+  },
   updated: o => {
     const badge = (o.type === "security") ? "安全更新" : (o.type === "fix" ? "问题修复" : "功能更新");
     const color = (o.type === "security") ? "#c42b1c" : (o.type === "fix" ? "#8a6d00" : "#0f7b3f");
@@ -2376,7 +3013,6 @@ window.addEventListener('drop', e=>{
 /* ---------- 启动 ---------- */
 try{ setTheme(localStorage.getItem('rtgTheme') || 'auto'); }catch(e){ setTheme('auto'); }
 try{ bgInit(); }catch(e){}
-try{ renderQuick([]); }catch(e){}
 host('ready');
 </script>
 <script>

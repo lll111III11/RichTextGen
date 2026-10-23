@@ -22,6 +22,15 @@
     font:14px/1.45 "Microsoft YaHei UI","Noto Sans SC",system-ui,sans-serif;
     padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
+  /* 主题切换过渡：颜色类属性平滑过渡，避免瞬间硬切 */
+  body, body *{
+    transition: background-color .26s ease, color .26s ease, border-color .26s ease,
+                box-shadow .26s ease, fill .26s ease, stroke .26s ease;
+  }
+  input[type=range]::-webkit-slider-thumb{transition:background-color .26s ease, box-shadow .26s ease}
+  @media (prefers-reduced-motion: reduce){
+    body, body *{ transition: none !important }
+  }
   header{display:flex;align-items:center;gap:8px;padding:8px var(--pad);flex:0 0 auto}
   header .t{font-weight:700;font-size:15px}
   header .v{color:var(--sub);font-size:11.5px}

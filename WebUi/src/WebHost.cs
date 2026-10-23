@@ -221,6 +221,17 @@ namespace RichTextGen
                 hotkeys = new HotkeyManager(this, OnHotkey);
                 LoadCloseAction();                       // 关闭行为（询问 / 最小化 / 直接退出）
 
+                // Live2D：角色窗口里的右键菜单会改配置，改完把状态同步回界面
+                Live2D.Load();
+                Live2D.Changed = delegate
+                {
+                    try { CallStr("live2dState", Live2D.StateJson()); } catch { }
+                };
+                Live2D.OpenSettings = delegate
+                {
+                    try { RestoreWindow(); Activate(); RunJs("go('set')"); } catch { }
+                };
+
                 // 命令行/右键传人的待打开文件（界面 ready 后逐个打开）
                 foreach (string f in Program.StartupFiles)
                 {
@@ -777,6 +788,7 @@ namespace RichTextGen
             // 释放全局热键与计时器，避免残留热键占用（否则重启程序会「注册失败（被占用）」）
             try { if (_winAnim != null) { _winAnim.Stop(); _winAnim.Dispose(); _winAnim = null; } } catch { }
             try { if (hotkeys != null) hotkeys.UnregisterAll(); } catch { }
+            if (!_secondary) { try { Live2D.Shutdown(); } catch { } }
             try { if (updateTimer != null) { updateTimer.Stop(); updateTimer.Dispose(); } } catch { }
             try { if (_mediaListener != null) { _mediaListener.Stop(); _mediaListener = null; } } catch { }   // 关掉音乐本地服务
             base.OnFormClosed(e);
@@ -816,12 +828,43 @@ namespace RichTextGen
                 {
                     try
                     {
-                        if (e2.Request.Uri.StartsWith(origin, StringComparison.OrdinalIgnoreCase))
+                        if (!e2.Request.Uri.StartsWith(origin, StringComparison.OrdinalIgnoreCase)) return;
+
+                        // Live2D 模型图片：https://richtextgen.local/__l2d/<模型目录>/<文件名>
+                        string abs = new Uri(e2.Request.Uri).AbsolutePath;
+                        if (abs.StartsWith(Live2D.UrlPrefix, StringComparison.OrdinalIgnoreCase))
                         {
-                            byte[] body = Encoding.UTF8.GetBytes(LoadHtml());
-                            e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
-                                new MemoryStream(body), 200, "OK", "Content-Type: text/html; charset=utf-8");
+                            string[] seg = abs.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                            string file = null;
+                            if (seg.Length >= 3)
+                            {
+                                // 支持子目录：/__l2d/<模型>/textures/xxx.png
+                                StringBuilder rel = new StringBuilder();
+                                for (int si = 2; si < seg.Length; si++)
+                                {
+                                    if (rel.Length > 0) rel.Append('/');
+                                    rel.Append(Uri.UnescapeDataString(seg[si]));
+                                }
+                                file = Live2D.ResolveFile(Uri.UnescapeDataString(seg[1]), rel.ToString());
+                            }
+                            if (file != null)
+                            {
+                                byte[] raw = File.ReadAllBytes(file);
+                                e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                                    new MemoryStream(raw), 200, "OK",
+                                    "Content-Type: " + MimeOf(file) + "\r\nCache-Control: no-cache");
+                            }
+                            else
+                            {
+                                e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                                    new MemoryStream(new byte[0]), 404, "Not Found", "Content-Type: text/plain");
+                            }
+                            return;
                         }
+
+                        byte[] body = Encoding.UTF8.GetBytes(LoadHtml());
+                        e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                            new MemoryStream(body), 200, "OK", "Content-Type: text/html; charset=utf-8");
                     }
                     catch { }
                 };
@@ -964,6 +1007,15 @@ namespace RichTextGen
                     CallStr("aiSettings", AiConfig.ToJson());
                     LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
 
+                    // Live2D：把模型列表与配置回传（只主窗口显示，副窗口不重复出角色）
+                    if (!_secondary)
+                    {
+                        Live2D.Load();
+                        CallStr("live2dModels", Live2D.ModelsJson());
+                        CallStr("live2dState", Live2D.StateJson());
+                        Live2D.Sync();
+                    }
+
                     // 启动提示：等界面稳定后再弹，避免和首屏渲染抢焦点
                     if (!_secondary) SetTimeout(1200, ShowStartupTip);
                     if (!_secondary) CallStr("closeAction", _closeAction);
@@ -1054,6 +1106,47 @@ namespace RichTextGen
                 case "pickBg": PickBgImage(arg); break;
                 case "clearBg": ClearBgImage(arg); break;
                 case "bgLoad": LoadBgImages(); break;
+                // ---- Live2D（2D 立绘 / 桌宠）----
+                case "live2dScan":
+                    Live2D.Load();
+                    CallStr("live2dModels", Live2D.ModelsJson());
+                    CallStr("live2dState", Live2D.StateJson());
+                    break;
+                case "live2dApply":
+                    CallStr("live2dState", Live2D.Apply(Un(arg)));
+                    CallStr("status", "Live2D 设置已保存");
+                    break;
+                case "live2dImport":
+                {
+                    string id = Live2D.Import(this);
+                    if (id.Length > 0)
+                    {
+                        CallStr("live2dModels", Live2D.ModelsJson());
+                        CallStr("live2dState", Live2D.Apply(Live2D.StateJson()));
+                        CallStr("status", "已导入 Live2D 模型：" + id +
+                            (Live2D.LastImportNote.Length > 0 ? "（" + Live2D.LastImportNote + "）" : ""));
+                    }
+                    break;
+                }
+                case "live2dOpenFolder": Live2D.OpenFolder(); break;
+                case "live2dImportFolder":
+                {
+                    string id = Live2D.ImportFolder(this);
+                    if (id.Length > 0)
+                    {
+                        CallStr("live2dModels", Live2D.ModelsJson());
+                        CallStr("live2dState", Live2D.Apply(Live2D.StateJson()));
+                        CallStr("status", "已导入 Live2D 模型包：" + id);
+                    }
+                    else if (Live2D.LastImportNote.Length > 0)
+                        CallStr("status", Live2D.LastImportNote);
+                    break;
+                }
+                case "live2dInstallCubism": StartCubismRuntimeDownload(); break;
+                case "live2dFindModel": Live2D.FindModelOnline(Un(arg)); break;
+                case "live2dOpenConfig": Live2D.OpenConfig(); break;
+                case "live2dInstall3D": StartLive2dRuntimeDownload(); break;
+                case "live2dAi": Live2dAiWorkshop(); break;
                 case "colorLib": FetchColorLibrary(); break;
                 case "blockArt": BlockArtFromFile(Un(arg)); break;
                 case "translate": Translate(arg); break;
@@ -1358,6 +1451,13 @@ namespace RichTextGen
                 case ".gif": return "image/gif";
                 case ".webp": return "image/webp";
                 case ".bmp": return "image/bmp";
+                case ".js": return "text/javascript; charset=utf-8";
+                case ".json": return "application/json; charset=utf-8";
+                case ".moc3": return "application/octet-stream";
+                case ".glb":
+                case ".vrm":
+                case ".gltf": return "model/gltf-binary";
+                case ".bin": return "application/octet-stream";
                 default: return "image/png";
             }
         }
