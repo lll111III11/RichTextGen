@@ -20,6 +20,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -41,7 +42,7 @@ import java.nio.charset.StandardCharsets;
  *   - 主题：浅色 / 深色 / 跟随系统
  *   - 背景图（相册选择，本机保存，可调透明度）
  *   - 打开 / 保存文本文件（系统文件选择器，UTF-8 / UTF-16 / GBK 自动识别）
- *   - 检查更新（读取 GitHub 上的 version.json，跳转下载页）
+ *   - 检查更新（读取自有下载站清单，失败时退回 GitHub version.json）
  *
  * 界面仍由 assets/index.html 提供，原生只做手机必须由系统完成的事。
  */
@@ -54,8 +55,16 @@ public class MainActivity extends Activity {
     private static final int REQ_SAVE = 1002;
     private static final int REQ_IMG = 1003;
 
-    private static final String UPDATE_URL =
-            "https://raw.githubusercontent.com/lll111III11/RichTextGen/main/version.json";
+    /** 更新清单优先走自有下载站（双线路），最后才退回 GitHub 上的 version.json */
+    private static final String[] UPDATE_URLS = {
+            "https://richtextgen-dl.pages.dev/releases.json",
+            "https://richtextgen-dl2.pages.dev/releases.json",
+            "https://raw.githubusercontent.com/lll111III11/RichTextGen/main/version.json"
+    };
+    private static final String[] MIRRORS = {
+            "https://richtextgen-dl.pages.dev/",
+            "https://richtextgen-dl2.pages.dev/"
+    };
 
     private WebView web;
     private long lastBack = 0L;
@@ -382,33 +391,87 @@ public class MainActivity extends Activity {
         public void checkUpdate() {
             new Thread(new Runnable() {
                 public void run() {
-                    HttpURLConnection c = null;
-                    try {
-                        URL u = new URL(UPDATE_URL + "?t=" + System.currentTimeMillis());
-                        c = (HttpURLConnection) u.openConnection();
-                        c.setConnectTimeout(8000);
-                        c.setReadTimeout(8000);
-                        c.setRequestProperty("User-Agent", "RichTextGen-Android");
-                        int code = c.getResponseCode();
-                        if (code != 200) throw new Exception("HTTP " + code);
-                        InputStream in = c.getInputStream();
-                        String body = new String(readAll(in), StandardCharsets.UTF_8);
-                        in.close();
-                        JSONObject all = new JSONObject(body);
-                        JSONObject a = all.optJSONObject("android");
-                        if (a == null) throw new Exception("清单中没有安卓版本信息");
-                        callJs("onUpdateInfo",
-                                a.optString("version", ""),
-                                String.valueOf(a.optInt("versionCode", 0)),
-                                a.optString("download", ""),
-                                a.optString("notes", ""));
-                    } catch (Exception e) {
-                        callJs("onUpdateFailed", String.valueOf(e.getMessage()));
-                    } finally {
-                        if (c != null) c.disconnect();
+                    Exception last = null;
+                    for (String base : UPDATE_URLS) {
+                        HttpURLConnection c = null;
+                        try {
+                            URL u = new URL(base + "?t=" + System.currentTimeMillis());
+                            c = (HttpURLConnection) u.openConnection();
+                            c.setConnectTimeout(8000);
+                            c.setReadTimeout(8000);
+                            c.setRequestProperty("User-Agent", "RichTextGen-Android");
+                            int http = c.getResponseCode();
+                            if (http != 200) throw new Exception("HTTP " + http);
+                            InputStream in = c.getInputStream();
+                            String body = new String(readAll(in), StandardCharsets.UTF_8);
+                            in.close();
+
+                            JSONObject all = new JSONObject(body);
+                            String ver, code, dl, notes;
+                            if (all.has("files")) {
+                                // 自有下载站清单：从 files[] 里取 android 项
+                                ver = all.optString("version", "");
+                                notes = all.optString("notes", "");
+                                JSONArray files = all.optJSONArray("files");
+                                if (files == null) throw new Exception("清单缺少 files");
+                                JSONObject af = null;
+                                for (int i = 0; i < files.length(); i++) {
+                                    JSONObject f = files.optJSONObject(i);
+                                    if (f != null && "android".equals(f.optString("id"))) { af = f; break; }
+                                }
+                                if (af == null) throw new Exception("清单中没有安卓版本信息");
+                                code = String.valueOf(af.optInt("versionCode", 0));
+                                dl = pickMirror() + "files/" + af.optString("file");
+                                if (notes.length() == 0) notes = af.optString("notes", "");
+                            } else {
+                                // 兜底：GitHub version.json 的旧结构
+                                JSONObject a = all.optJSONObject("android");
+                                if (a == null) throw new Exception("清单中没有安卓版本信息");
+                                ver = a.optString("version", "");
+                                code = String.valueOf(a.optInt("versionCode", 0));
+                                dl = a.optString("download", "");
+                                notes = a.optString("notes", "");
+                            }
+                            callJs("onUpdateInfo", ver, code, dl, notes);
+                            return;
+                        } catch (Exception e) {
+                            last = e;
+                        } finally {
+                            if (c != null) c.disconnect();
+                        }
                     }
+                    callJs("onUpdateFailed", String.valueOf(last != null ? last.getMessage() : "更新检查失败"));
                 }
             }).start();
+        }
+
+        /** 对两条线路的 probe.txt 计时，返回最快的一条；都不可用时回落到主线路 */
+        private String pickMirror() {
+            String best = MIRRORS[0];
+            long bestMs = Long.MAX_VALUE;
+            for (String base : MIRRORS) {
+                HttpURLConnection c = null;
+                long t0 = System.currentTimeMillis();
+                try {
+                    URL u = new URL(base + "files/probe.txt?t=" + t0);
+                    c = (HttpURLConnection) u.openConnection();
+                    c.setConnectTimeout(3000);
+                    c.setReadTimeout(3000);
+                    c.setRequestProperty("User-Agent", "RichTextGen-Android");
+                    if (c.getResponseCode() == 200) {
+                        InputStream in = c.getInputStream();
+                        readAll(in);
+                        in.close();
+                        long ms = System.currentTimeMillis() - t0;
+                        if (ms < bestMs) { bestMs = ms; best = base; }
+                    }
+                } catch (Exception e) {
+                    // 这条线路不可用，继续测下一条
+                } finally {
+                    if (c != null) c.disconnect();
+                }
+            }
+            return best;
         }
     }
 }

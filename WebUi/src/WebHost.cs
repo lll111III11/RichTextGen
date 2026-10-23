@@ -2013,6 +2013,30 @@ namespace RichTextGen
         }
 
         // ============================================================ 更新
+        /// <summary>自有下载站（Cloudflare Pages 双线路）；清单与安装包优先从这里取，失败才退回 GitHub</summary>
+        private const string UpdateSite = "https://richtextgen-dl.pages.dev/";
+        private static readonly string[] UpdateMirrors = { "https://richtextgen-dl.pages.dev/", "https://richtextgen-dl2.pages.dev/" };
+        private const string SetupFallback = "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe";
+        private static string _mirror;
+        private static DateTime _mirrorAt;
+
+        /// <summary>对每条镜像的 files/probe.txt 计时，取最快的一条；结果缓存 10 分钟</summary>
+        private static string PickMirror()
+        {
+            if (_mirror != null && (DateTime.UtcNow - _mirrorAt).TotalMinutes < 10) return _mirror;
+            string best = UpdateMirrors[0];
+            double bestMs = double.MaxValue;
+            foreach (string b in UpdateMirrors)
+            {
+                DateTime t0 = DateTime.UtcNow;
+                string probe = Http(b + "files/probe.txt?t=" + DateTime.Now.Ticks, 4000);
+                double ms = (DateTime.UtcNow - t0).TotalMilliseconds;
+                if (probe.Length > 0 && ms < bestMs) { bestMs = ms; best = b; }
+            }
+            _mirror = best; _mirrorAt = DateTime.UtcNow;
+            return best;
+        }
+
         /// <param name="manual">true = 用户点击「立即检测更新」，无论结果如何都要在界面上给出可见反馈</param>
         private void CheckUpdate(bool manual)
         {
@@ -2023,15 +2047,32 @@ namespace RichTextGen
                 bool mandatory = false;
                 try
                 {
-                    string txt = Http("https://raw.githubusercontent.com/lll111III11/RichTextGen/main/version.json", 8000);
-                    if (string.IsNullOrEmpty(txt) || txt.IndexOf("\"version\"", StringComparison.Ordinal) < 0)
-                        txt = Http("https://cdn.jsdelivr.net/gh/lll111III11/RichTextGen@main/version.json", 8000);
-                    if (string.IsNullOrEmpty(txt)) { FailUpdate(manual, "更新检查失败（网络不可达）"); return; }
-                    ver = Field(txt, "version");
-                    url = Field(txt, "installer");
-                    notes = Field(txt, "notes");
-                    type = Field(txt, "type"); if (type.Length == 0) type = "feature";
-                    mandatory = Regex.IsMatch(txt, "\"mandatory\"\\s*:\\s*true", RegexOptions.IgnoreCase);
+                    // 第 1 条路：自有下载站的 releases.json（带双线路清单）
+                    string txt = Http(UpdateSite + "releases.json?t=" + DateTime.Now.Ticks, 8000);
+                    bool fromSite = !string.IsNullOrEmpty(txt)
+                        && txt.IndexOf("\"version\"", StringComparison.Ordinal) >= 0
+                        && txt.IndexOf("\"files\"", StringComparison.Ordinal) >= 0;
+                    if (fromSite)
+                    {
+                        ver = Field(txt, "version");
+                        notes = Field(txt, "notes");
+                        type = Field(txt, "type");
+                        mandatory = Regex.IsMatch(txt, "\"mandatory\"\\s*:\\s*true", RegexOptions.IgnoreCase);
+                        url = PickMirror() + "files/RichTextGen-Setup.exe";
+                    }
+                    else
+                    {
+                        // 兜底：GitHub 上的 version.json（直连不通时再试 jsDelivr）
+                        txt = Http("https://raw.githubusercontent.com/lll111III11/RichTextGen/main/version.json", 8000);
+                        if (string.IsNullOrEmpty(txt) || txt.IndexOf("\"version\"", StringComparison.Ordinal) < 0)
+                            txt = Http("https://cdn.jsdelivr.net/gh/lll111III11/RichTextGen@main/version.json", 8000);
+                        if (string.IsNullOrEmpty(txt)) { FailUpdate(manual, "更新检查失败（网络不可达）"); return; }
+                        ver = Field(txt, "version");
+                        url = Field(txt, "installer");
+                        notes = Field(txt, "notes");
+                        type = Field(txt, "type");
+                    }
+                    if (type.Length == 0) type = "feature";
                 }
                 catch { }
                 if (ver.Length == 0) { FailUpdate(manual, "更新检查失败"); return; }
@@ -2072,7 +2113,7 @@ namespace RichTextGen
         private void DoUpdate()
         {
             if (pendingVer.Length == 0) { CallStr("status", "请先「检查更新」，确认有新版本后再更新"); return; }
-            string url = pendingUrl.Length > 0 ? pendingUrl : "https://github.com/lll111III11/RichTextGen/releases/latest/download/RichTextGen-Setup.exe";
+            string url = pendingUrl.Length > 0 ? pendingUrl : SetupFallback;
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try
@@ -2082,7 +2123,13 @@ namespace RichTextGen
                     using (WebClient wc = new WebClient())
                     {
                         wc.Headers.Add("User-Agent", "RichTextGen/" + Version);
-                        wc.DownloadFile(url, path);
+                        try { wc.DownloadFile(url, path); }
+                        catch
+                        {
+                            // 自有下载站不可达时退回 GitHub Releases，避免更新链路单点
+                            if (url.IndexOf("pages.dev", StringComparison.Ordinal) >= 0) wc.DownloadFile(SetupFallback, path);
+                            else throw;
+                        }
                     }
                     try
                     {

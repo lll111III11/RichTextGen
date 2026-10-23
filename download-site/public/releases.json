@@ -2,6 +2,9 @@
   "product": "彩色文本生成器",
   "version": "5.9.0.7",
   "updated": "2026-10-19",
+  "notes": "v5.9.0.7：标签拆分多窗口、单实例、快捷组件热键、界面与动效修复；本次同时上线双线路下载站。",
+  "type": "feature",
+  "mandatory": false,
   "files": [
     {
       "id": "setup",
@@ -30,6 +33,8 @@
       "label": "Android 版",
       "file": "RichTextGen.apk",
       "version": "1.1.0",
+      "versionCode": 2,
+      "notes": "安卓 1.1.0：主题切换、背景图水印、文本文件打开保存、检查更新。",
       "size": 41822,
       "sha256": "ec7faaba33d8423e7b31ef6ee583b4101242a49b00d9e1b09b64643270b0ea7c",
       "icon": "android",
