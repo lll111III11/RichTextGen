@@ -19,6 +19,7 @@
   </a>
   <div class="top-right">
     <span class="pill" id="verPill">v—</span>
+    <a class="ghost" href="https://github.com/lll111III11/RichTextGen" target="_blank" rel="noopener">GitHub</a>
     <span class="net" id="netState"><i></i><em>测速中</em></span>
   </div>
 </header>
@@ -46,6 +47,19 @@
 
   <section class="grid" id="cards" aria-live="polite"></section>
 
+  <section class="card notice">
+    <div class="notice-head">
+      <h2>下载时出现安全提示？</h2>
+      <a class="ghost" href="https://github.com/lll111III11/RichTextGen/releases" target="_blank" rel="noopener">从 GitHub 下载</a>
+    </div>
+    <ul>
+      <li><b>浏览器提示「不常见的下载内容 / 可能有害」</b>：在下载项菜单里选择「保留」或「仍要下载」即可。</li>
+      <li><b>SmartScreen 提示「Windows 已保护你的电脑」</b>：点「更多信息」→「仍要运行」。若只看到「删除」，先点提示框左侧的「更多信息」。</li>
+      <li><b>为什么会被拦</b>：安装包由项目自有的代码签名证书签名，不是付费商业 CA 签发，Windows 与浏览器因此会给出警告。这只说明证书未受信任，不代表文件被篡改。</li>
+      <li><b>怎么确认没被改过</b>：展开卡片里的「SHA-256 校验值」，用 <code>certutil -hashfile 文件名 SHA256</code> 比对；或改从 GitHub Releases 下载同一文件交叉核对，源码也都在这个仓库里。</li>
+    </ul>
+  </section>
+
   <section class="stats card">
     <div><b id="statTotal">—</b><span>累计安装</span></div>
     <div><b id="statFast">—</b><span>当前最快</span></div>
@@ -55,7 +69,7 @@
 
   <footer class="foot">
     <p>文件均通过 SHA-256 校验，下载后可自行核对。 · <a class="link" href="stats">安装统计</a> · <a class="link" href="studio">网页工作区（试验）</a></p>
-    <p class="dim">© 2026 彩色文本生成器 · 静态分发站点</p>
+    <p class="dim">© 2026 彩色文本生成器 · <a class="link" href="https://github.com/lll111III11/RichTextGen" target="_blank" rel="noopener">GitHub 仓库</a> · <a class="link" href="https://github.com/lll111III11/RichTextGen/blob/main/LICENSE" target="_blank" rel="noopener">MIT 开源协议</a></p>
   </footer>
 </main>
 

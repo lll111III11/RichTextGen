@@ -185,3 +185,16 @@ a.ghost{text-decoration:none;display:inline-flex;align-items:center}
 .bar{height:7px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .4s ease}
 
+/* 安全提示说明 */
+.notice{padding:18px 22px 16px;margin-bottom:22px}
+.notice-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.notice-head h2{margin:0;font-size:15px;font-weight:650;letter-spacing:.2px}
+.notice ul{margin:0;padding-left:18px;color:var(--dim);font-size:13px;line-height:1.85}
+.notice li{margin:4px 0}
+.notice b{color:var(--fg);font-weight:600}
+.notice code{
+  font:12px/1.4 "Cascadia Mono",Consolas,monospace;
+  background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:5px;
+  padding:1px 5px;color:#cfe0ff;
+}
+
