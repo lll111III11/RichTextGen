@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.7",
+    "version":  "5.9.0.8",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.7/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.7/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.8/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.8/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.7 更新（多窗口 + 单实例 + 快捷组件 + 动效）：\n· 【多窗口】拖动标签到窗口外即可把它拆成一个独立窗口（和记事本一样），文件名、正文、编码、换行符、未保存标记都会带过去；拆出来的窗口关闭前会提示未保存\n· 【单实例】同一版本只允许一个后台进程：再次双击只会唤回窗口并打开你选的文件；不同版本可以各开一个，互不干扰\n· 【关闭行为】点 ✕ 或 Alt+F4 时可选择「最小化到后台 / 退出应用」，可勾选记住选择；也能在「设置 → 关闭行为」里固定为最小化或直接退出\n· 【快捷组件】新增页面：退出应用、最小化窗口、切换深色/浅色、隐藏/显示窗口；每个组件都能绑定全局热键（例如把退出绑到 Ctrl+E，按下即退出）\n· 【系统集成收紧】打开方式由 34 种扩展名收窄为 6 种（TXT / MD / LOG / JSON / INI / CSV），旧版本残留的扩展名注册会自动清理\n· 【启动提示】首次启动弹出使用提示，说明后台常驻、标签拆分与注册范围，可勾选「不再提示」\n· 【窗口动效】最大化 / 还原改为 190ms 缓动，最小化向任务栏缩小淡出，关闭与收托盘淡出，从托盘唤回淡入\n· 【界面修复】修复小窗口下标签栏与工具栏文字溢出、互相压住的问题；工作台变窄时导航自动横排\n· 【滚动条 / 滑块】颜色改为跟随主题强调色，深色 / 亮色切换时同步变化\n· 【图标】更换为简约风格的新图标（蓝色圆角 + 白色文本光标 + 三色块，含多尺寸 ico）\n· 该 AI 接入能力仍处于 Beta 阶段，接口与行为可能继续调整",
+    "notes":  "v5.9.0.8 更新（Live2D + 更新链路）：\n· 【Live2D】设置页新增角色模型：支持 PNG / GIF 立绘（自动抠图）、Cubism .moc3、GLB / VRM 3D 模型；可选择仅在窗口内显示，或拆成独立透明窗口\n· 【互动】角色支持 model.json 配置：点击 / 悬停区域触发动作、台词与待机闲聊，也可以交给 AI 角色工坊生成\n· 【运行时】three.js 与 Cubism Web SDK 按需下载，安装包不内置，首次使用会提示下载\n· 【更新链路】检查更新与安装包下载优先走自有双线路下载站（自动测速选最快），GitHub Releases 作为备用，下载失败会自动回退\n· 【快捷组件】热键绑定修复，并统一收纳进设置页\n· 【下载页】新增累计下载与分文件统计，双线路可手动切换",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
