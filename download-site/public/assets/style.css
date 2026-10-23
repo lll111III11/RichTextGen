@@ -154,8 +154,11 @@ details[open] summary::before{content:"▾ "}
 
 @media (max-width:640px){
   .wrap,.top{padding-left:16px;padding-right:16px}
-  .stats{grid-template-columns:repeat(2,1fr)}
   .mirror-head{align-items:flex-start;flex-direction:column}
+}
+@media (max-width:780px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .stats b{white-space:nowrap}
 }
 
 /* stats page */
