@@ -10,6 +10,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -197,15 +198,11 @@ namespace RichTextGen
 
             web = new WebView2();
             web.Dock = DockStyle.Fill;
+            // 与窗口同色：WebView2 起来之前先是一块干净的记事本空白，不会闪白
+            try { web.DefaultBackgroundColor = Color.FromArgb(243, 243, 243); } catch { }
             Controls.Add(web);
             web.CoreWebView2InitializationCompleted += OnWebReady;
-            try
-            {
-                // 同一进程里多个窗口必须复用同一个 WebView2 环境（用户数据目录不能并行开两套）
-                if (secondary && WebEnv != null) web.EnsureCoreWebView2Async(WebEnv);
-                else web.EnsureCoreWebView2Async(null);
-            }
-            catch { }
+            PrepareWeb();
 
             if (!secondary)
             {
@@ -797,6 +794,93 @@ namespace RichTextGen
         /// <summary>主窗口的 WebView2 环境，供独立对话窗口复用（同一进程只能有一个用户数据目录环境）。</summary>
         internal static CoreWebView2Environment WebEnv;
 
+        private static Task<CoreWebView2Environment> _envTask;
+
+        /// <summary>初始化 WebView2：副窗口复用已有环境，主窗口按「GPU 加速」偏好创建一次环境。</summary>
+        private async void PrepareWeb()
+        {
+            try
+            {
+                if (_secondary && WebEnv != null) { await web.EnsureCoreWebView2Async(WebEnv); return; }
+                CoreWebView2Environment env = await GetEnvironmentAsync();
+                if (env != null) await web.EnsureCoreWebView2Async(env);
+                else await web.EnsureCoreWebView2Async(null);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 创建带渲染参数的环境。GPU 加速默认开启：
+        /// 光栅化 / 零拷贝 / 忽略黑名单，让界面滚动、动效与 Live2D 走硬件合成。
+        /// 若显卡驱动异常导致花屏，可在 设置 → 性能 里关闭后重启。
+        /// </summary>
+        private static Task<CoreWebView2Environment> GetEnvironmentAsync()
+        {
+            if (_envTask != null) return _envTask;
+            _envTask = Task.Run(async delegate
+            {
+                try
+                {
+                    string udf = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                                              "RichTextGen", "WebView2");
+                    Directory.CreateDirectory(udf);
+                    string args = UIPrefs.Gpu
+                        ? "--enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist --enable-features=CanvasOopRasterization"
+                        : "--disable-gpu --disable-gpu-compositing";
+                    CoreWebView2EnvironmentOptions opt = new CoreWebView2EnvironmentOptions(args);
+                    return await CoreWebView2Environment.CreateAsync(null, udf, opt);
+                }
+                catch
+                {
+                    return null;   // 退回到 WebView2 默认环境，保证仍能启动
+                }
+            });
+            return _envTask;
+        }
+
+        /// <summary>界面偏好（与前端 localStorage 同步的一份落盘副本，C# 启动时需要读 GPU 开关）。</summary>
+        internal static class UIPrefs
+        {
+            private static string FilePath
+            {
+                get
+                {
+                    string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen");
+                    Directory.CreateDirectory(dir);
+                    return Path.Combine(dir, "ui.json");
+                }
+            }
+
+            public static bool Gpu { get { return ReadBool("gpu", true); } }
+
+            private static bool ReadBool(string key, bool def)
+            {
+                try
+                {
+                    string p = FilePath;
+                    if (!File.Exists(p)) return def;
+                    Match m = Regex.Match(File.ReadAllText(p),
+                        "\"" + key + "\"\\s*:\\s*(true|false)", RegexOptions.IgnoreCase);
+                    if (!m.Success) return def;
+                    return m.Groups[1].Value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                }
+                catch { return def; }
+            }
+
+            public static void Save(string json)
+            {
+                try
+                {
+                    Match m = Regex.Match(json ?? "", "\"gpu\"\\s*:\\s*(true|false)", RegexOptions.IgnoreCase);
+                    if (!m.Success) return;
+                    bool gpu = m.Groups[1].Value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    File.WriteAllText(FilePath, "{\"gpu\":" + (gpu ? "true" : "false") + "}",
+                                      new UTF8Encoding(false));
+                }
+                catch { }
+            }
+        }
+
         private void OnWebReady(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
             if (!e.IsSuccess || web.CoreWebView2 == null)
@@ -1094,6 +1178,7 @@ namespace RichTextGen
                 case "tearTab": TearTab(Un(arg)); break;        // 标签拖出窗口 → 同进程新窗口
                 case "newWindow": TearTab("{}"); break;         // 文件 → 新建窗口
                 case "openRecent": OpenPath(Un(arg)); break;    // 文件 → 最近使用
+                case "uiPrefs": UIPrefs.Save(Un(arg)); break;   // 界面偏好（GPU 开关等）
                 case "dirty": { int dn; if (int.TryParse(arg, out dn)) _dirtyCount = dn; break; }
                 case "musicHost": MusicHost(Un(arg)); break;    // 拖入音乐 → 生成本地 URL
                 case "musicPick": MusicPick(); break;           // 点按钮选音乐文件
@@ -1378,6 +1463,9 @@ namespace RichTextGen
                 // 5) 纯文本类型（无扩展名也算文本）的右键项
                 using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\SystemFileAssociations\text\shell\RichTextGenApp"))
                     k.SetValue("", "用彩色文本生成器打开");
+                // 右键项也要有图标，否则 Win11 菜单里会显示通用空白图标、与其它项不对齐
+                using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\SystemFileAssociations\text\shell\RichTextGenApp\DefaultIcon"))
+                    k.SetValue("", quoted + ",0");
                 using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\SystemFileAssociations\text\shell\RichTextGenApp\command"))
                     k.SetValue("", quoted + " \"%1\"");
 

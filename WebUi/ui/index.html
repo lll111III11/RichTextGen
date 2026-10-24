@@ -76,6 +76,14 @@
   nav button.nav-gone{max-height:0;opacity:0;padding-top:0;padding-bottom:0;border:0;
                       transform:translateY(-10px);pointer-events:none}
   nav .g{width:14px;text-align:center;opacity:.85}
+  /* ---- 工作台功能栏：左侧竖排（旧版样式，设置里可切换） ---- */
+  body[data-nav="left"] #wsBody{flex-direction:row;gap:10px;padding:0 12px 12px 10px}
+  body[data-nav="left"] nav{width:150px;flex:0 0 auto;flex-direction:column;flex-wrap:nowrap;align-items:stretch;
+      gap:3px;padding:2px 6px 0 0;margin-bottom:0;border-bottom:0;border-right:1px solid var(--line);
+      overflow-x:visible;overflow-y:auto;max-height:100%}
+  body[data-nav="left"] nav button{justify-content:flex-start;text-align:left;padding:8px 10px;gap:8px;font-size:13px}
+  body[data-nav="left"] nav .g{width:16px}
+  body[data-nav="left"] #ws.narrow nav{width:132px}
   #pages{flex:1;min-width:0;overflow:auto}
   .page{display:none}
   .page.on{display:block}
@@ -302,9 +310,14 @@
   #p-chat.chat-collapsed #chatInputRow,
   #p-chat.chat-collapsed #chatHintRow{display:none}
   /* ===== Win11 记事本式容器（概念设计 M1） ===== */
-  #menubar{flex:0 0 auto;height:33px;display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--bg)}
-  #menubar .mi{padding:4px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer}
-  #menubar .mi:hover{background:var(--hover)}
+  /* 菜单栏现在并入工作台标题行，不再单独占一行 */
+  #menubar{flex:0 1 auto;display:flex;align-items:center;gap:1px;padding:0;background:transparent;
+           overflow:hidden;min-width:0;white-space:nowrap}
+  #menubar .mi{padding:3px 7px;border-radius:6px;font-size:12.5px;cursor:pointer;color:var(--sub);white-space:nowrap;flex:0 0 auto}
+  #menubar .mi:hover{background:var(--hover);color:var(--text)}
+  #wsHead{gap:6px;overflow:hidden}
+  #wsHead .wt{flex:0 0 auto}
+  #ws.cold #menubar{display:none}
   #tabBar{flex:0 0 auto;height:36px;display:flex;align-items:flex-end;gap:4px;padding:3px 10px 0;background:var(--bg);border-bottom:1px solid var(--line);overflow:hidden}
   #tabs{display:flex;align-items:flex-end;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:thin}
   #tabs::-webkit-scrollbar{height:4px}
@@ -336,9 +349,24 @@
   #menuDrop .mi-item.dis,#menuDrop2 .mi-item.dis{opacity:.42;cursor:default}
   #menuDrop .mi-item.dis:hover,#menuDrop2 .mi-item.dis:hover{background:transparent;color:inherit;filter:none}
   #main{padding:0 12px 12px;gap:12px}
-  #splitter{flex:0 0 6px;cursor:ew-resize;border-radius:3px;align-self:stretch;transition:background .15s ease}
+  #splitter{flex:0 0 6px;cursor:ew-resize;border-radius:3px;align-self:stretch;transition:background .15s ease;position:relative}
+  #splitter::after{content:"";position:absolute;top:0;bottom:0;left:-4px;right:-4px;cursor:ew-resize}
   #splitter:hover,#splitter:active{background:var(--accent);opacity:.7}
   #splitter.dragging{background:var(--accent)}
+  /* ---- 动效 ---- */
+  @keyframes dropIn{from{opacity:0;transform:translateY(-5px) scale(.985)}to{opacity:1;transform:none}}
+  #menuDrop.on,#menuDrop2.on{animation:dropIn .12s ease}
+  @keyframes tabIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .tab{animation:tabIn .16s ease}
+  #wsTip{position:fixed;z-index:80;display:none;padding:3px 8px;border-radius:6px;
+         background:var(--accent);color:var(--accentText);font-size:11.5px;font-weight:600;
+         pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+  body[data-motion="off"] *,body[data-motion="off"] *::before,body[data-motion="off"] *::after{
+    transition:none!important;animation:none!important}
+  body[data-motion="lite"] .tab,
+  body[data-motion="lite"] #menuDrop.on,
+  body[data-motion="lite"] #menuDrop2.on,
+  body[data-motion="lite"] .page{animation:none}
   #mainEditor{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
   #edToolbar{flex:0 0 auto;height:34px;display:flex;align-items:center;gap:10px;padding:0 4px}
   #edToolbar .seg{display:flex;border:1px solid var(--inputLine);border-radius:var(--r4);overflow:hidden}
@@ -390,7 +418,14 @@
   #ws.cold #wsFold2 .wst{writing-mode:vertical-rl;font-size:12px;letter-spacing:4px}
 </style>
 </head>
-<body>
+<body data-nav="top">
+<script>
+/* 尽早套用布局/动效偏好，避免首帧先从默认样式跳到用户选择 */
+try{
+  document.body.dataset.nav = (localStorage.getItem('rtg.navLayout') === 'left') ? 'left' : 'top';
+  document.body.dataset.motion = localStorage.getItem('rtg.motion') || 'full';
+}catch(e){}
+</script>
 <div id="bgLayer"></div>
 <!-- Live2D（窗口内悬浮层）：不接收鼠标，不会挡住任何操作 -->
 <div id="l2dWrap" aria-hidden="true"><div id="l2dInner"><img id="l2dImg" alt=""><img id="l2dBlink" alt=""></div><canvas id="l2d3d"></canvas><canvas id="l2dcv"></canvas></div>
@@ -407,13 +442,6 @@
   <button class="wbtn close" onclick="host('close')">✕</button>
 </div>
 <div id="cursorHide"></div>
-<div id="menubar">
-  <span class="mi" data-m="file">文件</span>
-  <span class="mi" data-m="edit">编辑</span>
-  <span class="mi" data-m="view">查看</span>
-  <span class="mi" data-m="format">格式</span>
-  <span class="mi" data-m="help">帮助</span>
-</div>
 <div id="tabBar">
   <span id="tabs"></span>
   <button id="newTab" title="新建标签页（Ctrl+N）">+</button>
@@ -463,11 +491,19 @@
   </div>
 
   <div id="splitter" title="拖动调整工作台宽度（双击恢复默认）"></div>
+  <div id="wsTip"></div>
 
   <!-- 右侧工作台（RichTextGen 全部功能迁入；可折叠到侧边留出白边） -->
   <div id="ws">
     <div id="wsHead">
       <span class="wt">📋 工作台</span>
+      <div id="menubar">
+        <span class="mi" data-m="file">文件</span>
+        <span class="mi" data-m="edit">编辑</span>
+        <span class="mi" data-m="view">查看</span>
+        <span class="mi" data-m="format">格式</span>
+        <span class="mi" data-m="help">帮助</span>
+      </div>
       <span class="sp"></span>
       <button id="wsFold" title="折叠到侧边">‹</button>
     </div>
@@ -624,6 +660,12 @@
 
     <!-- 设置 -->
     <section class="page" id="p-set">
+      <div class="card"><h3>性能</h3>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="gpuAccel" onchange="setGpuAccel(this.checked)"> GPU 加速（硬件渲染）</label>
+          <span class="hint" id="gpuHint">默认开启。改动后需重启程序生效；若界面花屏或白屏可关闭它。</span>
+        </div>
+      </div>
       <div class="card"><h3>外观</h3>
         <div class="row"><label class="f">主题</label>
           <select id="theme" onchange="setTheme(this.value)">
@@ -631,6 +673,22 @@
             <option value="light">亮色（Win11）</option>
             <option value="dark">深色（Win11）</option></select>
           <span class="hint">选「跟随系统」后会随 Windows 的浅色/深色设置自动切换</span></div>
+
+        <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+          <label class="f">工作台功能栏</label>
+          <select id="navLayout" onchange="setNavLayout(this.value)">
+            <option value="top">顶部横排（新版）</option>
+            <option value="left">左侧竖排（旧版）</option>
+          </select>
+          <span class="hint">即时生效，会记住你的选择</span></div>
+        <div class="row">
+          <label class="f">界面动效</label>
+          <select id="motionLevel" onchange="setMotionLevel(this.value)">
+            <option value="full">完整</option>
+            <option value="lite">精简</option>
+            <option value="off">关闭</option>
+          </select>
+          <span class="hint">完整 = 菜单淡入、标签滑入、拖动气泡等；精简只保留必要的过渡</span></div>
 
         <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
           <label class="f">背景水印</label>
@@ -3055,13 +3113,21 @@ window.addEventListener('dragleave', e=>{ if(--dragDepth <= 0){ dragDepth = 0; d
 window.addEventListener('drop', e=>{
   dragDepth = 0; drop.classList.remove('on');
   e.preventDefault();
-  const f = e.dataTransfer.files[0]; if(!f) return;
-  const p = f.path || f.name;                       // WebView2 在拖放时会带上真实路径
-  const img = /\.(png|jpg|jpeg|bmp|gif|webp)$/i.test(f.name);
-  const audio = /\.(mp3|wav|ogg|m4a|flac|aac|wma|opus)$/i.test(f.name);
-  if(img){ go('img'); host('blockArt|' + encodeURIComponent(p)); }
-  else if(audio){ go('music'); host('musicHost|' + encodeURIComponent(p)); }   // 音乐 → 本机端口 → 本地 URL
-  else { host('dropFile|' + encodeURIComponent(p)); }
+  const files = Array.prototype.slice.call(e.dataTransfer.files || []);
+  if (!files.length) return;
+  const pathOf = f => f.path || f.name;
+  const isImg = f => /\.(png|jpe?g|bmp|gif|webp)$/i.test(f.name);
+  const isAudio = f => /\.(mp3|wav|ogg|m4a|flac|aac|wma|opus)$/i.test(f.name);
+  const img = files.filter(isImg);
+  const audio = files.filter(isAudio);
+  const docs = files.filter(f => !isImg(f) && !isAudio(f));
+  // 图片 / 音频各取第一个进对应面板，其余文本文件依次开成标签
+  if (img.length){ go('img'); host('blockArt|' + encodeURIComponent(pathOf(img[0]))); }
+  if (audio.length){ go('music'); host('musicHost|' + encodeURIComponent(pathOf(audio[0]))); }
+  docs.slice(0, 10).forEach(f => host('openRecent|' + encodeURIComponent(pathOf(f))));
+  if (docs.length > 10) status('一次最多打开 10 个文本文件');
+  else if (docs.length > 1) status('正在打开 ' + docs.length + ' 个文件…');
+  else if (docs.length === 1) status('正在打开 ' + docs[0].name + '…');
 });
 
 /* ---------- 启动 ---------- */
@@ -4719,24 +4785,34 @@ const EdMode = (function(){
     if (!ws().classList.contains('cold')) setW(getW());
 
     let dragging = false, startX = 0, startW = 0;
+    const tip = () => document.getElementById('wsTip');
     splitter().addEventListener('mousedown', ev => {
       if (ev.button !== 0) return;
       ev.preventDefault();
       dragging = true; startX = ev.clientX; startW = ws().offsetWidth;
       ws().style.transition = 'none';
       splitter().classList.add('dragging');
+      const t = tip();
+      if (t){ t.style.display = 'block'; t.textContent = ws().offsetWidth + ' px'; }
     });
     document.addEventListener('mousemove', ev => {
       if (!dragging) return;
       const dx = ev.clientX - startX;
       // 分割条在右侧：向右拖 → 编辑区变宽、工作台变窄，所以宽度 = 初始宽 - dx
       setW(startW - dx);
+      const t = tip();
+      if (t){
+        t.textContent = ws().offsetWidth + ' px';
+        t.style.left = (ev.clientX + 14) + 'px';
+        t.style.top = Math.max(4, ev.clientY - 28) + 'px';
+      }
     });
     document.addEventListener('mouseup', () => {
       if (!dragging) return;
       dragging = false;
       ws().style.transition = '';
       splitter().classList.remove('dragging');
+      const t = tip(); if (t) t.style.display = 'none';
     });
     splitter().addEventListener('dblclick', () => { setW(DEF_W); });
     // 窗口变窄时重新夹一次宽度，避免工作台超过一半、把编辑区挤没
@@ -5294,6 +5370,35 @@ function recentList(){
 /* 启动时套用记住的视图设置 */
 applyPageRule();
 viewApply();
+
+/* ---------- 工作台布局 / 界面动效 / GPU ---------- */
+function setNavLayout(v){
+  document.body.dataset.nav = (v === 'left') ? 'left' : 'top';
+  try { localStorage.setItem('rtg.navLayout', document.body.dataset.nav); } catch(e){}
+  status('工作台功能栏已切换为' + (document.body.dataset.nav === 'left' ? '左侧竖排' : '顶部横排'));
+}
+function setMotionLevel(v){
+  document.body.dataset.motion = (v === 'off') ? 'off' : (v === 'lite' ? 'lite' : 'full');
+  try { localStorage.setItem('rtg.motion', document.body.dataset.motion); } catch(e){}
+  status('界面动效：' + ({ full:'完整', lite:'精简', off:'关闭' }[document.body.dataset.motion]));
+}
+function setGpuAccel(on){
+  try { localStorage.setItem('rtg.gpu', on ? '1' : '0'); } catch(e){}
+  host('uiPrefs|' + encodeURIComponent(JSON.stringify({ gpu: !!on })));
+  status('GPU 加速已' + (on ? '开启' : '关闭') + '，重启程序后生效');
+}
+function uiInit(){
+  let nav = 'top', motion = 'full', gpu = true;
+  try { nav = localStorage.getItem('rtg.navLayout') || 'top'; } catch(e){}
+  try { motion = localStorage.getItem('rtg.motion') || 'full'; } catch(e){}
+  try { const g = localStorage.getItem('rtg.gpu'); if (g !== null) gpu = (g === '1'); } catch(e){}
+  document.body.dataset.nav = (nav === 'left') ? 'left' : 'top';
+  document.body.dataset.motion = motion;
+  const nv = document.getElementById('navLayout'); if (nv) nv.value = document.body.dataset.nav;
+  const mv = document.getElementById('motionLevel'); if (mv) mv.value = motion;
+  const gv = document.getElementById('gpuAccel'); if (gv) gv.checked = gpu;
+}
+uiInit();
 </script>
 </body>
 </html>
