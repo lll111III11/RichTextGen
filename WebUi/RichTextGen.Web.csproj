@@ -20,9 +20,9 @@
     <Prefer32Bit>true</Prefer32Bit>
 
     <!-- exe 属性 -->
-    <Version>5.9.0.19</Version>
-    <AssemblyVersion>5.9.0.19</AssemblyVersion>
-    <FileVersion>5.9.0.19</FileVersion>
+    <Version>5.9.0.20</Version>
+    <AssemblyVersion>5.9.0.20</AssemblyVersion>
+    <FileVersion>5.9.0.20</FileVersion>
     <Product>Rich text &amp; multifunctional tool</Product>
     <AssemblyTitle>多功能性的一种工具</AssemblyTitle>
     <Description>多功能性的一种工具</Description>
@@ -44,6 +44,26 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
     <!-- model.json / live2d.json 解析（.NET Framework 自带，不引入第三方库） -->
     <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+
+  <!-- OCR：Windows 10/11 自带的 Windows.Media.Ocr（离线）。需要 Windows SDK 的元数据；
+       找不到时自动跳过 OCR 模块，其余功能照常构建。 -->
+  <PropertyGroup>
+    <WinmdPath Condition="Exists('C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.28000.0\Windows.winmd')">C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.28000.0\Windows.winmd</WinmdPath>
+    <WinmdPath Condition="'$(WinmdPath)' == '' and Exists('C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.22621.0\Windows.winmd')">C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.22621.0\Windows.winmd</WinmdPath>
+    <WinmdPath Condition="'$(WinmdPath)' == '' and Exists('C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.19041.0\Windows.winmd')">C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.19041.0\Windows.winmd</WinmdPath>
+    <WinRTProjPath Condition="Exists('C:\Windows\Microsoft.NET\assembly\GAC_MSIL\System.Runtime.WindowsRuntime\v4.0_4.0.0.0__b77a5c561934e089\System.Runtime.WindowsRuntime.dll')">C:\Windows\Microsoft.NET\assembly\GAC_MSIL\System.Runtime.WindowsRuntime\v4.0_4.0.0.0__b77a5c561934e089\System.Runtime.WindowsRuntime.dll</WinRTProjPath>
+    <DefineConstants Condition="'$(WinmdPath)' == '' or '$(WinRTProjPath)' == ''">$(DefineConstants);NO_WINRT</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(WinmdPath)' != '' and '$(WinRTProjPath)' != ''">
+    <Reference Include="Windows.winmd">
+      <HintPath>$(WinmdPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Runtime.WindowsRuntime">
+      <HintPath>$(WinRTProjPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

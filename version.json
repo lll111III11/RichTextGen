@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.19",
+    "version":  "5.9.0.20",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.19/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.19/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.20/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.20/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.19 更新（强制应用刷新）：\n· 【托盘】右键菜单新增「强制应用刷新」：先把所有标签页正文与工作台文本临时保存到 %APPDATA%\\RichTextGen\\refresh-snapshot.json，再重载界面并恢复窗口\n· 刷新后自动还原全部标签页（含未保存的脏标记）、当前标签与所在页面，最近使用不会被清空\n· 界面脚本卡死时也会强制重载（此时只能保留磁盘上已保存的内容）\n· 其余沿用 5.9.0.18：同步输出两步走、窗口置顶、复制换行开关",
+    "notes":  "v5.9.0.20 更新（文字提取 OCR）：\n· 工作台新增「提取」页：拖入图片、选择文件或直接从剪贴板读取，提取成可复制文本\n· 支持 PNG / JPG / BMP / GIF / TIFF / WebP / AVIF / HEIC 等常见格式，图片不会上传，识别全部在本机完成\n· 长截图自动按 1500px 分段识别（段间重叠 160px），自动去掉接缝处重复行并还原成整段文字；单图最大 5000 万像素\n· 语言列表读取系统已安装的 OCR 语言包（如简体中文、英文），识别后可一键复制、回填工作台或写入当前编辑区\n· 仅 Windows 10 / 11 可用（依赖系统自带 OCR，无需联网）\n· 其余沿用 5.9.0.19：托盘强制应用刷新、同步输出、窗口置顶",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

@@ -1341,6 +1341,11 @@ namespace RichTextGen
                 case "syncTarget": RecordForeground(); Call("syncState", SyncStateJson()); break;
                 case "syncSend": SyncOutput(Un(arg)); break;
                 case "forceRefresh": DoReload(Un(arg)); break;   // 界面已把全部正文打包好
+                // ---- 文字提取（OCR）----
+                case "ocrLangs": CallStr("ocrLangs", Ocr.LanguagesJson()); break;
+                case "ocrPick": OcrPick(Un(arg)); break;
+                case "ocrPaste": OcrPaste(Un(arg)); break;
+                case "ocrFile": OcrFile(arg); break;
                 case "setCopyNl":
                     UIPrefs.Save("{\"copyNl\":" + (arg == "1" ? "true" : "false") + "}");
                     CallStr("status", arg == "1" ? "复制时会用字面量 \\n 代替换行" : "复制时保持真实换行");
@@ -1992,6 +1997,93 @@ namespace RichTextGen
                 if (b.Length > 0 && long.TryParse(b, out en)) end = Math.Min(total - 1, en);
             }
             return end >= start;
+        }
+
+        // ============================================================ 文字提取（OCR）
+        /// <summary>选择图片：支持常见图片格式，长截图会自动分段识别。</summary>
+        private void OcrPick(string lang)
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.avif;*.heic;*.heif" +
+                           "|所有文件|*.*";
+                d.Title = "选择要提取文字的图片（支持长截图）";
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                OcrRun(d.FileName, lang, false);
+            }
+        }
+
+        /// <summary>读取剪贴板里的图片（截图工具复制后直接提取）。</summary>
+        private void OcrPaste(string lang)
+        {
+            try
+            {
+                Image img = null;
+                try
+                {
+                    IDataObject d = Clipboard.GetDataObject();
+                    if (d != null && d.GetDataPresent("PNG"))
+                    {
+                        MemoryStream ms = d.GetData("PNG") as MemoryStream;
+                        if (ms != null)
+                        {
+                            using (Image im = Image.FromStream(ms)) img = new Bitmap(im);
+                        }
+                    }
+                }
+                catch { }
+                if (img == null && Clipboard.ContainsImage()) img = Clipboard.GetImage();
+                if (img == null) { CallStr("status", "剪贴板里没有图片，先截图或复制一张图"); return; }
+
+                string tmp = Path.Combine(Path.GetTempPath(), "rtg-ocr-" + Guid.NewGuid().ToString("N") + ".png");
+                try { img.Save(tmp, System.Drawing.Imaging.ImageFormat.Png); }
+                finally { img.Dispose(); }
+                OcrRun(tmp, lang, true);
+            }
+            catch (Exception ex) { CallStr("status", "读取剪贴板图片失败：" + ex.Message); }
+        }
+
+        /// <summary>参数：lang|path（两段都经过 encodeURIComponent）。</summary>
+        private void OcrFile(string arg)
+        {
+            string raw = arg ?? "";
+            int bar = raw.IndexOf('|');
+            string lang = bar >= 0 ? Un(raw.Substring(0, bar)) : "";
+            string path = Un(bar >= 0 ? raw.Substring(bar + 1) : raw);
+            OcrRun(path, lang, false);
+        }
+
+        private void OcrRun(string path, string lang, bool temp)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                CallStr("status", "找不到要识别的图片");
+                if (temp) { try { File.Delete(path); } catch { } }
+                return;
+            }
+            DateTime t0 = DateTime.Now;
+            Call("ocrProgress", "{\"percent\":1,\"text\":" + Quote("正在读取图片…") + "}");
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    string text = Ocr.Recognize(path, lang, delegate (int pct, string msg)
+                    {
+                        Call("ocrProgress", "{\"percent\":" + pct + ",\"text\":" + Quote(msg) + "}");
+                    });
+                    Call("ocrResult", "{\"ok\":true,\"text\":" + Quote(text) +
+                         ",\"ms\":" + (int)(DateTime.Now - t0).TotalMilliseconds +
+                         ",\"name\":" + Quote(Path.GetFileName(path)) + "}");
+                }
+                catch (Exception ex)
+                {
+                    Call("ocrResult", "{\"ok\":false,\"error\":" + Quote(ex.Message) + "}");
+                }
+                finally
+                {
+                    if (temp) { try { File.Delete(path); } catch { } }
+                }
+            });
         }
 
         // ============================================================ 置顶 / 同步输出

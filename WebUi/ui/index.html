@@ -421,6 +421,14 @@
                     background:transparent;color:var(--sub);cursor:pointer;font-size:18px;padding-top:14px}
   #ws.cold #wsFold2:hover{color:var(--accent)}
   #ws.cold #wsFold2 .wst{writing-mode:vertical-rl;font-size:12px;letter-spacing:4px}
+  /* OCR 文字提取 */
+  #ocrDrop{border:1px dashed var(--inputLine);border-radius:10px;padding:18px;text-align:center;color:var(--sub);
+           font-size:12.5px;cursor:pointer;margin-bottom:8px;
+           transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+  #ocrDrop:hover,#ocrDrop.on{background:var(--hover);border-color:var(--accent);color:var(--text)}
+  #ocrBar{height:6px;border-radius:99px;background:rgba(127,127,127,.16);overflow:hidden;margin:6px 0 10px}
+  #ocrBar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s ease}
+  #ocrOut{min-height:180px}
 </style>
 </head>
 <body data-nav="top">
@@ -520,6 +528,7 @@ try{
     <button data-p="gen" title="文本生成"><span class="g">✎</span>生成</button>
     <button data-p="img" title="图片系统"><span class="g">▦</span>图片</button>
     <button data-p="trans" title="在线翻译"><span class="g">⇄</span>翻译</button>
+    <button data-p="ocr" title="图片文字提取（OCR）"><span class="g">⌗</span>提取</button>
     <button data-p="chatwin" title="AI 对话"><span class="g">✦</span>AI</button>
     <button data-p="set" title="设置"><span class="g">⚙</span>设置</button>
   </nav>
@@ -662,6 +671,29 @@ try{
           <span class="hint">翻译时会先把 &lt;color&gt; 等标签抽成占位符，翻完再回填，保证标签不被破坏</span></div>
         <div class="row"><label class="f">结果</label></div>
         <textarea id="transOut" readonly style="min-height:110px"></textarea>
+      </div>
+    </section>
+
+    <!-- 文字提取（OCR） -->
+    <section class="page" id="p-ocr">
+      <div class="card"><h3>文字提取（OCR · 支持长截图）</h3>
+        <div class="row">
+          <button class="b p" onclick="ocrPick()">选择图片…</button>
+          <button class="b" onclick="ocrPaste()">从剪贴板</button>
+          <label class="f">语言</label>
+          <select id="ocrLang" style="min-width:160px"><option value="">自动（系统语言）</option></select>
+          <button class="b" onclick="host('ocrLangs')">刷新</button>
+        </div>
+        <div id="ocrDrop" onclick="ocrPick()">把图片拖到这里，或点此选择；长截图会自动分段识别再拼成整段文本</div>
+        <div id="ocrBar"><i></i></div>
+        <div class="row"><span class="hint" id="ocrInfo">支持 PNG / JPG / BMP / GIF / TIFF / WebP 等常见格式；识别在本机完成，图片不会上传。</span></div>
+        <textarea id="ocrOut" readonly placeholder="识别结果会出现在这里…"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="b p" onclick="ocrCopy()">复制文本</button>
+          <button class="b" onclick="ocrToWork()">回填工作台</button>
+          <button class="b" onclick="ocrToDoc()">写入当前编辑区</button>
+          <span class="hint" id="ocrStat"></span>
+        </div>
       </div>
     </section>
 
@@ -3209,7 +3241,11 @@ window.addEventListener('drop', e=>{
   const audio = files.filter(isAudio);
   const docs = files.filter(f => !isImg(f) && !isAudio(f));
   // 图片 / 音频各取第一个进对应面板，其余文本文件依次开成标签
-  if (img.length){ go('img'); host('blockArt|' + encodeURIComponent(pathOf(img[0]))); }
+  if (img.length){
+    const curNav = document.querySelector('nav button.on');
+    if (curNav && curNav.dataset.p === 'ocr') ocrDropFile(pathOf(img[0]));
+    else { go('img'); host('blockArt|' + encodeURIComponent(pathOf(img[0]))); }
+  }
   if (audio.length){ go('music'); host('musicHost|' + encodeURIComponent(pathOf(audio[0]))); }
   docs.slice(0, 10).forEach(f => host('openRecent|' + encodeURIComponent(pathOf(f))));
   if (docs.length > 10) status('一次最多打开 10 个文本文件');
@@ -5647,6 +5683,87 @@ window.ui.refreshRestore = function(o){
     ui.status('已强制刷新，恢复 ' + ((o.tabs && o.tabs.length) || 0) + ' 个标签页');
   } catch(e){}
 };
+
+/* ---------- 文字提取（OCR） ---------- */
+function ocrLang(){ const s = document.getElementById('ocrLang'); return s ? s.value : ''; }
+function ocrPick(){ host('ocrPick|' + encodeURIComponent(ocrLang())); }
+function ocrPaste(){ host('ocrPaste|' + encodeURIComponent(ocrLang())); }
+function ocrDropFile(p){
+  if (!p) return;
+  host('ocrFile|' + encodeURIComponent(ocrLang()) + '|' + encodeURIComponent(p));
+}
+function ocrCopy(){
+  const v = document.getElementById('ocrOut').value;
+  if (!v){ ui.status('还没有识别结果'); return; }
+  host('copy|' + encodeURIComponent(v));
+}
+function ocrToWork(){
+  const v = document.getElementById('ocrOut').value;
+  if (!v){ ui.status('还没有识别结果'); return; }
+  const t = document.getElementById('txt');
+  if (t){ t.value = v; try { gen(); } catch(e){} }
+  go('work');
+  ui.status('已把识别结果回填到工作台');
+}
+function ocrToDoc(){
+  const v = document.getElementById('ocrOut').value;
+  if (!v){ ui.status('还没有识别结果'); return; }
+  try {
+    if (typeof DocM !== 'undefined' && DocM.setActiveText){ DocM.setActiveText(v); ui.status('已写入当前编辑区'); }
+  } catch(e){ ui.status('写入失败：' + e.message); }
+}
+window.ui.ocrLangs = function(o){
+  const sel = document.getElementById('ocrLang');
+  if (sel){
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">自动（系统语言）</option>';
+    ((o && o.list) || []).forEach(function(l){
+      const op = document.createElement('option');
+      op.value = l.tag; op.textContent = l.name + ' · ' + l.tag;
+      sel.appendChild(op);
+    });
+    if (keep && sel.querySelector('option[value="' + keep + '"]')) sel.value = keep;
+  }
+  const info = document.getElementById('ocrInfo');
+  if (o && o.ok === false && info) info.textContent = '系统暂不支持 OCR：' + (o.error || '没有可用的语言包');
+};
+window.ui.ocrProgress = function(o){
+  const bar = document.querySelector('#ocrBar i');
+  if (bar) bar.style.width = Math.max(0, Math.min(100, (o && o.percent) || 0)) + '%';
+  const info = document.getElementById('ocrInfo');
+  if (info && o && o.text) info.textContent = o.text;
+};
+window.ui.ocrResult = function(o){
+  const bar = document.querySelector('#ocrBar i');
+  const info = document.getElementById('ocrInfo');
+  const stat = document.getElementById('ocrStat');
+  if (o && o.ok){
+    const out = document.getElementById('ocrOut');
+    if (out) out.value = o.text || '';
+    if (bar) bar.style.width = '100%';
+    if (info) info.textContent = '识别完成 · ' + (o.text ? o.text.length : 0) + ' 个字符';
+    if (stat) stat.textContent = (o.name || '') + ' · ' + ((o.ms || 0) / 1000).toFixed(1) + ' 秒';
+    if (!o.text){ if (info) info.textContent = '没有识别到文字，换一张更清晰的图片试试'; }
+  } else {
+    if (bar) bar.style.width = '0%';
+    if (info) info.textContent = '识别失败：' + ((o && o.error) || '未知错误');
+    if (stat) stat.textContent = '';
+  }
+};
+(function(){
+  const z = document.getElementById('ocrDrop');
+  if (!z) return;
+  ['dragenter', 'dragover'].forEach(function(ev){
+    z.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); z.classList.add('on'); });
+  });
+  z.addEventListener('dragleave', function(e){ e.stopPropagation(); z.classList.remove('on'); });
+  z.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation(); z.classList.remove('on');
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) ocrDropFile(f.path || f.name);
+  });
+})();
+try { host('ocrLangs'); } catch(e){}
 
 /* 宿主回报的开关状态（启动与每次切换后各来一次） */
 window.ui.syncState = function(o){

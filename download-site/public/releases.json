@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.9.0.19",
+  "version": "5.9.0.20",
   "updated": "2026-10-24",
-  "notes": "v5.9.0.19：托盘新增「强制应用刷新」——临时保存全部文本后重载界面并恢复标签页。",
+  "notes": "v5.9.0.20：新增「提取」页 OCR，可拖入图片 / 读剪贴板提取文字，支持长截图自动分段拼接。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.9.0.19",
-      "size": 2161032,
-      "sha256": "fb473ceefeb4b16cb4a704833d08e865b59897e14c460061503a049d371f71a6",
+      "version": "5.9.0.20",
+      "size": 2175880,
+      "sha256": "0a9c557ce2cd8d338979f43dd7f7de3419b8e4f418dc396a29ddc8951f62fb0a",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.9.0.19",
-      "size": 455324,
-      "sha256": "9f87d7f292bcd8a032e56862e189ec3aac6744e421095da50e1c57d0ed6eb4ee",
+      "version": "5.9.0.20",
+      "size": 461335,
+      "sha256": "c1ff2048ad62a30664944312db1420f4b6054b0f9da898aa26e35e90e49d6c25",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"
