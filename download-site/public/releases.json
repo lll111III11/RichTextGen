@@ -1,29 +1,29 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.9.0.9",
+  "version": "5.9.0.10",
   "updated": "2026-10-24",
-  "notes": "v5.9.0.9：更新改为双通道自动测速（Cloudflare / GitHub 取快），安装量由安装器上报，新增网页工作区试验版。",
-  "type": "feature",
+  "notes": "v5.9.0.10：安装器改为普通权限运行、不再写入系统证书存储，安装包不再附带证书文件。",
+  "type": "fix",
   "mandatory": false,
   "files": [
     {
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.9.0.9",
-      "size": 2107784,
-      "sha256": "c134e7f642028dc58f56b3fcc084dd6bda0d83ab3b9a2470d2cf7aaf2dbac4c0",
+      "version": "5.9.0.10",
+      "size": 2105736,
+      "sha256": "04ee0b1721204758af4487e9a1e11c718bc003beb52ec1ef692515d472635da3",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
-      "desc": "标准安装向导，写入开始菜单与卸载项，适合长期使用。安装成功后自动计入安装量。"
+      "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。安装成功后自动计入安装量。"
     },
     {
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.9.0.9",
-      "size": 437469,
-      "sha256": "8278b80f09e57f94c2092c3cf4a506fe148f4970d0e31387acdf2677875cbac7",
+      "version": "5.9.0.10",
+      "size": 437404,
+      "sha256": "08ba8f135ebbacb1ea6472c2357d1e53e1c7e58525c1afe6a166221f35258a89",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

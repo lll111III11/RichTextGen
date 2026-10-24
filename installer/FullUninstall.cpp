@@ -35,11 +35,9 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "crypt32.lib")
-#ifndef RTG_NO_ELEVATE
-// 正式发布版强制要求管理员权限：删除其它目录、写注册表、改本机受信任存储都需要它。
-// 定义 RTG_NO_ELEVATE 可编译出免提权的副本，仅用于开发期验证扫描/判定逻辑。
-#pragma comment(linker, "/MANIFESTUAC:level='requireAdministrator'")
-#endif
+// 彻底卸载需要管理员权限：删除其它目录、写 HKLM、清理本机受信任存储。
+// 提权级别写在 fulluninstall.manifest 里，由 build_fulluninstall.bat 用 mt.exe 嵌入
+// （pragma 传 /MANIFESTUAC 会被链接器 LNK4229 忽略，等于从不提权）。
 
 namespace
 {

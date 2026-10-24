@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.9",
+    "version":  "5.9.0.10",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "feature",
+    "type":  "fix",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.9/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.9/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.10/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.10/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.9 更新（双通道更新 + 安装量统计 + 网页工作区）：\n· 【双通道更新】检查更新时同时探测 Cloudflare 下载站与 GitHub，哪条快就用哪条；手动点「立即检测更新」默认直接走 Cloudflare\n· 【下载兜底】选中的通道下载失败会自动换另一条，不再有单点\n· 【安装量统计】点击下载不再计数，改为安装成功后由安装器上报，统计页显示真实安装数\n· 【网页工作区】新增网页版编辑工作区（试验）：多标签、富文本上色、源码模式、复制与导出，数据存在本地浏览器\n· 【下载页】双线路可手动切换，页面底部可进入安装统计与网页工作区",
+    "notes":  "v5.9.0.10 更新（安装器权限与安全软件误报修复）：\n· 【不再需要管理员权限】安装器改为以普通权限运行，装到 %LOCALAPPDATA%\\Programs\\RichTextGen，只写当前用户注册表，全程不弹 UAC\n· 【不再安装证书】安装过程不再向系统「受信任的根证书」写入任何证书。之前把自签证书塞进根存储容易被安全软件判定为可疑行为，这一项已彻底移除\n· 【安装包不再附带证书文件】载荷里移除 rtg-codesign.cer\n· 【彻底卸载工具修复】RichTextGen-FullUninstall.exe 的管理员清单之前被链接器忽略，导致无法真正清理旧证书；现已修复，可正常清理旧版本装过的证书\n· 【兼容】老版本装过的证书不会被自动删除，需要时请运行彻底卸载工具；程序本体签名不受影响",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

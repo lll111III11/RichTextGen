@@ -11,25 +11,29 @@ setlocal
 set ROOT=%~dp0
 set VS=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\Tools\VsDevCmd.bat
 
-echo [1/4] ensure app icon ...
+echo [1/5] ensure app icon ...
 if not exist "%ROOT%app.ico" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%gen_icon.ps1" "%ROOT%app.ico"
   if errorlevel 1 goto fail
 )
 
-echo [2/4] generate embedded payload ...
+echo [2/5] generate embedded payload ...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%gen_embedded.ps1" "%ROOT%payload_web" "%ROOT%embedded.h"
 if errorlevel 1 goto fail
 
-echo [3/4] setup MSVC environment ...
+echo [3/5] setup MSVC environment ...
 call "%VS%" -arch=x86 -host_arch=x64 >nul
 if errorlevel 1 goto fail
 
-echo [4/4] compile resources + Setup.cpp (x86, static CRT) ...
+echo [4/5] compile resources + Setup.cpp (x86, static CRT) ...
 rc.exe /nologo /fo "%ROOT%setup.res" "%ROOT%setup.rc"
 if errorlevel 1 goto fail
 rem /Fo keeps the .obj next to the sources instead of polluting the caller's CWD
 cl.exe /nologo /O2 /MT /EHsc /utf-8 /DUNICODE /D_UNICODE /Fo"%ROOT%setup.obj" /Fe:"%ROOT%RichTextGen-Setup.exe" "%ROOT%Setup.cpp" "%ROOT%setup.res" /link /SUBSYSTEM:WINDOWS
+if errorlevel 1 goto fail
+
+echo [5/5] embed manifest (asInvoker, no UAC) ...
+mt.exe -nologo -manifest "%ROOT%setup.manifest" -outputresource:"%ROOT%RichTextGen-Setup.exe";#1
 if errorlevel 1 goto fail
 
 echo.

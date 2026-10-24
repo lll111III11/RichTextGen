@@ -7,8 +7,8 @@ rem
 rem  Signing is skipped automatically when signing\rtg-codesign.pfx
 rem  is missing, so a fresh clone still builds unsigned binaries.
 rem
-rem  NOTE: keep this file ASCII-only. cmd.exe reads .bat in the
-rem        OEM codepage, so UTF-8 Chinese literals would break.
+rem  NOTE: keep this file ASCII-only and CRLF. cmd.exe reads .bat in
+rem        the OEM codepage, so UTF-8 Chinese literals would break.
 rem ============================================================
 setlocal
 set ROOT=%~dp0
@@ -37,7 +37,7 @@ copy /y "%OUT%\Microsoft.Web.WebView2.WinForms.dll" "%PAY%\" >nul
 if errorlevel 1 goto fail
 copy /y "%OUT%\WebView2Loader.dll" "%PAY%\" >nul
 if errorlevel 1 goto fail
-if exist "%SIGN%\rtg-codesign.cer" copy /y "%SIGN%\rtg-codesign.cer" "%PAY%\" >nul
+rem The signing certificate is no longer shipped: setup never writes the cert stores.
 
 echo [4/6] build native installer (C++, zero dependency) ...
 call "%ROOT%build_native.bat"

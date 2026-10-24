@@ -37,8 +37,11 @@
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shlwapi.lib")
-#pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "winhttp.lib")
+
+// 以普通权限运行：装到 %LOCALAPPDATA%\Programs、只写 HKCU，不需要 UAC。
+// 提权级别写在 setup.manifest 里，由 build_native.bat 用 mt.exe 嵌入
+// （pragma 传 /MANIFESTUAC 会被链接器 LNK4229 忽略）。
 
 using namespace Gdiplus;
 
@@ -51,7 +54,7 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.9.0.9";
+    const wchar_t* const kVersion   = L"5.9.0.10";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
@@ -307,63 +310,9 @@ namespace
         RegCloseKey(k);
     }
 
-    // 代码签名证书的内包文件名（由 build.bat 复制进 payload_web 并随载荷内嵌）
-    const wchar_t* const kCertFile = L"rtg-codesign.cer";
-
-    /// 读取整个文件到缓冲区；失败返回 false
-    bool ReadFileBytes(const std::wstring& path, std::vector<BYTE>& out)
-    {
-        out.clear();
-        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
-                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (h == INVALID_HANDLE_VALUE) return false;
-        DWORD sz = GetFileSize(h, NULL);
-        if (sz == INVALID_FILE_SIZE || sz == 0) { CloseHandle(h); return false; }
-        out.resize(sz);
-        DWORD rd = 0;
-        BOOL ok = ReadFile(h, &out[0], sz, &rd, NULL);
-        CloseHandle(h);
-        if (!ok || rd != sz) { out.clear(); return false; }
-        return true;
-    }
-
-    /// 本机三个受信任存储：根 / 受信任的发布者 / 受信任的人
-    void ForEachTrustedStore(void (*fn)(HCERTSTORE, void*), void* ctx)
-    {
-        const wchar_t* stores[] = { L"Root", L"TrustedPublisher", L"TrustedPeople" };
-        for (int i = 0; i < 3; i++)
-        {
-            HCERTSTORE st = CertOpenStore(CERT_STORE_PROV_SYSTEM_W, 0, NULL,
-                                          CERT_SYSTEM_STORE_LOCAL_MACHINE, stores[i]);
-            if (st == NULL) continue;
-            fn(st, ctx);
-            CertCloseStore(st, 0);
-        }
-    }
-
-    /// 静默把内包证书写入本机三个受信任存储。
-    /// 需要管理员权限——安装器已在 UAC 授权后运行；任何一步失败只返回 false，不阻断安装。
-    struct AddCertCtx { const BYTE* data; DWORD size; bool ok; };
-
-    void AddCertToStore(HCERTSTORE st, void* p)
-    {
-        AddCertCtx* c = (AddCertCtx*)p;
-        if (!CertAddEncodedCertificateToStore(st, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-                                              c->data, c->size, CERT_STORE_ADD_REPLACE_EXISTING, NULL))
-            c->ok = false;
-    }
-
-    bool InstallCertificate(const std::wstring& cerPath)
-    {
-        std::vector<BYTE> data;
-        if (!ReadFileBytes(cerPath, data)) return false;
-        AddCertCtx ctx = { &data[0], (DWORD)data.size(), true };
-        ForEachTrustedStore(AddCertToStore, &ctx);
-        return ctx.ok;
-    }
-
-    // 注意：本程序的"卸载"刻意保留代码签名证书（保持本机始终有证书的状态），
-    // 只有独立发布的「彻底卸载」工具（RichTextGen-FullUninstall.exe）才会移除它。
+    // 安装器不再向系统证书存储写入任何证书：默认装到 %LOCALAPPDATA%\Programs，
+    // 只写 HKCU，全程不需要管理员权限。旧版本装过证书的机器，可用
+    // RichTextGen-FullUninstall.exe 清理（该工具仍保留管理员权限）。
 
     // ---- 安装量上报 --------------------------------------------------------
     // 只在安装成功后上报一次（同一版本只报一次），代表「安装量 +1」。
@@ -471,9 +420,8 @@ namespace
         if (_wcsicmp(self.c_str(), un.c_str()) != 0 && !CopyFileW(self.c_str(), un.c_str(), FALSE))
             return false;
 
-        // UAC 已授权 → 静默载入代码签名证书，保持本机"始终有证书"的状态。
-        // 该步骤失败不阻断安装（证书缺失只影响发布者显示，不影响程序运行）。
-        InstallCertificate(target + L"\\" + kCertFile);
+        // 不再写系统证书存储：那需要管理员权限，且容易被安全软件误判。
+        // 程序自带签名，安装后由 Windows 自行验证，无需把证书装进受信任根。
 
         std::wstring exe = PickMainExe(target);
 

@@ -11,12 +11,16 @@ setlocal
 set ROOT=%~dp0
 set VS=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\Tools\VsDevCmd.bat
 
-echo [1/2] setup MSVC environment ...
+echo [1/3] setup MSVC environment ...
 call "%VS%" -arch=x86 -host_arch=x64 >nul
 if errorlevel 1 goto fail
 
-echo [2/2] compile FullUninstall.cpp (x86, static CRT, console) ...
+echo [2/3] compile FullUninstall.cpp (x86, static CRT, console) ...
 cl.exe /nologo /O2 /MT /EHsc /utf-8 /DUNICODE /D_UNICODE /Fo"%ROOT%fulluninstall.obj" /Fe:"%ROOT%RichTextGen-FullUninstall.exe" "%ROOT%FullUninstall.cpp" /link /SUBSYSTEM:CONSOLE
+if errorlevel 1 goto fail
+
+echo [3/3] embed manifest (requireAdministrator) ...
+mt.exe -nologo -manifest "%ROOT%fulluninstall.manifest" -outputresource:"%ROOT%RichTextGen-FullUninstall.exe";#1
 if errorlevel 1 goto fail
 
 echo.
