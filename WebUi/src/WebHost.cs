@@ -157,6 +157,14 @@ namespace RichTextGen
         private DateTime _pendingAt = DateTime.MinValue;
         private IntPtr _lastFg;
 
+        // ============================================================ 强制应用刷新
+        /// <summary>界面所用的虚拟 https 源（重载时带时间戳重新请求内嵌 HTML）。</summary>
+        private const string WebOrigin = "https://richtextgen.local/";
+        /// <summary>刷新前由界面打包的标签页正文；页面重载完成后回灌。</summary>
+        private string _pendingRefresh;
+        private bool _refreshFallback;
+        private bool _refreshing;
+
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
         [DllImport("user32.dll")]
@@ -758,6 +766,7 @@ namespace RichTextGen
                 tray.Text = "彩色文本生成器 v" + Version;
                 ContextMenuStrip menu = new ContextMenuStrip();
                 menu.Items.Add("显示窗口", null, delegate { RestoreWindow(); });
+                menu.Items.Add("强制应用刷新", null, delegate { ForceRefreshApp(); });
                 menu.Items.Add("立即检测更新", null, delegate { CheckUpdate(true); });
                 menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add("退出", null, delegate { _allowClose = true; Close(); });
@@ -770,6 +779,45 @@ namespace RichTextGen
                 tray.Visible = true;
             }
             catch { tray = null; }
+        }
+
+        /// <summary>托盘「强制应用刷新」：先让界面把全部正文打包，再重载页面并恢复窗口。</summary>
+        private void ForceRefreshApp()
+        {
+            if (_refreshing) return;
+            _refreshing = true;
+            try { RestoreWindow(); } catch { }
+            _refreshFallback = true;
+            RunJs("forceRefresh()");
+            // 界面脚本卡死时也照样刷新（只是没有正文快照）
+            SetTimeout(1600, delegate { if (_refreshFallback) DoReload(null); });
+        }
+
+        /// <summary>把快照临时落盘，然后重新请求内嵌界面（等同于一次干净的页面刷新）。</summary>
+        private void DoReload(string snapshot)
+        {
+            _refreshFallback = false;
+            if (!string.IsNullOrEmpty(snapshot))
+            {
+                _pendingRefresh = snapshot;
+                try
+                {
+                    Directory.CreateDirectory(AiConfig.Dir);
+                    File.WriteAllText(Path.Combine(AiConfig.Dir, "refresh-snapshot.json"),
+                                      snapshot, new UTF8Encoding(false));
+                }
+                catch { }
+            }
+            else
+            {
+                try { RunJs("window.__rtgForceRefresh=true"); } catch { }
+            }
+            try
+            {
+                if (web != null && web.CoreWebView2 != null)
+                    web.CoreWebView2.Navigate(WebOrigin + "?refresh=" + DateTime.Now.Ticks);
+            }
+            catch { }
         }
 
         /// <summary>执行页面里的全局函数（热键触发 UI 侧动作）</summary>
@@ -963,7 +1011,7 @@ namespace RichTextGen
             // data:/about: 这类不透明源会被浏览器禁止访问 localStorage，
             // 导致主题、背景图、侧栏宽度等「记住设置」全部静默失效。
             // 这里拦截该源的请求，把内嵌 HTML 作为响应返回，即可获得可持久化的正常源。
-            const string origin = "https://richtextgen.local/";
+            const string origin = WebOrigin;
             try
             {
                 web.CoreWebView2.AddWebResourceRequestedFilter(origin + "*", CoreWebView2WebResourceContext.All);
@@ -1190,6 +1238,16 @@ namespace RichTextGen
                     LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
                     Call("syncState", SyncStateJson());   // 置顶 / 同步输出 / 换行开关的当前状态
 
+                    // 强制刷新后：把刷新前打包的标签页正文回灌（等界面脚本全部就绪）
+                    if (!string.IsNullOrEmpty(_pendingRefresh))
+                    {
+                        string snap = _pendingRefresh;
+                        _pendingRefresh = null;
+                        _refreshing = false;
+                        SetTimeout(300, delegate { CallStr("refreshRestore", snap); });
+                    }
+                    else if (_refreshing) _refreshing = false;
+
                     // Live2D：把模型列表与配置回传（只主窗口显示，副窗口不重复出角色）
                     if (!_secondary)
                     {
@@ -1282,6 +1340,7 @@ namespace RichTextGen
                 case "setSyncOut": SetSyncOut(arg == "1"); break;
                 case "syncTarget": RecordForeground(); Call("syncState", SyncStateJson()); break;
                 case "syncSend": SyncOutput(Un(arg)); break;
+                case "forceRefresh": DoReload(Un(arg)); break;   // 界面已把全部正文打包好
                 case "setCopyNl":
                     UIPrefs.Save("{\"copyNl\":" + (arg == "1" ? "true" : "false") + "}");
                     CallStr("status", arg == "1" ? "复制时会用字面量 \\n 代替换行" : "复制时保持真实换行");

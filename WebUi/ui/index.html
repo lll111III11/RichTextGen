@@ -4343,10 +4343,38 @@ const DocM = (function(){
     return out;
   }
 
+  /* 强制应用刷新前：把所有标签页（含未保存正文）完整打包；刷新后原样恢复 */
+  function snapshot(){
+    const cur = byId(activeId);
+    if (cur) cur.buffer = getActiveText();
+    return {
+      active: docs.findIndex(d => d.id === activeId),
+      tabs: docs.map(d => ({ name: d.name, path: d.path, text: d.buffer || '',
+                             dirty: !!d.dirty, enc: d.enc || 'UTF-8', eol: d.eol || 'LF' }))
+    };
+  }
+  function restoreTabs(o){
+    const list = (o && o.tabs) || [];
+    if (!list.length) return false;
+    docs.length = 0; seq = 0; activeId = 0;
+    for (const t of list){
+      const d = addDoc(t.name || '无标题', t.path || '', t.text || '', false);
+      d.dirty = !!t.dirty;
+      d.enc = t.enc || 'UTF-8';
+      d.eol = t.eol || 'LF';
+    }
+    const idx = (o.active >= 0 && o.active < docs.length) ? o.active : 0;
+    activeId = docs[idx].id;
+    syncEditor();
+    render();
+    return true;
+  }
+
   return { newTab, switchTab, closeTab, save, saveAs, saveAll, addDoc, openFromHost, saved, markDirty,
            setActiveBuffer, setViewHook: f => { viewHook = f; },
            activeText, activeName, setActiveText, setActiveName,
-           switchByName, closeActive, tabNames, allTabs, activeMeta, activePaths };
+           switchByName, closeActive, tabNames, allTabs, activeMeta, activePaths,
+           snapshot, restoreTabs };
 })();
 /* 启动：创建第一个「无标题」标签 */
 DocM.addDoc('无标题', '', '', true);
@@ -5410,6 +5438,7 @@ function removeRecent(path){
   }
 }
 window.addEventListener('beforeunload', function(){
+  if (window.__rtgForceRefresh) return;   // 强制刷新会恢复标签页，不能顺手清掉「最近使用」
   try {
     if (typeof DocM !== 'undefined' && DocM.activePaths){
       DocM.activePaths().forEach(function(p){ removeRecent(p); });
@@ -5587,6 +5616,37 @@ function syncEditorNow(){
   } catch(e){ s = ''; }
   if (s) host('syncSend|' + encodeURIComponent(s));
 }
+
+/* 强制应用刷新（托盘菜单调用）：先把全部文本打包给宿主临时保存，再由宿主重载页面 */
+function forceRefresh(){
+  window.__rtgForceRefresh = true;
+  const o = { tabs: [], active: 0, page: 'work', workText: '' };
+  try {
+    if (typeof DocM !== 'undefined' && DocM.snapshot){
+      const s = DocM.snapshot();
+      o.tabs = s.tabs || []; o.active = s.active || 0;
+    }
+    const t = document.getElementById('txt'); if (t) o.workText = t.value;
+    const on = document.querySelector('nav button.on'); if (on) o.page = on.dataset.p || 'work';
+  } catch(e){}
+  host('forceRefresh|' + encodeURIComponent(JSON.stringify(o)));
+}
+/* 宿主重载页面后回灌快照 */
+window.ui.refreshRestore = function(o){
+  if (typeof o === 'string'){ try{ o = JSON.parse(o); }catch(e){ return; } }
+  if (!o) return;
+  try {
+    if (typeof DocM !== 'undefined' && DocM.restoreTabs && o.tabs && o.tabs.length){
+      DocM.restoreTabs(o);
+    }
+    if (typeof o.workText === 'string'){
+      const t = document.getElementById('txt');
+      if (t){ t.value = o.workText; try { gen(); } catch(e){} }
+    }
+    if (o.page && typeof go === 'function') go(o.page);
+    ui.status('已强制刷新，恢复 ' + ((o.tabs && o.tabs.length) || 0) + ' 个标签页');
+  } catch(e){}
+};
 
 /* 宿主回报的开关状态（启动与每次切换后各来一次） */
 window.ui.syncState = function(o){

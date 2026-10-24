@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.18",
+    "version":  "5.9.0.19",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.18/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.18/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.19/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.19/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.18 更新（同步输出改为两步）：\n· 【同步输出】不再由程序抢焦点：先「复制代码 / 同步到窗口 / 给选区套颜色」把文字准备好，再点一次目标窗口让它聚焦，程序随后自动按 Ctrl+V 粘贴\n· 待粘贴内容 2 分钟内有效，点别的窗口会贴到那个窗口并把它记为新目标\n· 其余沿用 5.9.0.17：窗口置顶 📌、复制换行转 \\n 开关、设置里直接打开下载页",
+    "notes":  "v5.9.0.19 更新（强制应用刷新）：\n· 【托盘】右键菜单新增「强制应用刷新」：先把所有标签页正文与工作台文本临时保存到 %APPDATA%\\RichTextGen\\refresh-snapshot.json，再重载界面并恢复窗口\n· 刷新后自动还原全部标签页（含未保存的脏标记）、当前标签与所在页面，最近使用不会被清空\n· 界面脚本卡死时也会强制重载（此时只能保留磁盘上已保存的内容）\n· 其余沿用 5.9.0.18：同步输出两步走、窗口置顶、复制换行开关",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
