@@ -200,4 +200,8 @@ a.ghost{text-decoration:none;display:inline-flex;align-items:center}
   background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:5px;
   padding:1px 5px;color:#cfe0ff;
 }
+/* 使用手册入口 */
+.guide-card{padding:18px 22px 16px;margin-bottom:22px}
+.guide-desc{margin:4px 0 8px;font-size:13px;color:var(--dim)}
+.guide-links{margin:0;font-size:13px}
 

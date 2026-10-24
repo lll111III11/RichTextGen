@@ -19,6 +19,7 @@
   </a>
   <div class="top-right">
     <span class="pill" id="verPill">v—</span>
+    <a class="ghost" href="guide/" target="_blank" rel="noopener">使用手册</a>
     <a class="ghost" href="https://github.com/lll111III11/RichTextGen" target="_blank" rel="noopener">GitHub</a>
     <span class="net" id="netState"><i></i><em>测速中</em></span>
   </div>
@@ -58,6 +59,15 @@
       <li><b>为什么会被拦</b>：安装包由项目自有的代码签名证书签名，不是付费商业 CA 签发，Windows 与浏览器因此会给出警告。这只说明证书未受信任，不代表文件被篡改。</li>
       <li><b>怎么确认没被改过</b>：展开卡片里的「SHA-256 校验值」，用 <code>certutil -hashfile 文件名 SHA256</code> 比对；或改从 GitHub Releases 下载同一文件交叉核对，源码也都在这个仓库里。</li>
     </ul>
+  </section>
+
+  <section class="card guide-card">
+    <div class="notice-head">
+      <h2>第一次用？先看使用手册</h2>
+      <a class="ghost" href="guide/RichTextGen-Guide.pdf" target="_blank" rel="noopener">下载 PDF</a>
+    </div>
+    <p class="guide-desc">共 11 节，含全部界面截图：每个页面怎么用、该点什么、菜单与快捷键、彩色标签示例、安装与安全提示。</p>
+    <p class="guide-links"><a class="link" href="guide/" target="_blank" rel="noopener">在线查看手册</a> · <a class="link" href="guide/RichTextGen-Guide.pdf" target="_blank" rel="noopener">PDF 版（约 1.5 MB）</a></p>
   </section>
 
   <section class="stats card">

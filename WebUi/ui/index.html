@@ -4044,6 +4044,7 @@ const DocM = (function(){
     const d = byId(id); if (!d) return;
     if (d.id === activeId) d.buffer = getActiveText();
     if (d.dirty && !confirm('「' + d.name + '」尚未保存，关闭将丢失更改。是否继续？')) return;
+    try { if (typeof removeRecent === 'function') removeRecent(d.path); } catch(e){}
     const at = docs.findIndex(x => x.id === id);
     docs.splice(at, 1);
     if (activeId === id){
@@ -4170,6 +4171,12 @@ const DocM = (function(){
     return false;
   }
   function closeActive(){ if (activeId) closeTab(activeId); }
+  /** 当前窗口里所有已关联磁盘路径的文档（关闭窗口时用来清掉「最近使用」） */
+  function activePaths(){
+    const out = [];
+    for (const d of docs) if (d.path) out.push(d.path);
+    return out;
+  }
   /* 全部保存：有路径的直接写回，没有路径的走另存为 */
   function saveAll(){
     let n = 0;
@@ -4251,7 +4258,7 @@ const DocM = (function(){
   return { newTab, switchTab, closeTab, save, saveAs, saveAll, addDoc, openFromHost, saved, markDirty,
            setActiveBuffer, setViewHook: f => { viewHook = f; },
            activeText, activeName, setActiveText, setActiveName,
-           switchByName, closeActive, tabNames, allTabs, activeMeta };
+           switchByName, closeActive, tabNames, allTabs, activeMeta, activePaths };
 })();
 /* 启动：创建第一个「无标题」标签 */
 DocM.addDoc('无标题', '', '', true);
@@ -5302,6 +5309,25 @@ function recentList(){
   } });
   return out;
 }
+/** 关掉标签或窗口时把对应文件从「最近使用」里摘掉，避免已关闭的文件一直残留 */
+function removeRecent(path){
+  if (!path) return;
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('rtg.recent') || '[]'); } catch(e){}
+  const n = (list || []).filter(function(r){
+    return r && r.path && r.path.toLowerCase() !== path.toLowerCase();
+  });
+  if (n.length !== (list || []).length){
+    try { localStorage.setItem('rtg.recent', JSON.stringify(n)); } catch(e){}
+  }
+}
+window.addEventListener('beforeunload', function(){
+  try {
+    if (typeof DocM !== 'undefined' && DocM.activePaths){
+      DocM.activePaths().forEach(function(p){ removeRecent(p); });
+    }
+  } catch(e){}
+});
 
 /* ---------- 工具条事件与快捷键 ---------- */
 (function(){

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>彩色文本生成器 · 使用手册</title>
+<style>
+  @page { size: A4; margin: 15mm 14mm; }
+  * { box-sizing: border-box; }
+  body{
+    margin:0; color:#1b1f2a;
+    font: 11pt/1.75 "Microsoft YaHei","Microsoft YaHei UI",system-ui,sans-serif;
+  }
+  .cover{
+    height: 250mm; display:flex; flex-direction:column; justify-content:center;
+    page-break-after: always;
+  }
+  .cover .logo{
+    width:64px;height:64px;border-radius:18px;
+    background:linear-gradient(135deg,#6ea8ff,#a855f7);
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-size:28px;font-weight:700;margin-bottom:22px;
+  }
+  .cover h1{font-size:34pt;margin:0 0 8px;letter-spacing:-1px}
+  .cover .sub{font-size:14pt;color:#5b6478;margin:0 0 34px}
+  .cover .meta{font-size:10.5pt;color:#6b7488;line-height:2}
+  .cover .links{margin-top:28px;font-size:10.5pt;color:#2b6cb0}
+  h1.sec{
+    font-size:19pt;margin:0 0 14px;padding-bottom:8px;border-bottom:2px solid #e6e9f0;
+    page-break-before: always;
+  }
+  h1.sec:first-of-type{page-break-before: avoid}
+  h2{font-size:13.5pt;margin:22px 0 8px;color:#20263a}
+  h3{font-size:11.5pt;margin:16px 0 6px;color:#2d3550}
+  p{margin:6px 0}
+  ul,ol{margin:6px 0 10px;padding-left:20px}
+  li{margin:3px 0}
+  figure{margin:12px 0 16px;page-break-inside:avoid}
+  figure img{width:100%;border:1px solid #dfe3ec;border-radius:8px;display:block}
+  figcaption{font-size:9.5pt;color:#6b7488;margin-top:6px;text-align:center}
+  table{width:100%;border-collapse:collapse;margin:10px 0 14px;font-size:10pt;page-break-inside:avoid}
+  th,td{border:1px solid #e2e6ef;padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:#f5f7fb;font-weight:600}
+  code,kbd{
+    font-family:"Cascadia Mono",Consolas,monospace;font-size:9.5pt;
+    background:#f2f4f9;border:1px solid #e3e7f0;border-radius:4px;padding:1px 5px;
+  }
+  .tip,.warn{
+    border-left:3px solid #6ea8ff;background:#f3f8ff;padding:9px 13px;margin:12px 0;
+    border-radius:0 6px 6px 0;font-size:10.5pt;
+  }
+  .warn{border-left-color:#e0a03a;background:#fff9ee}
+  .toc{margin-top:10px}
+  .toc li{margin:6px 0;font-size:11pt}
+  .demo{
+    background:#11141d;color:#e9edf7;border-radius:8px;padding:14px 16px;margin:10px 0;
+    font-family:"Cascadia Mono",Consolas,monospace;font-size:10pt;line-height:1.9;
+  }
+  .demo .c1{color:#ff6b81}.demo .c2{color:#3ddc97}.demo .c3{color:#6ea8ff}
+  .muted{color:#6b7488}
+  /* 屏幕上留出左右边距（打印时由 @page 控制，不受影响） */
+  @media screen{
+    html{background:#eef1f7}
+    body{
+      max-width:880px;margin:0 auto;padding:0 34px 60px;background:#fff;
+      box-shadow:0 0 0 1px #e3e7f0;
+    }
+    .cover{height:auto;padding:70px 0 40px}
+    h1.sec{page-break-before:auto}
+    .toc{margin-bottom:10px}
+  }
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<div class="cover">
+  <div class="logo">文</div>
+  <h1>彩色文本生成器</h1>
+  <p class="sub">使用手册 · 界面说明 · 示例与常见问题</p>
+  <div class="meta">
+    适用版本：v5.9.0.13 及以后<br />
+    文档版本：2026-10-24<br />
+    平台：Windows 7 / 10 / 11
+  </div>
+  <div class="links">
+    下载页：https://richtextgen-dl.pages.dev/<br />
+    安装统计：https://richtextgen-dl.pages.dev/stats<br />
+    GitHub：https://github.com/lll111III11/RichTextGen
+  </div>
+</div>
+
+<!-- 目录 -->
+<h1 class="sec">目录</h1>
+<ol class="toc">
+  <li>快速开始</li>
+  <li>界面总览</li>
+  <li>工作台功能栏的三种摆放方式</li>
+  <li>菜单详解（文件 / 编辑 / 查看 / 格式 / 帮助）</li>
+  <li>编辑器：源码与渲染、查找与替换</li>
+  <li>功能页说明（生成 / 图片 / 翻译 / AI / TXT / 音乐）</li>
+  <li>设置：性能、外观与动效</li>
+  <li>彩色标签写法与示例</li>
+  <li>快捷键一览</li>
+  <li>安装、更新与安全提示</li>
+  <li>反馈与许可</li>
+</ol>
+
+<!-- 1 -->
+<h1 class="sec">1. 快速开始</h1>
+<p>彩色文本生成器是一个 Windows 桌面文本工具：左侧是编辑区，右侧是「工作台」，把颜色、样式、图片、翻译、AI 等能力集中在一起。</p>
+<ol>
+  <li>安装版双击 <code>RichTextGen-Setup.exe</code>，按向导装到当前用户目录（<b>不需要管理员权限</b>）；免安装版解压 <code>RichTextGen-Portable.zip</code> 后直接运行 <code>彩色文本生成器.exe</code>。</li>
+  <li>首次启动会弹出简短提示，说明后台常驻、标签拆分与注册范围，可勾选「不再提示」。</li>
+  <li>在左侧输入内容；选中文字后，在右侧工作台点颜色或样式即可上色。</li>
+  <li>多个文件想同时开着，用「文件 → 新建标签页」，或把标签<b>拖到窗口外</b>拆成独立窗口。</li>
+</ol>
+<div class="tip">双击由本程序接管的文本文件（.txt / .md / .log / .json / .ini / .csv）时，会先出现一个干净的浅色窗口，界面加载完再自动填入内容，不需要等待白屏。</div>
+
+<!-- 2 -->
+<h1 class="sec">2. 界面总览</h1>
+<figure>
+  <img src="img/guide-01-main.png" alt="主界面" />
+  <figcaption>主界面：顶部标题与菜单、标签栏、左侧编辑区、右侧工作台、底部状态栏</figcaption>
+</figure>
+<table>
+  <tr><th style="width:22%">区域</th><th>作用</th></tr>
+  <tr><td>标题栏</td><td>显示版本，右侧是最小化 / 最大化 / 关闭。拖动空白处可移动窗口。</td></tr>
+  <tr><td>菜单栏</td><td>文件、编辑、查看、格式、帮助五组菜单。</td></tr>
+  <tr><td>标签栏</td><td>每个标签是一份文档；<code>+</code> 新建；标签可拖动到窗口外拆分。</td></tr>
+  <tr><td>编辑器</td><td>上方「源码 / 渲染」切换：源码显示原始标签文本，渲染按标签实时显示样式。</td></tr>
+  <tr><td>工作台</td><td>颜色、样式、生成、图片、翻译、AI、TXT、音乐、设置等能力集中在这里。</td></tr>
+  <tr><td>状态栏</td><td>网络状态、提示信息、光标行列、字符数、编码与换行符。</td></tr>
+</table>
+
+<!-- 3 -->
+<h1 class="sec">3. 工作台功能栏的三种摆放方式</h1>
+<p>工作台顶部的功能入口（工作台 / 生成 / 图片 / 翻译 / AI / TXT / 音乐 / 设置）可以按习惯换位置。</p>
+<p>打开 <b>工作台 → ⚙ 设置 → 外观 → 工作台功能栏</b>，三选一：</p>
+<table>
+  <tr><th style="width:26%">方式</th><th>效果</th><th style="width:26%">适合</th></tr>
+  <tr><td>并入菜单栏</td><td>功能入口排在「文件 编辑 查看 格式 帮助」同一行的右侧</td><td>喜欢一切集中在顶部一行的人</td></tr>
+  <tr><td>顶部横排</td><td>功能入口横排在工作台内容上方</td><td>默认，左右分栏最直观</td></tr>
+  <tr><td>左侧竖排</td><td>功能入口竖排在左侧，内容在右</td><td>习惯传统侧边导航的人</td></tr>
+</table>
+<div class="tip">选择会立刻生效并记住；拖动编辑器与工作台之间的分隔条可以调整工作台宽度，拖动时会显示当前像素值，双击分隔条恢复默认宽度。</div>
+<figure>
+  <img src="img/guide-12-settings.png" alt="设置页" />
+  <figcaption>设置页：性能（GPU 加速）与外观（主题、工作台功能栏、界面动效等）</figcaption>
+</figure>
+
+<!-- 4 -->
+<h1 class="sec">4. 菜单详解</h1>
+
+<h2>4.1 文件</h2>
+<figure>
+  <img src="img/guide-02-menu-file.png" alt="文件菜单" />
+  <figcaption>文件菜单</figcaption>
+</figure>
+<ul>
+  <li><b>新建标签页 / 新建窗口</b>：开一份新文档，或干脆开一个新窗口。</li>
+  <li><b>“新建 Markdown”选项卡</b>：直接建一个 <code>.md</code> 标签并预填标题骨架。</li>
+  <li><b>打开…</b>：选择本机文本文件。打开过的文件会出现在<b>最近使用</b>里，可直接重开。</li>
+  <li><b>保存 / 另存为 / 全部保存</b>：保存会保留原编码与换行符；多个标签一次写入用「全部保存」。</li>
+  <li><b>页面设置 / 打印</b>：设置页边距（毫米），打印时生效。</li>
+  <li><b>关闭选项卡 / 关闭窗口 / 退出</b>：注意「关闭窗口」按你设置的关闭行为处理（最小化到托盘或退出）。</li>
+</ul>
+
+<h2>4.2 编辑</h2>
+<figure>
+  <img src="img/guide-03-menu-edit.png" alt="编辑菜单" />
+  <figcaption>编辑菜单</figcaption>
+</figure>
+<ul>
+  <li><b>撤销 / 重做 / 剪切 / 复制 / 粘贴 / 删除</b>：常规编辑操作。</li>
+  <li><b>清除格式设置</b>：在渲染模式下清掉选区的颜色与样式。</li>
+  <li><b>使用必应搜索</b>：选中文字后直接用默认浏览器搜索。</li>
+  <li><b>查找 / 查找下一个 / 查找上一个 / 替换 / 转到</b>：会打开编辑器上方的查找条。</li>
+  <li><b>时间/日期</b>：在光标处插入 <code>2026-10-24 22:02:23</code> 这样的时间。</li>
+  <li><b>字体…</b>：调整编辑区字体、字号、加粗与斜体。</li>
+</ul>
+
+<h2>4.3 查看</h2>
+<figure>
+  <img src="img/guide-04-menu-view.png" alt="查看菜单" />
+  <figcaption>查看菜单：缩放、状态栏、自动换行、Markdown</figcaption>
+</figure>
+<ul>
+  <li><b>缩放</b>：放大 / 缩小 / 还原默认缩放（60%–200%）。</li>
+  <li><b>状态栏</b>：显示或隐藏底部状态栏。</li>
+  <li><b>自动换行</b>：长行是否折行显示。</li>
+  <li><b>Markdown</b>：预留项，暂为灰色不可用。</li>
+</ul>
+
+<h2>4.4 格式 / 帮助</h2>
+<ul>
+  <li><b>格式</b>：跳到工作台的颜色系统、样式与渐变、拾色器，以及「切换渲染模式」。</li>
+  <li><b>帮助</b>：立即检测更新、查看发布页、Android 版说明、关于。</li>
+</ul>
+
+<!-- 5 -->
+<h1 class="sec">5. 编辑器：源码与渲染、查找与替换</h1>
+<p>编辑器上方有两个按钮：</p>
+<ul>
+  <li><b>源码</b>：显示真正的文本，包括 <code>&lt;color=#FF6B81&gt;</code> 这类标签。要精确改标签、做替换，用这个模式。</li>
+  <li><b>渲染</b>：按标签实时显示颜色与样式，所见即所得。选中文字后在工作台点颜色，改动会写回源码。</li>
+</ul>
+<figure>
+  <img src="img/guide-05-find.png" alt="查找条" />
+  <figcaption>Ctrl+F 打开查找条：输入内容后显示匹配数量，可上一个 / 下一个，Ctrl+H 可替换</figcaption>
+</figure>
+<ul>
+  <li><code>Ctrl+F</code> 查找，<code>Ctrl+H</code> 替换，<code>Ctrl+G</code> 转到行号。</li>
+  <li><code>F3</code> / <code>Shift+F3</code> 跳到下一个 / 上一个匹配。</li>
+  <li>替换与转到行在<b>源码模式</b>下执行；渲染模式会提示切换。</li>
+</ul>
+
+<!-- 6 -->
+<h1 class="sec">6. 功能页说明</h1>
+
+<h2>6.1 生成</h2>
+<figure>
+  <img src="img/guide-06-gen.png" alt="生成页" />
+  <figcaption>「生成」页说明：生成能力已并入工作台</figcaption>
+</figure>
+<p>「生成」页是一个入口提示，真正的颜色与样式生成在工作台主页完成：选颜色 → 套到选区，或按行批量上色。</p>
+
+<h2>6.2 图片</h2>
+<figure>
+  <img src="img/guide-07-img.png" alt="图片页" />
+  <figcaption>图片系统：把图片转成「彩色块字符 + 标签」的方块画</figcaption>
+</figure>
+<p>把图片直接拖进窗口，或在面板里选择图片，程序会把像素转成彩色方块字符并带上 <code>&lt;color&gt;</code> 标签，适合做头像、logo 的文本化版本。</p>
+
+<h2>6.3 在线翻译</h2>
+<figure>
+  <img src="img/guide-08-trans.png" alt="翻译页" />
+  <figcaption>在线翻译：会自动保护文本里的标签，只翻译正文</figcaption>
+</figure>
+<ol>
+  <li>选择翻译服务，按提示填写 Endpoint 与 API Key（保存在本机）。</li>
+  <li>选择源语言与目标语言，点「翻译工作台文本」。</li>
+  <li>文本里的 <code>&lt;color&gt;</code> 等标签会被保护，不会被翻坏。</li>
+</ol>
+
+<h2>6.4 AI 对话</h2>
+<p>点「AI」会打开独立的对话窗口：左侧是任务列表，底部输入框可选模型、思考强度与联网搜索。窗口独立存在，可以一边看文档一边对话。首次使用需要在设置里填写模型服务与密钥。</p>
+<div class="tip">AI 也可以直接操作工作台：例如让它「把这段文字改成蓝色渐变、加粗、字号 48」，它会生成对应的标签并套用到选区。</div>
+
+<h2>6.5 TXT 全面处理</h2>
+<figure>
+  <img src="img/guide-10-txt.png" alt="TXT 页" />
+  <figcaption>TXT 全面处理：逐行编辑、逐行实时渲染</figcaption>
+</figure>
+<p>把长文本拆成一行一条，适合批量给每行上色、批量加前缀后缀。按钮包括：从工作台载入、导入 TXT、全选 / 全不选、复制选中行、导出 TXT、回填工作台。</p>
+
+<h2>6.6 音乐</h2>
+<figure>
+  <img src="img/guide-11-music.png" alt="音乐页" />
+  <figcaption>音乐 → 本地链接：拖入音频后生成本机可播放的链接</figcaption>
+</figure>
+<p>支持 mp3 / wav / ogg / m4a / flac / aac / wma / opus。拖入后程序会在本机起一个只读端口，生成一个可直接放进播放器或网页的链接；程序关闭后链接失效。</p>
+
+<!-- 7 -->
+<h1 class="sec">7. 设置：性能、外观与动效</h1>
+<table>
+  <tr><th style="width:26%">项目</th><th>说明</th></tr>
+  <tr><td>GPU 加速</td><td>默认开启硬件光栅化与零拷贝，滚动、动效与画面更顺滑。<b>修改后需重启程序生效</b>；若出现花屏或白屏可关闭它。</td></tr>
+  <tr><td>主题</td><td>跟随系统 / 亮色 / 深色。</td></tr>
+  <tr><td>工作台功能栏</td><td>并入菜单栏 / 顶部横排 / 左侧竖排。</td></tr>
+  <tr><td>界面动效</td><td>完整 / 精简 / 关闭。完整包含菜单淡入、标签滑入、拖动气泡等。</td></tr>
+  <tr><td>背景水印</td><td>可启用本机图片作为半透明背景，调透明度、模糊与铺满方式。</td></tr>
+  <tr><td>关闭行为</td><td>点 ✕ 或 Alt+F4 时最小化到后台还是直接退出，可勾选记住。</td></tr>
+</table>
+
+<!-- 8 -->
+<h1 class="sec">8. 彩色标签写法与示例</h1>
+<p>文本使用 Unity / TextMesh Pro 风格的标签。最简单的上色方式是用工作台点颜色；也可以直接手写：</p>
+<div class="demo">
+这是 <span class="c1">&lt;color=#FF6B81&gt;红色&lt;/color&gt;</span> 与 <span class="c2">&lt;color=#3DDC97&gt;绿色&lt;/color&gt;</span>，
+还有 <span class="c3">&lt;color=#6EA8FF&gt;蓝色&lt;/color&gt;</span>。
+</div>
+<p>渲染后就是：</p>
+<div class="demo">
+这是 <span class="c1">红色</span> 与 <span class="c2">绿色</span>，还有 <span class="c3">蓝色</span>。
+</div>
+<h3>常用写法</h3>
+<table>
+  <tr><th style="width:34%">写法</th><th>效果</th></tr>
+  <tr><td><code>&lt;color=#FF6B81&gt;文字&lt;/color&gt;</code></td><td>指定颜色</td></tr>
+  <tr><td><code>&lt;b&gt;文字&lt;/b&gt;</code></td><td>加粗</td></tr>
+  <tr><td><code>&lt;i&gt;文字&lt;/i&gt;</code></td><td>斜体</td></tr>
+  <tr><td><code>&lt;u&gt;文字&lt;/u&gt;</code></td><td>下划线</td></tr>
+  <tr><td><code>&lt;size=48&gt;文字&lt;/size&gt;</code></td><td>指定字号</td></tr>
+</table>
+<div class="warn">标签必须成对闭合（<code>&lt;color&gt;</code> 配 <code>&lt;/color&gt;</code>）。在渲染模式下删除彩色文字时，建议先切回源码模式，避免把标签拆断。</div>
+
+<!-- 9 -->
+<h1 class="sec">9. 快捷键一览</h1>
+<table>
+  <tr><th style="width:34%">快捷键</th><th>作用</th></tr>
+  <tr><td><code>Ctrl+N</code> / <code>Ctrl+O</code> / <code>Ctrl+S</code></td><td>新建 / 打开 / 保存</td></tr>
+  <tr><td><code>Ctrl+Shift+S</code> / <code>Ctrl+Alt+S</code></td><td>另存为 / 全部保存</td></tr>
+  <tr><td><code>Ctrl+W</code> / <code>Ctrl+Shift+W</code></td><td>关闭选项卡 / 关闭窗口</td></tr>
+  <tr><td><code>Ctrl+Shift+N</code></td><td>新建窗口</td></tr>
+  <tr><td><code>Ctrl+F</code> / <code>Ctrl+H</code> / <code>Ctrl+G</code></td><td>查找 / 替换 / 转到行</td></tr>
+  <tr><td><code>F3</code> / <code>Shift+F3</code></td><td>下一个 / 上一个匹配</td></tr>
+  <tr><td><code>Ctrl+E</code></td><td>用必应搜索选中文字</td></tr>
+  <tr><td><code>F5</code></td><td>插入时间/日期</td></tr>
+  <tr><td><code>Ctrl+加号</code> / <code>Ctrl+减号</code> / <code>Ctrl+0</code></td><td>放大 / 缩小 / 还原缩放</td></tr>
+  <tr><td><code>Ctrl+P</code></td><td>打印</td></tr>
+  <tr><td><code>Ctrl+Shift+R</code></td><td>切换源码 / 渲染模式</td></tr>
+  <tr><td><code>Ctrl+Z</code> / <code>Ctrl+Y</code></td><td>撤销 / 重做</td></tr>
+</table>
+<p class="muted">全局热键（隐藏窗口、导入、生成、退出、最小化、切换深浅色）可在「设置 → 快捷组件」里自定义。</p>
+
+<!-- 10 -->
+<h1 class="sec">10. 安装、更新与安全提示</h1>
+<h2>安装位置与权限</h2>
+<p>安装版默认装到 <code>%LOCALAPPDATA%\Programs\RichTextGen</code>，只写当前用户注册表，<b>全程不弹 UAC</b>。安装过程也不会向系统证书存储写入任何证书。</p>
+
+<h2>下载或安装时的安全提示</h2>
+<div class="warn">安装包使用项目自有证书签名，不是付费商业 CA 签发，因此浏览器与 Windows 可能给出提示。这只说明证书未受信任，不代表文件被篡改。</div>
+<ul>
+  <li>浏览器提示「不常见的下载内容」：在下载项里选「保留」或「仍要下载」。</li>
+  <li>SmartScreen 提示「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。</li>
+  <li>核对方式：在下载页展开「SHA-256 校验值」，用 <code>certutil -hashfile 文件名 SHA256</code> 比对；或改从 GitHub Releases 下载同一文件交叉核对。</li>
+</ul>
+
+<h2>更新机制</h2>
+<p>程序会同时探测 <b>Cloudflare 下载站</b> 与 <b>GitHub</b> 两条通道，哪条快用哪条；手动点「立即检测更新」默认走 Cloudflare；任一通道下载失败会自动换另一条。</p>
+
+<!-- 11 -->
+<h1 class="sec">11. 反馈与许可</h1>
+<ul>
+  <li>项目主页：https://github.com/lll111III11/RichTextGen</li>
+  <li>问题反馈：https://github.com/lll111III11/RichTextGen/issues</li>
+  <li>下载页：https://richtextgen-dl.pages.dev/</li>
+</ul>
+<p>本项目采用 <b>MIT License</b>，可自由使用、修改与分发，请保留版权声明与协议文本。</p>
+<p class="muted">文档由项目的界面截图生成，随版本更新可能略有差异；以程序内实际界面为准。</p>
+
+</body>
+</html>

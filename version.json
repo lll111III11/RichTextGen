@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.13",
+    "version":  "5.9.0.14",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "feature",
+    "type":  "fix",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.13/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.13/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.14/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.14/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.13 更新（工作台功能栏三种摆放方式）：\n· 【并入菜单栏】生成 / 图片 / 翻译 / AI / TXT / 音乐 / 设置 这些入口，可以和「文件 / 编辑 / 查看 / 格式 / 帮助」放在同一行\n· 【顶部横排】保持在工作台内容上方的横排方式\n· 【左侧竖排】恢复旧版左侧竖排方式\n· 设置 → 外观 → 工作台功能栏 三选一，即时生效并记住\n· 菜单栏恢复为独立一行，不再与工作台标题挤在一起\n· 其余沿用 5.9.0.12：动效三档、GPU 加速、拖动宽度气泡、多文件拖入、启动浅色空白、右键菜单图标",
+    "notes":  "v5.9.0.14 更新（最近使用修复 + 使用手册）：\n· 【最近使用】关闭标签、关闭窗口或退出程序时，对应文件会从「最近使用」里自动移除，不再残留已关闭的文件\n· 【使用手册】新增完整图文手册（22 页 PDF + 在线网页版）：界面总览、三种功能栏布局、五个菜单逐项说明、编辑器与查找替换、六个功能页、设置项、彩色标签示例、快捷键表、安装与安全提示\n· 手册入口在下载页顶部「使用手册」与下载卡片下方的说明卡\n· 其余沿用 5.9.0.13：工作台功能栏三种摆放、动效三档、GPU 加速、拖动宽度气泡、多文件拖入",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
