@@ -31,10 +31,11 @@
   @media (prefers-reduced-motion: reduce){
     body, body *{ transition: none !important }
   }
-  /* 背景图：铺在内容「下面」，像水印一样从半透明面板里透出来，绝不覆盖文字 */
-  #bgLayer{position:fixed;inset:0;z-index:-1;pointer-events:none;display:none;
+  /* 背景：图片用 background-image（可平铺），视频用内部 <video>（自动循环、静音） */
+  #bgLayer{position:fixed;inset:0;z-index:-1;pointer-events:none;display:none;overflow:hidden;
            background-position:center center;background-repeat:no-repeat;background-size:cover;
            transition:opacity .18s ease}
+  #bgLayer>video{width:100%;height:100%;object-fit:cover;display:none;background:#000}
   body.bg-on #menubar,
   body.bg-on #tabBar,
   body.bg-on .tab{background:transparent}
@@ -426,7 +427,7 @@ try{
   document.body.dataset.motion = localStorage.getItem('rtg.motion') || 'full';
 }catch(e){}
 </script>
-<div id="bgLayer"></div>
+<div id="bgLayer"><video id="bgVid" muted loop playsinline preload="auto" disablepictureinpicture></video></div>
 <!-- Live2D（窗口内悬浮层）：不接收鼠标，不会挡住任何操作 -->
 <div id="l2dWrap" aria-hidden="true"><div id="l2dInner"><img id="l2dImg" alt=""><img id="l2dBlink" alt=""></div><canvas id="l2d3d"></canvas><canvas id="l2dcv"></canvas></div>
 <div id="l2dSay" aria-hidden="true"></div>
@@ -709,18 +710,30 @@ try{
           </select>
         </div>
         <div class="row">
-          <label class="f">深色图</label>
-          <button class="b" onclick="host('pickBg|dark')">选择图片…</button>
+          <label class="f">深色背景</label>
+          <button class="b" onclick="host('pickBg|dark')">选择图片 / 视频…</button>
           <span class="hint" id="bgDarkName">未选择</span>
           <button class="b" onclick="host('clearBg|dark')">清除</button>
         </div>
         <div class="row">
-          <label class="f">亮色图</label>
-          <button class="b" onclick="host('pickBg|light')">选择图片…</button>
+          <label class="f">亮色背景</label>
+          <button class="b" onclick="host('pickBg|light')">选择图片 / 视频…</button>
           <span class="hint" id="bgLightName">未选择</span>
           <button class="b" onclick="host('clearBg|light')">清除</button>
         </div>
-        <div class="row"><span class="hint">开启后背景图铺在内容下方，通过半透明面板像水印一样透出来，不会盖住文字；图片保存在本机 <code>%APPDATA%\RichTextGen</code>，不会上传。</span></div>
+        <div class="row">
+          <label class="f">网络背景</label>
+          <input id="bgUrl" placeholder="粘贴图片 / 视频直链，例如 https://…/bg.mp4" style="flex:1 1 200px;min-width:150px">
+          <select id="bgUrlKind" style="min-width:88px">
+            <option value="both">深浅色都设</option>
+            <option value="dark">仅深色</option>
+            <option value="light">仅亮色</option>
+          </select>
+          <button class="b" onclick="bgFromUrl()">从网络获取</button>
+          <button class="b" onclick="bgDaily()">每日壁纸</button>
+        </div>
+        <div class="row"><span class="hint">支持图片 PNG / JPG / BMP / GIF / WebP / AVIF / SVG 与视频 MP4 / WebM / OGV / MOV / MKV / AVI（视频能否解码取决于 WebView2 内置的 Chromium，推荐 MP4 H.264）。网络地址会先下载到本机再启用，离线也能继续用，且图片 / 视频都静音、自动循环。</span></div>
+        <div class="row"><span class="hint">开启后背景铺在内容下方，通过半透明面板像水印一样透出来，不会盖住文字；文件保存在本机 <code>%APPDATA%\RichTextGen</code>，不会上传。</span></div>
       </div>
       <div class="card"><h3>⚡ 快捷组件与全局热键</h3>
         <div class="row"><span class="hint" id="hotkeyInfo">热键状态读取中…</span>
@@ -1868,6 +1881,16 @@ try{
 const BG_KEY = 'rtgBg';
 const bgImgs = { dark: '', light: '' };
 const bgNames = { dark: '', light: '' };
+const bgTypes = { dark: '', light: '' };   // 'video' = 走 <video>，其余按图片处理
+
+/* 没有宿主给的 type 时，用扩展名兜底判断 */
+function bgIsVideo(url, type){
+  if (type) return type === 'video';
+  if (!url) return false;
+  if (/^data:video\//i.test(url)) return true;
+  if (/^data:/i.test(url)) return false;
+  return /\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi)([?#]|$)/i.test(url);
+}
 
 function bgCfg(){
   try{ return JSON.parse(localStorage.getItem(BG_KEY) || '{}') || {}; }catch(e){ return {}; }
@@ -1898,12 +1921,33 @@ function bgApply(){
   const el = $('bgLayer'); if (!el) return;
   const s = bgState();
   const dark = document.body.classList.contains('dark');
+  const kind = s.shared ? (bgImgs.dark ? 'dark' : 'light') : (dark ? 'dark' : 'light');
   const url = s.shared ? (bgImgs.dark || bgImgs.light) : (dark ? bgImgs.dark : bgImgs.light);
+  const vid = $('bgVid');
   const on = s.enable && !!url;
   el.style.display = on ? 'block' : 'none';
-  document.body.classList.toggle('bg-on', on);   // 面板转为半透明，让背景图从下面透出来
-  if (!on) return;
-  el.style.backgroundImage = 'url("' + url + '")';
+  document.body.classList.toggle('bg-on', on);   // 面板转为半透明，让背景从下面透出来
+  if (!on){
+    if (vid){ try{ vid.pause(); }catch(e){} }
+    return;
+  }
+  if (bgIsVideo(url, bgTypes[kind]) && vid){
+    el.style.backgroundImage = 'none';
+    vid.style.display = 'block';
+    vid.style.objectFit = (s.fit === 'contain') ? 'contain' : 'cover';
+    if (vid.dataset.url !== url){          // 地址换了才重新加载，避免每次调设置都把视频倒回开头
+      vid.dataset.url = url;
+      vid.src = url;
+      try{ vid.currentTime = 0; }catch(e){}
+    }
+    const p = vid.play(); if (p && p.catch) p.catch(function(){});
+  }else{
+    if (vid){
+      vid.pause(); vid.style.display = 'none';
+      if (vid.dataset.url){ vid.removeAttribute('src'); vid.dataset.url = ''; try{ vid.load(); }catch(e){} }
+    }
+    el.style.backgroundImage = 'url("' + url + '")';
+  }
   el.style.opacity = String(Math.max(0, Math.min(100, s.opacity)) / 100);
   el.style.filter = s.blur > 0 ? ('blur(' + s.blur + 'px)') : 'none';
   if (s.fit === 'tile'){
@@ -1914,6 +1958,13 @@ function bgApply(){
     el.style.backgroundRepeat = 'no-repeat';
   }
 }
+/* 视频编码不被 WebView2 支持时给个提示，而不是留一块黑 */
+try{
+  const v = $('bgVid');
+  if (v) v.addEventListener('error', function(){
+    if (v.dataset.url) ui.status('这段视频的编码无法在界面内播放，建议改用 MP4(H.264) 或 WebM');
+  });
+}catch(e){}
 function bgToggle(){
   bgSave();
   const s = bgState();
@@ -1930,18 +1981,32 @@ function bgInit(){
   if ($('bgFit')) $('bgFit').value = s.fit;
   if ($('bgOpacityVal')) $('bgOpacityVal').textContent = s.opacity + '%';
   if ($('bgBlurVal')) $('bgBlurVal').textContent = s.blur + 'px';
+  if ($('bgUrl') && !$('bgUrl').value){ try{ $('bgUrl').value = localStorage.getItem('rtgBgUrl') || ''; }catch(e){} }
   bgApply();
   try{ host('bgLoad'); }catch(e){}   // 让宿主把已保存的图片读回来
 }
-/* 宿主回传背景图（data URL） */
+/* 宿主回传背景（图片为 data URL，视频为本地虚拟源地址） */
 window.ui.bgImage = function(o){
   if (!o || (o.kind !== 'dark' && o.kind !== 'light')) return;
   bgImgs[o.kind] = o.url || '';
   bgNames[o.kind] = o.name || '';
+  bgTypes[o.kind] = o.type || '';
   if ($('bgDarkName')) $('bgDarkName').textContent = bgNames.dark || '未选择';
   if ($('bgLightName')) $('bgLightName').textContent = bgNames.light || '未选择';
   bgApply();
 };
+
+/* 从网络地址取背景（图片或视频），由宿主下载到本地后回传 */
+function bgFromUrl(){
+  const u = (($('bgUrl') && $('bgUrl').value) || '').trim();
+  if (!u){ ui.status('请先填写网络图片或视频地址'); return; }
+  try{ localStorage.setItem('rtgBgUrl', u); }catch(e){}
+  host('bgUrl|' + (($('bgUrlKind') && $('bgUrlKind').value) || 'both') + '|' + encodeURIComponent(u));
+}
+/* 自动获取一张网络壁纸（Bing 每日图） */
+function bgDaily(){
+  host('bgDaily|' + (($('bgUrlKind') && $('bgUrlKind').value) || 'both'));
+}
 
 /* ---------- 翻译（预装免费服务） ---------- */
 const TR_PRESETS = {

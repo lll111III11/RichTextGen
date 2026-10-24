@@ -946,6 +946,45 @@ namespace RichTextGen
                             return;
                         }
 
+                        // 背景图片 / 视频：https://richtextgen.local/__bg/<dark|light>
+                        // 视频用 <video> 播放，必须支持 Range，否则无法循环 / 拖动进度。
+                        if (abs.StartsWith("/__bg/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string bk = abs.Substring("/__bg/".Length).Trim('/');
+                            bk = (bk == "light") ? "light" : "dark";
+                            string bf = BgFile(bk);
+                            if (bf == null || bf.Length == 0 || !File.Exists(bf))
+                            {
+                                e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                                    new MemoryStream(new byte[0]), 404, "Not Found", "Content-Type: text/plain");
+                                return;
+                            }
+                            byte[] raw = File.ReadAllBytes(bf);
+                            string mime = MimeOf(bf);
+                            string rangeHeader = "";
+                            try { rangeHeader = e2.Request.Headers.GetHeader("Range"); } catch { }
+                            long st, en;
+                            if (TryBgRange(rangeHeader, raw.LongLength, out st, out en))
+                            {
+                                int len = (int)(en - st + 1);
+                                byte[] part = new byte[len];
+                                Array.Copy(raw, st, part, 0, len);
+                                e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                                    new MemoryStream(part), 206, "Partial Content",
+                                    "Content-Type: " + mime + "\r\nAccept-Ranges: bytes\r\nCache-Control: no-cache" +
+                                    "\r\nContent-Range: bytes " + st + "-" + en + "/" + raw.LongLength +
+                                    "\r\nContent-Length: " + len);
+                            }
+                            else
+                            {
+                                e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                                    new MemoryStream(raw), 200, "OK",
+                                    "Content-Type: " + mime + "\r\nAccept-Ranges: bytes\r\nCache-Control: no-cache" +
+                                    "\r\nContent-Length: " + raw.LongLength);
+                            }
+                            return;
+                        }
+
                         byte[] body = Encoding.UTF8.GetBytes(LoadHtml());
                         e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
                             new MemoryStream(body), 200, "OK", "Content-Type: text/html; charset=utf-8");
@@ -1193,6 +1232,8 @@ namespace RichTextGen
                 case "pickBg": PickBgImage(arg); break;
                 case "clearBg": ClearBgImage(arg); break;
                 case "bgLoad": LoadBgImages(); break;
+                case "bgUrl": SetBgFromUrl(arg); break;
+                case "bgDaily": BgDaily(arg); break;
                 // ---- Live2D（2D 立绘 / 桌宠）----
                 case "live2dScan":
                     Live2D.Load();
@@ -1540,7 +1581,17 @@ namespace RichTextGen
                 case ".jpeg": return "image/jpeg";
                 case ".gif": return "image/gif";
                 case ".webp": return "image/webp";
+                case ".avif": return "image/avif";
+                case ".svg": return "image/svg+xml";
                 case ".bmp": return "image/bmp";
+                case ".mp4":
+                case ".m4v": return "video/mp4";
+                case ".webm": return "video/webm";
+                case ".ogv":
+                case ".ogg": return "video/ogg";
+                case ".mov": return "video/quicktime";
+                case ".mkv": return "video/x-matroska";
+                case ".avi": return "video/x-msvideo";
                 case ".js": return "text/javascript; charset=utf-8";
                 case ".json": return "application/json; charset=utf-8";
                 case ".moc3": return "application/octet-stream";
@@ -1552,57 +1603,95 @@ namespace RichTextGen
             }
         }
 
-        /// <summary>把某一张背景图读成 data URL 发给界面（文件不存在则发空）。</summary>
+        /// <summary>背景可用的视频扩展名（界面里真正能解码的取决于 WebView2 内置的 Chromium）</summary>
+        private static readonly string[] BgVideoExts =
+            { ".mp4", ".m4v", ".webm", ".ogv", ".ogg", ".mov", ".mkv", ".avi" };
+
+        private static bool IsBgVideo(string path)
+        {
+            string e = (Path.GetExtension(path) ?? "").ToLowerInvariant();
+            foreach (string v in BgVideoExts) if (e == v) return true;
+            return false;
+        }
+
+        /// <summary>把当前背景发给界面：图片走 data URL，视频走本地虚拟源（可拖动、可循环，不必塞进内存字符串）。</summary>
         private void SendBgImage(string kind)
         {
             string path = BgFile(kind);
-            string url = "", name = "";
+            string url = "", name = "", type = "image";
             try
             {
                 if (!string.IsNullOrEmpty(path) && File.Exists(path))
                 {
-                    byte[] b = File.ReadAllBytes(path);
-                    url = "data:" + MimeOf(path) + ";base64," + Convert.ToBase64String(b);
                     name = Path.GetFileName(path);
+                    if (IsBgVideo(path))
+                    {
+                        type = "video";
+                        // 带时间戳避免换文件后命中 WebView 的缓存
+                        url = "https://richtextgen.local/__bg/" + kind + "?v=" + DateTime.Now.Ticks;
+                    }
+                    else
+                    {
+                        byte[] b = File.ReadAllBytes(path);
+                        url = "data:" + MimeOf(path) + ";base64," + Convert.ToBase64String(b);
+                    }
                 }
             }
             catch { }
             Call("bgImage", "{\"kind\":" + Quote(kind) + ",\"url\":" + Quote(url) +
-                 ",\"name\":" + Quote(name) + "}");
+                 ",\"name\":" + Quote(name) + ",\"type\":" + Quote(type) + "}");
         }
 
-        /// <summary>启动时把已保存的背景图读回界面。</summary>
+        /// <summary>启动时把已保存的背景读回界面。</summary>
         private void LoadBgImages()
         {
             SendBgImage("dark");
             SendBgImage("light");
         }
 
-        /// <summary>选择背景图（kind = dark / light），复制到 %APPDATA%\RichTextGen 后回传 data URL。</summary>
+        /// <summary>选择背景（kind = dark / light），图片或视频都行，复制到 %APPDATA%\RichTextGen 后回传。</summary>
         private void PickBgImage(string kind)
         {
             kind = (kind == "light") ? "light" : "dark";
             using (OpenFileDialog d = new OpenFileDialog())
             {
-                d.Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|所有文件|*.*";
-                d.Title = (kind == "dark" ? "选择深色模式背景图" : "选择亮色模式背景图");
+                d.Filter = "图片或视频|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp;*.avif;*.svg;" +
+                           "*.mp4;*.m4v;*.webm;*.ogv;*.ogg;*.mov;*.mkv;*.avi" +
+                           "|图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp;*.avif;*.svg" +
+                           "|视频文件|*.mp4;*.m4v;*.webm;*.ogv;*.ogg;*.mov;*.mkv;*.avi" +
+                           "|所有文件|*.*";
+                d.Title = (kind == "dark" ? "选择深色模式背景（图片或视频）" : "选择亮色模式背景（图片或视频）");
                 if (d.ShowDialog(this) != DialogResult.OK) return;
-                try
-                {
-                    FileInfo fi = new FileInfo(d.FileName);
-                    if (fi.Length > 8 * 1024 * 1024) { CallStr("status", "图片超过 8MB，请换一张小一点的"); return; }
-                    Directory.CreateDirectory(AiConfig.Dir);
-                    foreach (string old in Directory.GetFiles(AiConfig.Dir, "bg-" + kind + ".*"))
-                    {
-                        try { File.Delete(old); } catch { }
-                    }
-                    string dest = Path.Combine(AiConfig.Dir, "bg-" + kind + Path.GetExtension(d.FileName).ToLowerInvariant());
-                    File.Copy(d.FileName, dest, true);
-                    SendBgImage(kind);
-                    CallStr("status", "已设置" + (kind == "dark" ? "深色" : "亮色") + "背景图");
-                }
-                catch (Exception ex) { CallStr("status", "设置背景图失败：" + ex.Message); }
+                string err;
+                if (!ApplyBgFile(kind, d.FileName, out err)) { CallStr("status", err); return; }
+                SendBgImage(kind);
+                CallStr("status", "已设置" + (kind == "dark" ? "深色" : "亮色") + "背景");
             }
+        }
+
+        /// <summary>校验大小并复制成本地 bg-&lt;kind&gt;.&lt;ext&gt;（保留扩展名，界面据此区分图片/视频）。</summary>
+        private static bool ApplyBgFile(string kind, string src, out string error)
+        {
+            error = "";
+            try
+            {
+                bool video = IsBgVideo(src);
+                long max = video ? 48L * 1024 * 1024 : 16L * 1024 * 1024;
+                if (new FileInfo(src).Length > max)
+                {
+                    error = video ? "视频超过 48MB，请换一段小一点的" : "图片超过 16MB，请换一张小一点的";
+                    return false;
+                }
+                Directory.CreateDirectory(AiConfig.Dir);
+                foreach (string old in Directory.GetFiles(AiConfig.Dir, "bg-" + kind + ".*"))
+                {
+                    try { File.Delete(old); } catch { }
+                }
+                string dest = Path.Combine(AiConfig.Dir, "bg-" + kind + Path.GetExtension(src).ToLowerInvariant());
+                File.Copy(src, dest, true);
+                return true;
+            }
+            catch (Exception ex) { error = "设置背景失败：" + ex.Message; return false; }
         }
 
         private void ClearBgImage(string kind)
@@ -1616,8 +1705,160 @@ namespace RichTextGen
                 }
             }
             catch { }
-            Call("bgImage", "{\"kind\":" + Quote(kind) + ",\"url\":\"\",\"name\":\"\"}");
-            CallStr("status", "已清除" + (kind == "dark" ? "深色" : "亮色") + "背景图");
+            Call("bgImage", "{\"kind\":" + Quote(kind) + ",\"url\":\"\",\"name\":\"\",\"type\":\"image\"}");
+            CallStr("status", "已清除" + (kind == "dark" ? "深色" : "亮色") + "背景");
+        }
+
+        // ------------------------------------------------------------ 网络背景图片 / 视频
+        /// <summary>参数：kind|url，kind = dark / light / both</summary>
+        private void SetBgFromUrl(string arg)
+        {
+            string kind = "dark", raw = arg ?? "";
+            int bar = raw.IndexOf('|');
+            if (bar >= 0) { kind = raw.Substring(0, bar); raw = raw.Substring(bar + 1); }
+            string url = Un(raw).Trim();
+            if (url.Length == 0) { CallStr("status", "请先填写网络地址（图片或视频直链）"); return; }
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) url = "https://" + url;
+            FetchBgAsync(url, BgKinds(kind));
+        }
+
+        /// <summary>一键取网络壁纸（Bing 每日图），当作“自动获取网络图片”的现成来源。</summary>
+        private void BgDaily(string arg)
+        {
+            string kind = arg == "both" ? "both" : (arg == "light" ? "light" : "dark");
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                CallStr("status", "正在获取网络壁纸…");
+                string json = Http("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=zh-CN", 12000);
+                Match m = Regex.Match(json ?? "", "\"url\"\\s*:\\s*\"([^\"]+)\"");
+                if (!m.Success) { CallStr("status", "获取网络壁纸失败，请检查网络，或改用「粘贴地址」"); return; }
+                FetchBg("https://www.bing.com" + m.Groups[1].Value, BgKinds(kind));
+            });
+        }
+
+        private static string[] BgKinds(string kind)
+        {
+            if (kind == "both") return new[] { "dark", "light" };
+            return new[] { kind == "light" ? "light" : "dark" };
+        }
+
+        private void FetchBgAsync(string url, string[] kinds)
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { FetchBg(url, kinds); });
+        }
+
+        /// <summary>下载网络背景到临时文件，再按 kind 落到本地（离线也能用，且不受 https 页面混合内容限制）。</summary>
+        private void FetchBg(string url, string[] kinds)
+        {
+            string tmp = null;
+            try
+            {
+                CallStr("status", "正在从网络获取背景…");
+                ServicePointManager.SecurityProtocol =
+                    SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+                string ext = "";
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Timeout = 20000;
+                req.ReadWriteTimeout = 30000;
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RichTextGen/" + Version;
+                req.AllowAutoRedirect = true;
+                tmp = Path.Combine(Path.GetTempPath(), "rtg-bg-" + Guid.NewGuid().ToString("N") + ".tmp");
+                using (WebResponse resp = req.GetResponse())
+                {
+                    ext = BgExtOfUrl(url);
+                    if (ext.Length == 0) ext = BgExtOfMime(resp.ContentType);
+                    using (Stream s = resp.GetResponseStream())
+                    using (FileStream fs = new FileStream(tmp, FileMode.Create, FileAccess.Write))
+                    {
+                        byte[] buf = new byte[81920];
+                        long total = 0;
+                        int n;
+                        while ((n = s.Read(buf, 0, buf.Length)) > 0)
+                        {
+                            total += n;
+                            if (total > 48L * 1024 * 1024) throw new Exception("文件超过 48MB");
+                            fs.Write(buf, 0, n);
+                        }
+                    }
+                }
+                if (ext.Length == 0) ext = ".jpg";
+                bool video = IsBgVideo("x" + ext);
+                foreach (string k in kinds)
+                {
+                    Directory.CreateDirectory(AiConfig.Dir);
+                    foreach (string old in Directory.GetFiles(AiConfig.Dir, "bg-" + k + ".*"))
+                    {
+                        try { File.Delete(old); } catch { }
+                    }
+                    File.Copy(tmp, Path.Combine(AiConfig.Dir, "bg-" + k + ext), true);
+                }
+                foreach (string k in kinds) SendBgImage(k);
+                CallStr("status", "已从网络设置" + (video ? "视频" : "图片") + "背景");
+            }
+            catch (Exception ex) { CallStr("status", "获取网络背景失败：" + ex.Message); }
+            finally { if (tmp != null) { try { File.Delete(tmp); } catch { } } }
+        }
+
+        private static string BgExtOfUrl(string url)
+        {
+            try
+            {
+                string p = new Uri(url).AbsolutePath.ToLowerInvariant();
+                string e = Path.GetExtension(p);
+                if (e == ".png" || e == ".jpg" || e == ".jpeg" || e == ".gif" || e == ".webp" ||
+                    e == ".avif" || e == ".svg" || e == ".mp4" || e == ".m4v" || e == ".webm" ||
+                    e == ".ogv" || e == ".ogg" || e == ".mov" || e == ".mkv" || e == ".avi")
+                    return e == ".jpeg" ? ".jpg" : e;
+            }
+            catch { }
+            return "";
+        }
+
+        private static string BgExtOfMime(string mime)
+        {
+            mime = (mime ?? "").ToLowerInvariant();
+            if (mime.StartsWith("image/jpeg")) return ".jpg";
+            if (mime.StartsWith("image/png")) return ".png";
+            if (mime.StartsWith("image/gif")) return ".gif";
+            if (mime.StartsWith("image/webp")) return ".webp";
+            if (mime.StartsWith("image/avif")) return ".avif";
+            if (mime.StartsWith("image/svg")) return ".svg";
+            if (mime.StartsWith("image/bmp")) return ".bmp";
+            if (mime.StartsWith("video/mp4")) return ".mp4";
+            if (mime.StartsWith("video/webm")) return ".webm";
+            if (mime.StartsWith("video/ogg")) return ".ogv";
+            if (mime.StartsWith("video/quicktime")) return ".mov";
+            if (mime.StartsWith("video/x-matroska")) return ".mkv";
+            if (mime.StartsWith("video/x-msvideo")) return ".avi";
+            return "";
+        }
+
+        /// <summary>解析 Range 头（视频播放器依赖它做 seek / 循环）。返回 false 表示整段返回。</summary>
+        private static bool TryBgRange(string header, long total, out long start, out long end)
+        {
+            start = 0; end = total - 1;
+            if (string.IsNullOrEmpty(header) || total <= 0) return false;
+            if (!header.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase)) return false;
+            string spec = header.Substring(6).Split(',')[0].Trim();
+            int dash = spec.IndexOf('-');
+            if (dash < 0) return false;
+            string a = spec.Substring(0, dash).Trim(), b = spec.Substring(dash + 1).Trim();
+            long s;
+            if (a.Length == 0)
+            {
+                long n;
+                if (!long.TryParse(b, out n) || n <= 0) return false;
+                start = Math.Max(0, total - n);
+            }
+            else
+            {
+                if (!long.TryParse(a, out s) || s < 0 || s >= total) return false;
+                start = s;
+                long en;
+                if (b.Length > 0 && long.TryParse(b, out en)) end = Math.Min(total - 1, en);
+            }
+            return end >= start;
         }
 
         /// <summary>JS 侧对含中文/换行的载荷统一做了 encodeURIComponent，这里还原</summary>

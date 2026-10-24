@@ -1,18 +1,18 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.9.0.14",
+  "version": "5.9.0.15",
   "updated": "2026-10-24",
-  "notes": "v5.9.0.14：修复关闭后「最近使用」残留；新增 22 页图文使用手册（PDF + 在线版）。",
-  "type": "fix",
+  "notes": "v5.9.0.15：背景支持视频（MP4 / WebM / OGV / MOV / MKV / AVI）与网络图片 / 视频直链，另可一键获取每日壁纸。",
+  "type": "feature",
   "mandatory": false,
   "files": [
     {
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.9.0.14",
-      "size": 2138504,
-      "sha256": "ff489f712abadc35c882c270117a2f7b85f4a22fb3598e2aab9591075b3dec85",
+      "version": "5.9.0.15",
+      "size": 2147720,
+      "sha256": "9de9ed467fc86aca47499c083fffd388eba43b3ec9ca89b7a9735f0a2d126aaf",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。安装成功后自动计入安装量。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.9.0.14",
-      "size": 446573,
-      "sha256": "c2acc7f78f8695fb42d451c7e9fbaac5240bbd25555c4a0e4fa58d6b2ac73f58",
+      "version": "5.9.0.15",
+      "size": 450358,
+      "sha256": "2d69b1bb5407cee8cda87f66860ed638c41c2e2978a7eb8d9b496e8ec9d459a6",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"
