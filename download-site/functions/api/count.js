@@ -22,7 +22,7 @@ export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
-/** 读取安装计数。total = 全部安装次数，files = 各安装包次数 */
+/** 读取安装计数。total = 全部安装次数，files = 各安装包次数，versions = 按版本分开的次数 */
 export async function onRequestGet({ request, env }) {
   if (!env.DOWNLOADS) return json({ ok: false, reason: 'kv-not-bound' }, 503);
 
@@ -36,7 +36,20 @@ export async function onRequestGet({ request, env }) {
   const files = {};
   for (const id of list) files[id] = await readCount(env.DOWNLOADS, `install:file:${id}`);
 
-  return json({ ok: true, total: await readCount(env.DOWNLOADS, 'install:total'), files });
+  // 每个版本单独一行，不再只看一个累计数
+  const versions = {};
+  const keys = await env.DOWNLOADS.list({ prefix: 'install:ver:' });
+  for (const k of keys.keys) {
+    const ver = k.name.slice('install:ver:'.length);
+    if (ver) versions[ver] = await readCount(env.DOWNLOADS, k.name);
+  }
+
+  return json({
+    ok: true,
+    total: await readCount(env.DOWNLOADS, 'install:total'),
+    files,
+    versions
+  });
 }
 
 /**

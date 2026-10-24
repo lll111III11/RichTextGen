@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>安装统计 · 彩色文本生成器</title>
-<link rel="stylesheet" href="assets/style.css?v=20261024c" />
+<link rel="stylesheet" href="assets/style.css?v=20261024d" />
 </head>
 <body>
 <div class="bg" aria-hidden="true"><span class="glow g1"></span><span class="glow g2"></span></div>
@@ -25,16 +25,24 @@
 <main class="wrap">
   <section class="hero">
     <h1>安装统计</h1>
-    <p class="sub">历史记录页：数据来自 Cloudflare Pages Functions + KV，只有安装成功后由安装器上报，点击下载不计入；下载页不再展示安装量。页面每 30 秒自动刷新。</p>
+    <p class="sub">历史记录页：数据来自 Cloudflare Pages Functions + KV，只有安装成功后由安装器上报，点击下载不计入。安装量按版本分别计数、互不累加；下载页不再展示安装量。页面每 30 秒自动刷新。</p>
   </section>
 
   <section class="card total-card">
-    <span class="total-label">累计安装</span>
+    <span class="total-label">当前版本安装</span>
     <b class="total-num" id="total">—</b>
-    <span class="total-updated" id="updated">读取中…</span>
+    <span class="total-updated"><span id="curVer">v—</span> · <span id="updated">读取中…</span></span>
   </section>
 
-  <section class="card stat-list" id="list" aria-live="polite"></section>
+  <section class="card stat-list" aria-label="按版本统计">
+    <h2 class="list-title">按版本</h2>
+    <div id="verList"></div>
+  </section>
+
+  <section class="card stat-list" aria-label="按安装包统计">
+    <h2 class="list-title">按安装包</h2>
+    <div id="list" aria-live="polite"></div>
+  </section>
 
   <footer class="foot">
     <p>接口：<a class="link" id="apiLink" href="#" target="_blank" rel="noopener">/api/count</a></p>
@@ -42,6 +50,6 @@
   </footer>
 </main>
 
-<script src="assets/stats.js?v=20261024c"></script>
+<script src="assets/stats.js?v=20261024d"></script>
 </body>
 </html>
