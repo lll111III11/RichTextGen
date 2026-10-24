@@ -10,7 +10,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Collect payload files in a deterministic order (app exe/config first, then dlls).
-$all = Get-ChildItem -LiteralPath $PayloadDir -File
+# Sub-directories are supported and keep their relative path (e.g. x86\tesseract50.dll).
+$root = $PayloadDir.TrimEnd('\')
+$all = Get-ChildItem -LiteralPath $root -Recurse -File
 $ordered = @()
 
 # 1) main program exe (not Uninstall / Setup)
@@ -23,15 +25,9 @@ foreach ($f in $all) {
 foreach ($f in $all) {
     if ($f.Extension -eq '.config') { $ordered += $f }
 }
-# 3) WebView2 dlls in fixed order
-foreach ($dllName in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll')) {
-    foreach ($f in $all) {
-        if ($f.Name -eq $dllName) { $ordered += $f }
-    }
-}
-# 4) code signing certificate (public part only) -> installer imports it into the machine stores
-foreach ($f in $all) {
-    if ($f.Extension -eq '.cer') { $ordered += $f }
+# 3) dlls: top level first, then sub-directories (stable by relative path)
+foreach ($f in ($all | Where-Object { $_.Extension -eq '.dll' } | Sort-Object { $_.FullName.Substring($root.Length) })) {
+    $ordered += $f
 }
 
 if ($ordered.Count -eq 0) { throw "no payload files found in $PayloadDir" }
@@ -69,7 +65,8 @@ for ($i = 0; $i -lt $ordered.Count; $i++) {
     $null = $sb.AppendLine("};")
     $null = $sb.AppendLine("")
 
-    $wl = To-WideLiteral $ordered[$i].Name
+    $relName = $ordered[$i].FullName.Substring($root.Length).TrimStart('\')
+    $wl = To-WideLiteral $relName
     $entry += "    { L`"$wl`", kFile$i, sizeof(kFile$i) }"
 }
 

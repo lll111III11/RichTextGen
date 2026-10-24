@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.20",
+    "version":  "5.9.1.0",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.20/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.20/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.1.0/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.1.0/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.20 更新（文字提取 OCR）：\n· 工作台新增「提取」页：拖入图片、选择文件或直接从剪贴板读取，提取成可复制文本\n· 支持 PNG / JPG / BMP / GIF / TIFF / WebP / AVIF / HEIC 等常见格式，图片不会上传，识别全部在本机完成\n· 长截图自动按 1500px 分段识别（段间重叠 160px），自动去掉接缝处重复行并还原成整段文字；单图最大 5000 万像素\n· 语言列表读取系统已安装的 OCR 语言包（如简体中文、英文），识别后可一键复制、回填工作台或写入当前编辑区\n· 仅 Windows 10 / 11 可用（依赖系统自带 OCR，无需联网）\n· 其余沿用 5.9.0.19：托盘强制应用刷新、同步输出、窗口置顶",
+    "notes":  "v5.9.1.0 更新（OCR 换引擎 + 音乐系统）：\n· 【OCR】改用开源 Tesseract 5（Apache-2.0）+ 内置中英文模型，识别明显更准；深色截图自动反色、小字自动放大 2 倍，长截图仍自动分段去重，系统 OCR 作为回退\n· 【音乐】工作台「音乐」页改成播放列表：可多选添加音乐或带声音的 MP4，点列表切歌，支持上一首 / 下一首 / 播放暂停 / 音量 / 移除，列表自动保存\n· 【切歌】状态栏「♪」点一下切下一首；全局热键 Ctrl+Alt+N 也能切歌（可在设置里改键）\n· 【背景声音】设置 → 外观 → 背景水印 新增「播放背景视频的声音」与音量，背景 MP4 带音轨时可直接出声（默认静音）\n· 【体积】安装包变大到约 12MB：内置 Tesseract 引擎与 6.6MB 中英文模型，全部离线",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

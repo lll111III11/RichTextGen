@@ -429,6 +429,12 @@
   #ocrBar{height:6px;border-radius:99px;background:rgba(127,127,127,.16);overflow:hidden;margin:6px 0 10px}
   #ocrBar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s ease}
   #ocrOut{min-height:180px}
+  /* 音乐播放列表 */
+  #musicZone{margin:10px 0;padding:16px 14px;border:1px dashed var(--inputLine);border-radius:10px;
+             text-align:center;color:var(--sub);font-size:12.5px;
+             transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+  #musicZone.on{background:var(--hover);border-color:var(--accent);color:var(--text)}
+  #musicBar{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 </style>
 </head>
 <body data-nav="top">
@@ -681,12 +687,12 @@ try{
           <button class="b p" onclick="ocrPick()">选择图片…</button>
           <button class="b" onclick="ocrPaste()">从剪贴板</button>
           <label class="f">语言</label>
-          <select id="ocrLang" style="min-width:160px"><option value="">自动（系统语言）</option></select>
+          <select id="ocrLang" style="min-width:160px"><option value="">中文 + 英文（内置）</option></select>
           <button class="b" onclick="host('ocrLangs')">刷新</button>
         </div>
         <div id="ocrDrop" onclick="ocrPick()">把图片拖到这里，或点此选择；长截图会自动分段识别再拼成整段文本</div>
         <div id="ocrBar"><i></i></div>
-        <div class="row"><span class="hint" id="ocrInfo">支持 PNG / JPG / BMP / GIF / TIFF / WebP 等常见格式；识别在本机完成，图片不会上传。</span></div>
+        <div class="row"><span class="hint" id="ocrInfo">内置开源 Tesseract 5 中英文模型，离线识别、图片不上传；深色截图会自动反色、小字自动放大，识别更准。</span></div>
         <textarea id="ocrOut" readonly placeholder="识别结果会出现在这里…"></textarea>
         <div class="row" style="margin-top:10px">
           <button class="b p" onclick="ocrCopy()">复制文本</button>
@@ -769,6 +775,13 @@ try{
           </select>
           <button class="b" onclick="bgFromUrl()">从网络获取</button>
           <button class="b" onclick="bgDaily()">每日壁纸</button>
+        </div>
+        <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+          <label class="chk"><input type="checkbox" id="bgSound" onchange="bgSoundApply()"> 播放背景视频的声音</label>
+          <label class="f">音量</label>
+          <input type="range" id="bgVol" min="0" max="100" value="60" style="width:110px" oninput="bgSoundApply()">
+          <span class="hint" id="bgVolVal">60%</span>
+          <span class="hint">背景选的是带声音的 MP4 时才有声；默认静音</span>
         </div>
         <div class="row"><span class="hint">支持图片 PNG / JPG / BMP / GIF / WebP / AVIF / SVG 与视频 MP4 / WebM / OGV / MOV / MKV / AVI（视频能否解码取决于 WebView2 内置的 Chromium，推荐 MP4 H.264）。网络地址会先下载到本机再启用，离线也能继续用，且图片 / 视频都静音、自动循环。</span></div>
         <div class="row"><span class="hint">开启后背景铺在内容下方，通过半透明面板像水印一样透出来，不会盖住文字；文件保存在本机 <code>%APPDATA%\RichTextGen</code>，不会上传。</span></div>
@@ -1079,6 +1092,7 @@ try{
   <span class="badge" id="net" title="点击有惊喜（联网 5 次）">● 检测中</span>
   <span id="status">就绪</span>
   <span style="flex:1"></span>
+  <span class="badge" id="musicBar" onclick="host('musicNext')" title="点击切换下一首音乐（Ctrl+Alt+N）">♪ 音乐</span>
   <span id="sbPos">行 1，列 1</span>
   <span id="sbChars">0 个字符</span>
   <span id="sbEnc">UTF-8</span>
@@ -2025,6 +2039,18 @@ function bgToggle(){
   if ($('bgBlurVal')) $('bgBlurVal').textContent = s.blur + 'px';
   bgApply();
 }
+/* 背景视频的声音（仅当背景是带声音的 MP4 时有效） */
+function bgSoundApply(){
+  const on = $('bgSound') ? $('bgSound').checked : false;
+  const v = $('bgVol') ? Math.max(0, Math.min(100, +$('bgVol').value)) : 60;
+  try {
+    localStorage.setItem('rtg.bgSound', on ? '1' : '0');
+    localStorage.setItem('rtg.bgVol', String(v));
+  } catch(e){}
+  const vid = $('bgVid');
+  if (vid){ vid.muted = !on; vid.volume = v / 100; }
+  if ($('bgVolVal')) $('bgVolVal').textContent = v + '%';
+}
 function bgInit(){
   const s = bgState();
   if ($('bgEnable')) $('bgEnable').checked = s.enable;
@@ -2035,6 +2061,13 @@ function bgInit(){
   if ($('bgOpacityVal')) $('bgOpacityVal').textContent = s.opacity + '%';
   if ($('bgBlurVal')) $('bgBlurVal').textContent = s.blur + 'px';
   if ($('bgUrl') && !$('bgUrl').value){ try{ $('bgUrl').value = localStorage.getItem('rtgBgUrl') || ''; }catch(e){} }
+  // 背景视频的声音：默认静音
+  let snd = false, volv = 60;
+  try { snd = localStorage.getItem('rtg.bgSound') === '1'; } catch(e){}
+  try { const v = localStorage.getItem('rtg.bgVol'); if (v !== null) volv = Math.max(0, Math.min(100, +v)); } catch(e){}
+  if ($('bgSound')) $('bgSound').checked = snd;
+  if ($('bgVol')) $('bgVol').value = volv;
+  bgSoundApply();
   bgApply();
   try{ host('bgLoad'); }catch(e){}   // 让宿主把已保存的图片读回来
 }
@@ -3235,18 +3268,21 @@ window.addEventListener('drop', e=>{
   const files = Array.prototype.slice.call(e.dataTransfer.files || []);
   if (!files.length) return;
   const pathOf = f => f.path || f.name;
-  const isImg = f => /\.(png|jpe?g|bmp|gif|webp)$/i.test(f.name);
+  const isImg = f => /\.(png|jpe?g|bmp|gif|webp|avif)$/i.test(f.name);
   const isAudio = f => /\.(mp3|wav|ogg|m4a|flac|aac|wma|opus)$/i.test(f.name);
+  const isVideo = f => /\.(mp4|m4v|webm|ogv|mov|mkv|avi)$/i.test(f.name);
   const img = files.filter(isImg);
   const audio = files.filter(isAudio);
-  const docs = files.filter(f => !isImg(f) && !isAudio(f));
+  const video = files.filter(isVideo);
+  const docs = files.filter(f => !isImg(f) && !isAudio(f) && !isVideo(f));
   // 图片 / 音频各取第一个进对应面板，其余文本文件依次开成标签
   if (img.length){
     const curNav = document.querySelector('nav button.on');
     if (curNav && curNav.dataset.p === 'ocr') ocrDropFile(pathOf(img[0]));
     else { go('img'); host('blockArt|' + encodeURIComponent(pathOf(img[0]))); }
   }
-  if (audio.length){ go('music'); host('musicHost|' + encodeURIComponent(pathOf(audio[0]))); }
+  if (audio.length){ go('music'); host('musicAdd|' + encodeURIComponent(pathOf(audio[0]))); }
+  else if (video.length){ go('music'); host('musicAdd|' + encodeURIComponent(pathOf(video[0]))); }
   docs.slice(0, 10).forEach(f => host('openRecent|' + encodeURIComponent(pathOf(f))));
   if (docs.length > 10) status('一次最多打开 10 个文本文件');
   else if (docs.length > 1) status('正在打开 ' + docs.length + ' 个文件…');
@@ -5089,89 +5125,129 @@ const EdMode = (function(){
   const page = document.createElement('section');
   page.className = 'page'; page.id = 'p-music';
   page.innerHTML =
-    '<div class="card"><h3>音乐 → 本地链接（内置本机端口服务）</h3>' +
-      '<p class="hint">把音乐文件直接拖进窗口任意位置即可：程序会在 127.0.0.1 上开一个本地 HTTP 服务，' +
-      '把这首歌挂上去，返回一条可直接播放、可发给同机其它软件的本地 URL。</p>' +
-      '<div id="musicZone" style="margin:10px 0;padding:22px 14px;border:2px dashed var(--accent,#0067c0);' +
-      'border-radius:10px;text-align:center;background:rgba(0,103,192,.06)">' +
-        '<div style="font-size:30px;line-height:1">♪</div>' +
-        '<div style="margin-top:6px">把音乐文件拖到这里（或拖进窗口任意位置）</div>' +
-        '<div class="hint">支持 mp3 / wav / ogg / m4a / flac / aac / wma / opus —— 松开鼠标即自动生成链接</div>' +
-        '<div style="margin-top:10px"><button class="b p" onclick="host(\'musicPick\')">选择音乐文件…</button></div>' +
+    '<div class="card"><h3>🎵 音乐播放列表</h3>' +
+      '<div class="row">' +
+        '<button class="b p" onclick="host(\'musicPick\')">添加音乐 / 视频…</button>' +
+        '<button class="b" onclick="host(\'musicPrev\')">上一首</button>' +
+        '<button class="b" onclick="host(\'musicToggle\')">播放 / 暂停</button>' +
+        '<button class="b" onclick="host(\'musicNext\')">下一首</button>' +
+        '<button class="b" onclick="host(\'musicClear\')">清空</button>' +
+        '<label class="f">音量</label>' +
+        '<input type="range" id="musicVol" min="0" max="100" value="70" style="width:110px" oninput="musicVolApply()">' +
+        '<span class="hint" id="musicVolVal">70%</span>' +
       '</div>' +
-      '<div class="row"><label class="f">本地 URL</label>' +
-        '<input type="text" id="musicUrl" readonly placeholder="拖入音乐后这里会出现链接" style="flex:1;min-width:200px">' +
-        '<button class="b" onclick="musicCopy()">复制</button>' +
-        '<button class="b" onclick="musicOpen()">浏览器打开</button>' +
-        '<button class="b" onclick="musicTest()">试听</button>' +
+      '<div id="musicZone">把音乐或带声音的 MP4 拖到这里（也可以点「添加音乐 / 视频…」多选）' +
+        '<div class="hint" style="margin-top:6px">Ctrl+Alt+N 切换下一首；点击状态栏的「♪」也能切歌。列表会记住，下次启动自动恢复。</div>' +
       '</div>' +
-      '<div class="row"><span class="hint" id="musicInfo">尚未生成</span></div>' +
-      '<audio id="musicAudio" controls style="width:100%;margin-top:6px;display:none"></audio>' +
+      '<div class="row"><span class="hint" id="musicNow">当前：未播放</span></div>' +
+      '<div id="musicList"><span class="hint">播放列表为空</span></div>' +
     '</div>' +
-    '<div class="card"><h3>本次已生成的链接（程序运行期间有效）</h3>' +
-      '<div id="musicList"><span class="hint">还没有记录，拖一个音乐进来试试。</span></div>' +
-    '</div>';
+    '<div class="card"><h3>背景视频的声音</h3>' +
+      '<p class="hint">如果背景用的是带声音的 MP4，可以到设置里打开「播放背景视频的声音」并调音量（默认静音）。</p>' +
+      '<button class="b" onclick="go(\'set\')">去设置</button>' +
+    '</div>' +
+    '<audio id="musicAudio" preload="auto"></audio>';
   document.getElementById('pages').appendChild(page);
 
-  const urlBox = () => document.getElementById('musicUrl');
-  const info = () => document.getElementById('musicInfo');
+  const audio = document.getElementById('musicAudio');
+  let cur = { index: -1, playing: false, url: '', tracks: [] };
 
-  function musicAdd(name, url){
-    const list = document.getElementById('musicList');
-    if (list.querySelector('.hint')) list.innerHTML = '';
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.style.alignItems = 'center';
-
-    const a = document.createElement('a');
-    a.href = '#'; a.textContent = name || '音乐';
-    a.style.cssText = 'flex:1;min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-    a.title = '点击用浏览器打开';
-    a.onclick = ev => { ev.preventDefault(); host('openUrl|' + url); };
-
-    const u = document.createElement('span');
-    u.className = 'hint';
-    u.style.cssText = 'flex:2;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text';
-    u.textContent = url; u.title = '点击填入上方输入框';
-    u.onclick = () => { urlBox().value = url; };
-
-    const cp = document.createElement('button');
-    cp.className = 'b'; cp.textContent = '复制';
-    cp.onclick = () => host('copy|' + encodeURIComponent(url));
-
-    row.appendChild(a); row.appendChild(u); row.appendChild(cp);
-    list.appendChild(row);
+  function vol(){
+    const s = document.getElementById('musicVol');
+    return s ? Math.max(0, Math.min(100, +s.value)) : 70;
   }
+  window.musicVolApply = function(){
+    const v = vol();
+    audio.volume = v / 100;
+    try { localStorage.setItem('rtg.musicVol', String(v)); } catch(e){}
+    const t = document.getElementById('musicVolVal'); if (t) t.textContent = v + '%';
+  };
+  try {
+    const v = localStorage.getItem('rtg.musicVol');
+    const s = document.getElementById('musicVol');
+    if (v !== null && s) s.value = v;
+  } catch(e){}
+  window.musicVolApply();
 
-  window.musicCopy = function(){
-    const u = urlBox().value;
-    if (!u){ status('还没有链接，先拖一个音乐进来'); return; }
-    host('copy|' + encodeURIComponent(u));
-  };
-  window.musicOpen = function(){
-    const u = urlBox().value;
-    if (!u){ status('还没有链接，先拖一个音乐进来'); return; }
-    host('openUrl|' + u);
-  };
-  window.musicTest = function(){
-    const u = urlBox().value;
-    if (!u){ status('还没有链接，先拖一个音乐进来'); return; }
-    const a = document.getElementById('musicAudio');
-    a.style.display = 'block';
-    a.src = u;
-    a.currentTime = 0;
-    const p = a.play();
-    if (p && p.catch) p.catch(function(){});
+  (function(){
+    const z = document.getElementById('musicZone'); if (!z) return;
+    ['dragenter', 'dragover'].forEach(function(ev){
+      z.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); z.classList.add('on'); });
+    });
+    z.addEventListener('dragleave', function(e){ e.stopPropagation(); z.classList.remove('on'); });
+    z.addEventListener('drop', function(e){
+      e.preventDefault(); e.stopPropagation(); z.classList.remove('on');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) host('musicAdd|' + encodeURIComponent(f.path || f.name));
+    });
+  })();
+
+  /* 宿主回调：播放列表 / 当前曲目 / 播放状态 */
+  window.ui.musicState = function(o){
+    if (!o) return;
+    cur = o;
+    const list = document.getElementById('musicList');
+    list.innerHTML = '';
+    if (!o.tracks || !o.tracks.length){
+      list.innerHTML = '<span class="hint">播放列表为空</span>';
+    } else {
+      o.tracks.forEach(function(t, i){
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.alignItems = 'center';
+        row.style.margin = '4px 0';
+
+        const play = document.createElement('a');
+        play.href = '#';
+        play.textContent = (i === o.index ? '▶ ' : '♪ ') + t.name;
+        play.style.cssText = 'flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        play.title = '点击播放这首';
+        if (i === o.index) play.style.fontWeight = '600';
+        play.onclick = function(ev){ ev.preventDefault(); host('musicPlay|' + i); };
+
+        const rm = document.createElement('button');
+        rm.className = 'b'; rm.textContent = '移除';
+        rm.onclick = function(){ host('musicRemove|' + i); };
+
+        row.appendChild(play); row.appendChild(rm);
+        list.appendChild(row);
+      });
+    }
+
+    const name = (o.index >= 0 && o.tracks && o.tracks[o.index]) ? o.tracks[o.index].name : '';
+    const now = document.getElementById('musicNow');
+    if (now) now.textContent = name ? (o.playing ? '正在播放：' + name : '已暂停：' + name) : '当前：未播放';
+
+    const bar = document.getElementById('musicBar');
+    if (bar) bar.textContent = '♪ ' + (name || '音乐');
+
+    if (o.url){
+      if (audio.dataset.url !== o.url){
+        audio.dataset.url = o.url;
+        audio.src = o.url;
+        try { audio.load(); } catch(e){}
+        try { audio.currentTime = 0; } catch(e){}
+      }
+      audio.volume = vol() / 100;
+      if (o.playing){
+        const p = audio.play(); if (p && p.catch) p.catch(function(){});
+      } else {
+        try { audio.pause(); } catch(e){}
+      }
+    } else {
+      try { audio.pause(); } catch(e){}
+      audio.removeAttribute('src'); audio.dataset.url = '';
+    }
   };
 
-  /* 宿主回调：音乐已挂到本机端口 */
-  window.ui.musicUrl = function(o){
-    if (!o || !o.ok){ status((o && o.msg) ? o.msg : '生成失败'); info().textContent = (o && o.msg) ? o.msg : '生成失败'; return; }
-    urlBox().value = o.url;
-    info().textContent = o.name + ' · 已挂到本机端口，程序运行期间有效';
-    status('已生成音乐本地链接：' + o.url);
-    musicAdd(o.name, o.url);
-  };
+  audio.addEventListener('ended', function(){ host('musicNext'); });
+  audio.addEventListener('error', function(){
+    if (!audio.dataset.url) return;
+    const n = (cur.tracks && cur.tracks[cur.index]) ? cur.tracks[cur.index].name : '';
+    status('这首播放不了：' + n);
+  });
+
+  host('musicState');
 })();
 </script>
 <script>
@@ -5716,7 +5792,7 @@ window.ui.ocrLangs = function(o){
   const sel = document.getElementById('ocrLang');
   if (sel){
     const keep = sel.value;
-    sel.innerHTML = '<option value="">自动（系统语言）</option>';
+    sel.innerHTML = '<option value="">中文 + 英文（内置）</option>';
     ((o && o.list) || []).forEach(function(l){
       const op = document.createElement('option');
       op.value = l.tag; op.textContent = l.name + ' · ' + l.tag;
@@ -5742,7 +5818,8 @@ window.ui.ocrResult = function(o){
     if (out) out.value = o.text || '';
     if (bar) bar.style.width = '100%';
     if (info) info.textContent = '识别完成 · ' + (o.text ? o.text.length : 0) + ' 个字符';
-    if (stat) stat.textContent = (o.name || '') + ' · ' + ((o.ms || 0) / 1000).toFixed(1) + ' 秒';
+    if (stat) stat.textContent = (o.engine === 'tesseract' ? 'Tesseract 5' : '系统 OCR') + ' · ' +
+      (o.name || '') + ' · ' + ((o.ms || 0) / 1000).toFixed(1) + ' 秒';
     if (!o.text){ if (info) info.textContent = '没有识别到文字，换一张更清晰的图片试试'; }
   } else {
     if (bar) bar.style.width = '0%';

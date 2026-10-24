@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.9.0.20",
+  "version": "5.9.1.0",
   "updated": "2026-10-24",
-  "notes": "v5.9.0.20：新增「提取」页 OCR，可拖入图片 / 读剪贴板提取文字，支持长截图自动分段拼接。",
+  "notes": "v5.9.1.0：OCR 换成开源 Tesseract 5（内置中英文模型），新增音乐播放列表、切歌热键与背景视频声音。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.9.0.20",
-      "size": 2175880,
-      "sha256": "0a9c557ce2cd8d338979f43dd7f7de3419b8e4f418dc396a29ddc8951f62fb0a",
+      "version": "5.9.1.0",
+      "size": 14619528,
+      "sha256": "f57277e3886c8746a3dece16a5f41d05b7f6a70e649435828489034e38fac1a0",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.9.0.20",
-      "size": 461335,
-      "sha256": "c1ff2048ad62a30664944312db1420f4b6054b0f9da898aa26e35e90e49d6c25",
+      "version": "5.9.1.0",
+      "size": 6709236,
+      "sha256": "a804c0ad03ddfeb4c50b736bd0fd8b06efc241af711531974bce7cf495dcb246",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

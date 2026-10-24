@@ -26,8 +26,8 @@ for %%F in ("%OUT%\*.exe") do powershell -NoProfile -ExecutionPolicy Bypass -Fil
 if errorlevel 1 goto fail
 
 echo [3/6] refresh installer payload ...
+if exist "%PAY%" rd /s /q "%PAY%"
 if not exist "%PAY%" mkdir "%PAY%"
-del /q "%PAY%\*.*" 2>nul
 copy /y "%OUT%\*.exe" "%PAY%\" >nul
 if errorlevel 1 goto fail
 copy /y "%OUT%\*.exe.config" "%PAY%\" >nul
@@ -36,6 +36,12 @@ if errorlevel 1 goto fail
 copy /y "%OUT%\Microsoft.Web.WebView2.WinForms.dll" "%PAY%\" >nul
 if errorlevel 1 goto fail
 copy /y "%OUT%\WebView2Loader.dll" "%PAY%\" >nul
+if errorlevel 1 goto fail
+rem OCR: managed wrapper + x86 native engine (embedded payload keeps sub-directory)
+copy /y "%OUT%\Tesseract.dll" "%PAY%\" >nul
+if errorlevel 1 goto fail
+if not exist "%PAY%\x86" mkdir "%PAY%\x86"
+copy /y "%OUT%\x86\*.dll" "%PAY%\x86\" >nul
 if errorlevel 1 goto fail
 rem The signing certificate is no longer shipped: setup never writes the cert stores.
 

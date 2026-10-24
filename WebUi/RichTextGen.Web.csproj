@@ -20,9 +20,9 @@
     <Prefer32Bit>true</Prefer32Bit>
 
     <!-- exe 属性 -->
-    <Version>5.9.0.20</Version>
-    <AssemblyVersion>5.9.0.20</AssemblyVersion>
-    <FileVersion>5.9.0.20</FileVersion>
+    <Version>5.9.1.0</Version>
+    <AssemblyVersion>5.9.1.0</AssemblyVersion>
+    <FileVersion>5.9.1.0</FileVersion>
     <Product>Rich text &amp; multifunctional tool</Product>
     <AssemblyTitle>多功能性的一种工具</AssemblyTitle>
     <Description>多功能性的一种工具</Description>
@@ -38,10 +38,14 @@
     <!-- 界面资源 -->
     <EmbeddedResource Include="ui\index.html" />
     <EmbeddedResource Include="ui\chat.html" />
+    <!-- OCR 语言数据（tessdata_fast，Apache-2.0），首次识别时释放到 %APPDATA%\RichTextGen\tessdata -->
+    <EmbeddedResource Include="tessdata\*.traineddata" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
+    <!-- OCR：Tesseract 5（Apache-2.0）+ 自带中英文模型，离线识别 -->
+    <PackageReference Include="Tesseract" Version="5.2.0" />
     <!-- model.json / live2d.json 解析（.NET Framework 自带，不引入第三方库） -->
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>

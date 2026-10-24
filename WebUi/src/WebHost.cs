@@ -165,6 +165,11 @@ namespace RichTextGen
         private bool _refreshFallback;
         private bool _refreshing;
 
+        // ============================================================ 音乐播放列表
+        private readonly List<string> _playlist = new List<string>();
+        private int _musicIndex = -1;
+        private bool _musicPlaying;
+
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
         [DllImport("user32.dll")]
@@ -228,6 +233,7 @@ namespace RichTextGen
             // 置顶 / 同步输出：从 ui.json 恢复上次的选择（关掉再打开依然生效）
             try { TopMost = UIPrefs.Topmost; } catch { }
             _syncOut = UIPrefs.SyncOut;
+            LoadMusic();
             StartForegroundWatch();
 
             // WebView2 用户数据目录放到 %APPDATA%，避免把缓存写进安装目录（装到只读目录时也不会启动失败）
@@ -548,6 +554,7 @@ namespace RichTextGen
                 case "minimize": MinimizeAnimated(); break;
                 case "theme": RunJs("toggleTheme()"); break;
                 case "hide": if (Visible) HideWindow(); else RestoreWindow(); break;
+                case "music": MusicNext(); break;
             }
         }
 
@@ -565,6 +572,7 @@ namespace RichTextGen
                 case "quit": _allowClose = true; Close(); break;        // 快捷组件：退出应用
                 case "minimize": MinimizeAnimated(); break;             // 快捷组件：最小化
                 case "theme": RunJs("toggleTheme()"); break;            // 快捷组件：切换深浅色
+                case "music": MusicNext(); break;                       // 切换下一首音乐
             }
         }
 
@@ -1066,28 +1074,24 @@ namespace RichTextGen
                                     new MemoryStream(new byte[0]), 404, "Not Found", "Content-Type: text/plain");
                                 return;
                             }
-                            byte[] raw = File.ReadAllBytes(bf);
-                            string mime = MimeOf(bf);
-                            string rangeHeader = "";
-                            try { rangeHeader = e2.Request.Headers.GetHeader("Range"); } catch { }
-                            long st, en;
-                            if (TryBgRange(rangeHeader, raw.LongLength, out st, out en))
+                            ServeMedia(e2, bf);
+                            return;
+                        }
+
+                        // 音乐播放列表：https://richtextgen.local/__music/<序号>
+                        if (abs.StartsWith("/__music/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string tail = abs.Substring("/__music/".Length).Trim('/');
+                            int mi;
+                            if (int.TryParse(tail, out mi) && mi >= 0 && mi < _playlist.Count &&
+                                File.Exists(_playlist[mi]))
                             {
-                                int len = (int)(en - st + 1);
-                                byte[] part = new byte[len];
-                                Array.Copy(raw, st, part, 0, len);
-                                e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
-                                    new MemoryStream(part), 206, "Partial Content",
-                                    "Content-Type: " + mime + "\r\nAccept-Ranges: bytes\r\nCache-Control: no-cache" +
-                                    "\r\nContent-Range: bytes " + st + "-" + en + "/" + raw.LongLength +
-                                    "\r\nContent-Length: " + len);
+                                ServeMedia(e2, _playlist[mi]);
                             }
                             else
                             {
                                 e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
-                                    new MemoryStream(raw), 200, "OK",
-                                    "Content-Type: " + mime + "\r\nAccept-Ranges: bytes\r\nCache-Control: no-cache" +
-                                    "\r\nContent-Length: " + raw.LongLength);
+                                    new MemoryStream(new byte[0]), 404, "Not Found", "Content-Type: text/plain");
                             }
                             return;
                         }
@@ -1237,6 +1241,7 @@ namespace RichTextGen
                     CallStr("aiSettings", AiConfig.ToJson());
                     LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
                     Call("syncState", SyncStateJson());   // 置顶 / 同步输出 / 换行开关的当前状态
+                    PushMusicState();                   // 音乐播放列表（不自动播放）
 
                     // 强制刷新后：把刷新前打包的标签页正文回灌（等界面脚本全部就绪）
                     if (!string.IsNullOrEmpty(_pendingRefresh))
@@ -1351,8 +1356,26 @@ namespace RichTextGen
                     CallStr("status", arg == "1" ? "复制时会用字面量 \\n 代替换行" : "复制时保持真实换行");
                     break;
                 case "dirty": { int dn; if (int.TryParse(arg, out dn)) _dirtyCount = dn; break; }
-                case "musicHost": MusicHost(Un(arg)); break;    // 拖入音乐 → 生成本地 URL
+                case "musicHost": MusicAddPaths(new string[] { Un(arg) }); break;   // 拖入音乐 → 加入播放列表
                 case "musicPick": MusicPick(); break;           // 点按钮选音乐文件
+                case "musicAdd": MusicAddPaths(new string[] { Un(arg) }); break;
+                case "musicNext": MusicNext(); break;
+                case "musicPrev": MusicPrev(); break;
+                case "musicToggle": MusicToggle(); break;
+                case "musicState": PushMusicState(); break;
+                case "musicClear": MusicClear(); break;
+                case "musicPlay":
+                {
+                    int mi;
+                    if (int.TryParse(arg, out mi)) MusicPlay(mi);
+                    break;
+                }
+                case "musicRemove":
+                {
+                    int mi;
+                    if (int.TryParse(arg, out mi)) MusicRemove(mi);
+                    break;
+                }
                 case "checkUpdate": CheckUpdate(true); break;
                 case "doUpdate": DoUpdate(); break;
                 case "openUrl": OpenUrl(arg); break;
@@ -1725,11 +1748,18 @@ namespace RichTextGen
                 case ".mp4":
                 case ".m4v": return "video/mp4";
                 case ".webm": return "video/webm";
-                case ".ogv":
-                case ".ogg": return "video/ogg";
+                case ".ogv": return "video/ogg";
                 case ".mov": return "video/quicktime";
                 case ".mkv": return "video/x-matroska";
                 case ".avi": return "video/x-msvideo";
+                case ".mp3": return "audio/mpeg";
+                case ".wav": return "audio/wav";
+                case ".ogg":
+                case ".opus": return "audio/ogg";
+                case ".m4a":
+                case ".aac": return "audio/mp4";
+                case ".flac": return "audio/flac";
+                case ".wma": return "audio/x-ms-wma";
                 case ".js": return "text/javascript; charset=utf-8";
                 case ".json": return "application/json; charset=utf-8";
                 case ".moc3": return "application/octet-stream";
@@ -1972,6 +2002,46 @@ namespace RichTextGen
             return "";
         }
 
+        /// <summary>把本地文件以支持 Range 的响应送回 WebView（视频/音乐拖动进度、循环都靠它）。</summary>
+        private void ServeMedia(CoreWebView2WebResourceRequestedEventArgs e2, string file)
+        {
+            try
+            {
+                byte[] raw = File.ReadAllBytes(file);
+                string mime = MimeOf(file);
+                string rangeHeader = "";
+                try { rangeHeader = e2.Request.Headers.GetHeader("Range"); } catch { }
+                long st, en;
+                if (TryBgRange(rangeHeader, raw.LongLength, out st, out en))
+                {
+                    int len = (int)(en - st + 1);
+                    byte[] part = new byte[len];
+                    Array.Copy(raw, st, part, 0, len);
+                    e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                        new MemoryStream(part), 206, "Partial Content",
+                        "Content-Type: " + mime + "\r\nAccept-Ranges: bytes\r\nCache-Control: no-cache" +
+                        "\r\nContent-Range: bytes " + st + "-" + en + "/" + raw.LongLength +
+                        "\r\nContent-Length: " + len);
+                }
+                else
+                {
+                    e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                        new MemoryStream(raw), 200, "OK",
+                        "Content-Type: " + mime + "\r\nAccept-Ranges: bytes\r\nCache-Control: no-cache" +
+                        "\r\nContent-Length: " + raw.LongLength);
+                }
+            }
+            catch
+            {
+                try
+                {
+                    e2.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(
+                        new MemoryStream(new byte[0]), 500, "Error", "Content-Type: text/plain");
+                }
+                catch { }
+            }
+        }
+
         /// <summary>解析 Range 头（视频播放器依赖它做 seek / 循环）。返回 false 表示整段返回。</summary>
         private static bool TryBgRange(string header, long total, out long start, out long end)
         {
@@ -2067,12 +2137,14 @@ namespace RichTextGen
             {
                 try
                 {
+                    string engine = "";
                     string text = Ocr.Recognize(path, lang, delegate (int pct, string msg)
                     {
                         Call("ocrProgress", "{\"percent\":" + pct + ",\"text\":" + Quote(msg) + "}");
-                    });
+                    }, out engine);
                     Call("ocrResult", "{\"ok\":true,\"text\":" + Quote(text) +
                          ",\"ms\":" + (int)(DateTime.Now - t0).TotalMilliseconds +
+                         ",\"engine\":" + Quote(engine) +
                          ",\"name\":" + Quote(Path.GetFileName(path)) + "}");
                 }
                 catch (Exception ex)
@@ -3142,32 +3214,176 @@ namespace RichTextGen
             }
         }
 
-        /// <summary>把音乐文件挂到本机端口，回传可直接访问的本地 URL</summary>
-        private void MusicHost(string path)
+        // ============================================================ 音乐播放列表（含带声音的 MP4）
+        private static string MusicCfgPath { get { return Path.Combine(AiConfig.Dir, "music.json"); } }
+
+        private bool HasTrack(string p)
         {
-            path = (path ?? "").Trim().Trim('"');
-            if (path.Length == 0 || !File.Exists(path)) { CallStr("status", "音乐文件不存在：" + path); return; }
-            string url = RegisterMedia(path);
-            if (url.Length == 0)
-            {
-                Call("musicUrl", "{\"ok\":false,\"name\":" + Quote(Path.GetFileName(path)) + ",\"msg\":" +
-                    Quote("本地服务启动失败：17861-17961 端口全被占用") + "}");
-                CallStr("status", "本地服务启动失败：端口全被占用");
-                return;
-            }
-            Call("musicUrl", "{\"ok\":true,\"name\":" + Quote(Path.GetFileName(path)) + ",\"url\":" + Quote(url) + "}");
-            CallStr("status", "已生成音乐本地链接：" + url);
+            foreach (string t in _playlist)
+                if (string.Equals(t, p, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
 
-        /// <summary>备用入口：点按钮选文件（不能拖放时用）</summary>
+        private void LoadMusic()
+        {
+            try
+            {
+                if (!File.Exists(MusicCfgPath)) return;
+                string s = File.ReadAllText(MusicCfgPath, Encoding.UTF8);
+                Match mi = Regex.Match(s, "\"index\"\\s*:\\s*(-?\\d+)");
+                int idx = mi.Success ? int.Parse(mi.Groups[1].Value) : -1;
+                Match mt = Regex.Match(s, "\"tracks\"\\s*:\\s*\\[([\\s\\S]*?)\\]");
+                if (mt.Success)
+                {
+                    foreach (Match m in Regex.Matches(mt.Groups[1].Value, "\"((?:[^\"\\\\]|\\\\.)*)\""))
+                    {
+                        string p = Unescape(m.Groups[1].Value);
+                        if (p.Length > 0 && File.Exists(p) && !HasTrack(p)) _playlist.Add(p);
+                    }
+                }
+                if (_playlist.Count > 0) _musicIndex = (idx >= 0 && idx < _playlist.Count) ? idx : 0;
+            }
+            catch { }
+        }
+
+        private void SaveMusic()
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder("{\"index\":").Append(_musicIndex).Append(",\"tracks\":[");
+                for (int i = 0; i < _playlist.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.Append(Quote(_playlist[i]));
+                }
+                sb.Append("]}");
+                Directory.CreateDirectory(AiConfig.Dir);
+                File.WriteAllText(MusicCfgPath, sb.ToString(), new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        /// <summary>加入播放列表：第一首加入后自动开始播放，之后只排队不打断当前曲目。</summary>
+        private void MusicAddPaths(string[] paths)
+        {
+            int added = 0;
+            if (paths != null)
+            {
+                foreach (string raw in paths)
+                {
+                    string p = (raw ?? "").Trim().Trim('"');
+                    if (p.Length == 0 || !File.Exists(p) || HasTrack(p)) continue;
+                    _playlist.Add(p);
+                    added++;
+                }
+            }
+            if (added > 0)
+            {
+                if (_musicIndex < 0) { _musicIndex = 0; _musicPlaying = true; }
+                SaveMusic();
+            }
+            PushMusicState();
+            CallStr("status", added > 0
+                ? ("已添加 " + added + " 首，共 " + _playlist.Count + " 首")
+                : "没有新增音乐");
+        }
+
         private void MusicPick()
         {
             using (OpenFileDialog d = new OpenFileDialog())
             {
-                d.Filter = "音乐文件|*.mp3;*.wav;*.ogg;*.m4a;*.flac;*.aac;*.wma;*.opus|所有文件|*.*";
+                d.Filter = "音乐 / 视频|*.mp3;*.wav;*.ogg;*.m4a;*.flac;*.aac;*.wma;*.opus;" +
+                           "*.mp4;*.m4v;*.webm;*.mov;*.mkv;*.avi|所有文件|*.*";
+                d.Multiselect = true;
+                d.Title = "添加音乐（可多选；带声音的 MP4 也可以）";
                 if (d.ShowDialog(this) != DialogResult.OK) return;
-                MusicHost(d.FileName);
+                MusicAddPaths(d.FileNames);
             }
+        }
+
+        private void MusicPlay(int index)
+        {
+            if (index < 0 || index >= _playlist.Count) return;
+            _musicIndex = index;
+            _musicPlaying = true;
+            SaveMusic();
+            PushMusicState();
+            CallStr("status", "音乐：" + Path.GetFileName(_playlist[_musicIndex]));
+        }
+
+        private void MusicToggle()
+        {
+            if (_playlist.Count == 0) { CallStr("status", "播放列表为空：在「音乐」页添加文件"); return; }
+            if (_musicIndex < 0) _musicIndex = 0;
+            _musicPlaying = !_musicPlaying;
+            SaveMusic();
+            PushMusicState();
+            CallStr("status", _musicPlaying
+                ? "正在播放：" + Path.GetFileName(_playlist[_musicIndex])
+                : "已暂停");
+        }
+
+        private void MusicNext()
+        {
+            if (_playlist.Count == 0) { CallStr("status", "播放列表为空：在「音乐」页添加文件"); return; }
+            _musicIndex = _musicIndex < 0 ? 0 : (_musicIndex + 1) % _playlist.Count;
+            _musicPlaying = true;
+            SaveMusic();
+            PushMusicState();
+            CallStr("status", "音乐：" + Path.GetFileName(_playlist[_musicIndex]));
+        }
+
+        private void MusicPrev()
+        {
+            if (_playlist.Count == 0) { CallStr("status", "播放列表为空：在「音乐」页添加文件"); return; }
+            _musicIndex = _musicIndex <= 0 ? _playlist.Count - 1 : _musicIndex - 1;
+            _musicPlaying = true;
+            SaveMusic();
+            PushMusicState();
+            CallStr("status", "音乐：" + Path.GetFileName(_playlist[_musicIndex]));
+        }
+
+        private void MusicRemove(int index)
+        {
+            if (index < 0 || index >= _playlist.Count) return;
+            _playlist.RemoveAt(index);
+            if (_playlist.Count == 0) { _musicIndex = -1; _musicPlaying = false; }
+            else if (index < _musicIndex) _musicIndex--;
+            else if (index == _musicIndex) _musicIndex = Math.Min(_musicIndex, _playlist.Count - 1);
+            SaveMusic();
+            PushMusicState();
+        }
+
+        private void MusicClear()
+        {
+            _playlist.Clear();
+            _musicIndex = -1;
+            _musicPlaying = false;
+            SaveMusic();
+            PushMusicState();
+            CallStr("status", "已清空播放列表");
+        }
+
+        private void PushMusicState()
+        {
+            string url = (_musicIndex >= 0 && _musicIndex < _playlist.Count)
+                ? WebOrigin + "__music/" + _musicIndex
+                : "";
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"index\":").Append(_musicIndex)
+              .Append(",\"playing\":").Append(_musicPlaying ? "true" : "false")
+              .Append(",\"count\":").Append(_playlist.Count)
+              .Append(",\"url\":").Append(Quote(url))
+              .Append(",\"tracks\":[");
+            for (int i = 0; i < _playlist.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append("{\"name\":").Append(Quote(Path.GetFileName(_playlist[i])))
+                  .Append(",\"path\":").Append(Quote(_playlist[i])).Append('}');
+            }
+            sb.Append("]}");
+            Call("musicState", sb.ToString());
         }
 
         // ============================================================ 卸载

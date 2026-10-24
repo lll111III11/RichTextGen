@@ -54,7 +54,7 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.9.0.20";
+    const wchar_t* const kVersion   = L"5.9.1.0";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
@@ -402,6 +402,10 @@ namespace
         for (unsigned long i = 0; i < kPayloadCount; i++)
         {
             std::wstring out = target + L"\\" + kPayload[i].name;
+            // 载荷名可能带子目录（如 x86\tesseract50.dll）：先把父目录建出来
+            size_t slash = out.find_last_of(L'\\');
+            if (slash != std::wstring::npos)
+                SHCreateDirectoryExW(NULL, out.substr(0, slash).c_str(), NULL);
             HANDLE h = CreateFileW(out.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
             if (h == INVALID_HANDLE_VALUE) return false;
             DWORD written = 0;
