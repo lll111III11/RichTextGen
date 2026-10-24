@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.9.0.12",
+  "version": "5.9.0.13",
   "updated": "2026-10-24",
-  "notes": "v5.9.0.12：菜单并入工作台标题行，功能栏可切顶部/左侧，新增动效三档、GPU 加速、拖动宽度气泡与多文件拖入。",
+  "notes": "v5.9.0.13：工作台功能入口支持三种摆放（并入菜单栏 / 顶部横排 / 左侧竖排），菜单栏恢复独立一行。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.9.0.12",
-      "size": 2136456,
-      "sha256": "e7162a003dc82b8c94b92ba7d3d3b4e4e9469694b011410c99d3cf7c43903f6a",
+      "version": "5.9.0.13",
+      "size": 2137480,
+      "sha256": "35764938b036b4db1be6f317f20b0d0f0ad350543f902386b4a5b5a541b0e00c",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。安装成功后自动计入安装量。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.9.0.12",
-      "size": 446020,
-      "sha256": "add883ad04eda205357cf29bede58a2e8fef03963522e5c1cdd42149b4221f62",
+      "version": "5.9.0.13",
+      "size": 446312,
+      "sha256": "9141b03bfe76cba72304dd454894c74ac6cf9f048e50d0539529d69a6a42334f",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

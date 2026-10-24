@@ -310,14 +310,14 @@
   #p-chat.chat-collapsed #chatInputRow,
   #p-chat.chat-collapsed #chatHintRow{display:none}
   /* ===== Win11 记事本式容器（概念设计 M1） ===== */
-  /* 菜单栏现在并入工作台标题行，不再单独占一行 */
-  #menubar{flex:0 1 auto;display:flex;align-items:center;gap:1px;padding:0;background:transparent;
-           overflow:hidden;min-width:0;white-space:nowrap}
-  #menubar .mi{padding:3px 7px;border-radius:6px;font-size:12.5px;cursor:pointer;color:var(--sub);white-space:nowrap;flex:0 0 auto}
-  #menubar .mi:hover{background:var(--hover);color:var(--text)}
-  #wsHead{gap:6px;overflow:hidden}
-  #wsHead .wt{flex:0 0 auto}
-  #ws.cold #menubar{display:none}
+  #menubar{flex:0 0 auto;height:33px;display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--bg);overflow:hidden}
+  #menubar .mi{padding:4px 12px;border-radius:var(--r4);font-size:13px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+  #menubar .mi:hover{background:var(--hover)}
+  /* 功能入口并入菜单栏时（第三种布局） */
+  #menubar nav{flex:1 1 auto;width:auto;min-width:0;border:0;margin:0;padding:0 0 0 6px;gap:2px;
+               overflow-x:auto;overflow-y:hidden;max-height:32px}
+  #menubar nav button{padding:3px 8px;font-size:12.5px;border:0;max-height:26px}
+  #menubar nav .g{width:14px}
   #tabBar{flex:0 0 auto;height:36px;display:flex;align-items:flex-end;gap:4px;padding:3px 10px 0;background:var(--bg);border-bottom:1px solid var(--line);overflow:hidden}
   #tabs{display:flex;align-items:flex-end;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:thin}
   #tabs::-webkit-scrollbar{height:4px}
@@ -442,6 +442,13 @@ try{
   <button class="wbtn close" onclick="host('close')">✕</button>
 </div>
 <div id="cursorHide"></div>
+<div id="menubar">
+  <span class="mi" data-m="file">文件</span>
+  <span class="mi" data-m="edit">编辑</span>
+  <span class="mi" data-m="view">查看</span>
+  <span class="mi" data-m="format">格式</span>
+  <span class="mi" data-m="help">帮助</span>
+</div>
 <div id="tabBar">
   <span id="tabs"></span>
   <button id="newTab" title="新建标签页（Ctrl+N）">+</button>
@@ -497,13 +504,6 @@ try{
   <div id="ws">
     <div id="wsHead">
       <span class="wt">📋 工作台</span>
-      <div id="menubar">
-        <span class="mi" data-m="file">文件</span>
-        <span class="mi" data-m="edit">编辑</span>
-        <span class="mi" data-m="view">查看</span>
-        <span class="mi" data-m="format">格式</span>
-        <span class="mi" data-m="help">帮助</span>
-      </div>
       <span class="sp"></span>
       <button id="wsFold" title="折叠到侧边">‹</button>
     </div>
@@ -677,7 +677,8 @@ try{
         <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
           <label class="f">工作台功能栏</label>
           <select id="navLayout" onchange="setNavLayout(this.value)">
-            <option value="top">顶部横排（新版）</option>
+            <option value="menubar">并入菜单栏（文件/编辑 那一行）</option>
+            <option value="top">顶部横排（内容上方）</option>
             <option value="left">左侧竖排（旧版）</option>
           </select>
           <span class="hint">即时生效，会记住你的选择</span></div>
@@ -5372,10 +5373,29 @@ applyPageRule();
 viewApply();
 
 /* ---------- 工作台布局 / 界面动效 / GPU ---------- */
+/* 三种摆放方式：
+   menubar = 并入「文件/编辑/查看/格式/帮助」那一行
+   top     = 工作台内容上方的横排（重叠式）
+   left    = 旧版左侧竖排 */
+function applyNavLayout(mode){
+  mode = (mode === 'left' || mode === 'menubar') ? mode : 'top';
+  document.body.dataset.nav = mode;
+  const nav = document.querySelector('nav');
+  const menubar = document.getElementById('menubar');
+  const wsBody = document.getElementById('wsBody');
+  if (!nav || !menubar || !wsBody) return;
+  if (mode === 'menubar'){
+    if (nav.parentElement !== menubar) menubar.appendChild(nav);
+  } else if (nav.parentElement !== wsBody){
+    wsBody.insertBefore(nav, wsBody.firstChild);
+  }
+}
 function setNavLayout(v){
-  document.body.dataset.nav = (v === 'left') ? 'left' : 'top';
+  applyNavLayout(v);
   try { localStorage.setItem('rtg.navLayout', document.body.dataset.nav); } catch(e){}
-  status('工作台功能栏已切换为' + (document.body.dataset.nav === 'left' ? '左侧竖排' : '顶部横排'));
+  status('工作台功能栏：' + ({
+    menubar: '并入菜单栏', top: '顶部横排', left: '左侧竖排'
+  }[document.body.dataset.nav] || '顶部横排'));
 }
 function setMotionLevel(v){
   document.body.dataset.motion = (v === 'off') ? 'off' : (v === 'lite' ? 'lite' : 'full');
@@ -5392,7 +5412,7 @@ function uiInit(){
   try { nav = localStorage.getItem('rtg.navLayout') || 'top'; } catch(e){}
   try { motion = localStorage.getItem('rtg.motion') || 'full'; } catch(e){}
   try { const g = localStorage.getItem('rtg.gpu'); if (g !== null) gpu = (g === '1'); } catch(e){}
-  document.body.dataset.nav = (nav === 'left') ? 'left' : 'top';
+  applyNavLayout(nav);
   document.body.dataset.motion = motion;
   const nv = document.getElementById('navLayout'); if (nv) nv.value = document.body.dataset.nav;
   const mv = document.getElementById('motionLevel'); if (mv) mv.value = motion;

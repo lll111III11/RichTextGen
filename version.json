@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.12",
+    "version":  "5.9.0.13",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.12/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.12/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.13/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.13/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.12 更新（界面布局、动效与性能）：\n· 【菜单并入工作台标题行】文件 / 编辑 / 查看 / 格式 / 帮助 移到「📋 工作台」同一行，顶部省掉一整行高度\n· 【功能栏可切换】设置 → 外观 → 工作台功能栏：顶部横排（新版）或左侧竖排（旧版），即时生效并记住\n· 【界面动效三档】设置 → 外观 → 界面动效：完整 / 精简 / 关闭。完整档新增菜单淡入、标签滑入、拖动气泡等\n· 【拖动工作台宽度】分隔条热区加宽到约 14px，拖动时显示实时宽度气泡，双击恢复默认宽度\n· 【拖入文件】支持一次拖入多个文本文件，依次打开为标签；图片/音频仍进对应面板；拖入时整屏高亮提示\n· 【GPU 加速】默认开启硬件光栅化与零拷贝（设置 → 性能 可关闭，重启生效），滚动、动效与 Live2D 更顺滑\n· 【启动体验】双击文件启动时先显示干净的浅色空白窗口，界面加载完自动填入内容，不再白屏闪烁\n· 【右键菜单】「用彩色文本生成器打开」补齐程序图标，避免在 Win11 菜单里与其它项错位",
+    "notes":  "v5.9.0.13 更新（工作台功能栏三种摆放方式）：\n· 【并入菜单栏】生成 / 图片 / 翻译 / AI / TXT / 音乐 / 设置 这些入口，可以和「文件 / 编辑 / 查看 / 格式 / 帮助」放在同一行\n· 【顶部横排】保持在工作台内容上方的横排方式\n· 【左侧竖排】恢复旧版左侧竖排方式\n· 设置 → 外观 → 工作台功能栏 三选一，即时生效并记住\n· 菜单栏恢复为独立一行，不再与工作台标题挤在一起\n· 其余沿用 5.9.0.12：动效三档、GPU 加速、拖动宽度气泡、多文件拖入、启动浅色空白、右键菜单图标",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
