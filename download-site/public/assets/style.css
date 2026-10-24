@@ -120,9 +120,7 @@ body{
 .meta{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--dim)}
 .meta span{background:rgba(255,255,255,.04);border:1px solid var(--line);padding:3px 8px;border-radius:6px}
 .desc{margin:0;font-size:13px;color:var(--dim);min-height:40px}
-.dl-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
-.count{font-size:12.5px;color:var(--dim-2)}
-.count b{color:var(--fg);font-size:14px;font-variant-numeric:tabular-nums}
+.dl-bottom{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:auto}
 .btn{
   border:0;border-radius:10px;padding:9px 18px;font-size:14px;font-weight:600;color:#08111f;
   background:linear-gradient(100deg,#8fc0ff,#b98cff);cursor:pointer;transition:.18s;
@@ -143,7 +141,7 @@ details[open] summary::before{content:"▾ "}
 }
 .hash:hover{border-color:var(--line-2);color:var(--fg)}
 
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;margin-bottom:26px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:16px 20px;margin-bottom:26px}
 .stats div{display:flex;flex-direction:column;gap:2px}
 .stats b{font-size:18px;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
 .stats span{font-size:12px;color:var(--dim-2)}
