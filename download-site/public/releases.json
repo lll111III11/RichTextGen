@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.9.0.16",
+  "version": "5.9.0.17",
   "updated": "2026-10-24",
-  "notes": "v5.9.0.16：新增窗口置顶、同步输出（自动粘贴到最近点击的窗口）、复制换行转 \\n 开关，设置里可直接打开下载页。",
+  "notes": "v5.9.0.17：新增窗口置顶、同步输出（自动粘贴到最近点击的窗口）、复制换行转 \\n 开关，设置里可直接打开下载页。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.9.0.16",
+      "version": "5.9.0.17",
       "size": 2156936,
-      "sha256": "ca58e1c1bb008920a01f5c7a3712a1f7ec7d03503023ab844374c88429605dc0",
+      "sha256": "6e22ba58fd95310a63b0df59ecf44e010f40c4e82f75b9231b74a2f261c84f58",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.9.0.16",
-      "size": 453814,
-      "sha256": "fccb8918ffbeba6ffc0d380603dfcdeeb913f2ff6593e3b135649c23e0c75106",
+      "version": "5.9.0.17",
+      "size": 453865,
+      "sha256": "abfb5f95e8351d0bb8e041a44cfbfedf5ce9a787c516bffd8f02a4bc8ccc5c5b",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"
