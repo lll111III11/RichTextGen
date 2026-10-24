@@ -152,6 +152,10 @@ namespace RichTextGen
         private System.Windows.Forms.Timer _fgTimer;
         private string _lastSent = "";
         private DateTime _lastSentAt = DateTime.MinValue;
+        /// <summary>等待粘贴的文字：先备好，等用户点击目标窗口让它自然获得焦点后再按 Ctrl+V。</summary>
+        private string _pendingPaste;
+        private DateTime _pendingAt = DateTime.MinValue;
+        private IntPtr _lastFg;
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
@@ -1977,7 +1981,10 @@ namespace RichTextGen
             try
             {
                 IntPtr fg = GetForegroundWindow();
-                if (fg == IntPtr.Zero || fg == Handle) return;
+                if (fg == IntPtr.Zero) return;
+                bool changed = fg != _lastFg;
+                _lastFg = fg;
+                if (fg == Handle) return;
                 uint pid;
                 GetWindowThreadProcessId(fg, out pid);
                 if (pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id) return;   // 本程序的另一个窗口也不算
@@ -1990,26 +1997,42 @@ namespace RichTextGen
                 if (title.Length == 0 || title == "Program Manager") return;
                 _lastExternal = fg;
                 _lastExternalTitle = title;
+                // 用户点了另一个窗口 → 这就是「再点一次让它聚焦」，把等待中的文字贴进去
+                if (changed && _pendingPaste != null) PastePending();
             }
             catch { }
         }
 
-        /// <summary>把文字粘到最近点击的外部窗口：先写剪贴板，再切回目标窗口按 Ctrl+V。</summary>
+        /// <summary>把文字先准备好，等用户点击目标窗口获得焦点后再粘贴（不再由程序抢焦点）。</summary>
         private void SyncOutput(string text)
         {
             if (!_syncOut) return;
             if (text == null || text.Length == 0) { CallStr("status", "同步输出：没有可发送的文字"); return; }
-
-            IntPtr target = _lastExternal;
-            if (target == IntPtr.Zero || !IsWindow(target))
-            {
-                CallStr("status", "同步输出：还没有目标窗口，请先点一下要接收文字的窗口");
-                return;
-            }
-            // 连续改颜色时避免 0.5 秒内重复粘贴同一份内容
+            // 连续改颜色时避免 0.5 秒内重复准备同一份内容
             if (text == _lastSent && (DateTime.Now - _lastSentAt).TotalMilliseconds < 1200) return;
             _lastSent = text;
             _lastSentAt = DateTime.Now;
+
+            _pendingPaste = text;
+            _pendingAt = DateTime.Now;
+            try { Clipboard.SetText(text); } catch { }
+
+            string who = _lastExternalTitle.Length > 0 ? ("「" + _lastExternalTitle + "」") : "目标窗口";
+            CallStr("status", "文字已就绪：点一下" + who + "让它聚焦，随后会自动粘贴");
+        }
+
+        /// <summary>目标窗口已被用户点中并获得焦点：稍等输入框就绪，再按 Ctrl+V。</summary>
+        private void PastePending()
+        {
+            if (_pendingPaste == null) return;
+            // 超过 2 分钟还没点目标窗口，就把待粘贴内容作废，避免以后误贴
+            if ((DateTime.Now - _pendingAt).TotalSeconds > 120)
+            {
+                _pendingPaste = null;
+                return;
+            }
+            string text = _pendingPaste;
+            _pendingPaste = null;
             string title = _lastExternalTitle;
 
             try { Clipboard.SetText(text); }
@@ -2023,9 +2046,7 @@ namespace RichTextGen
             {
                 try
                 {
-                    if (IsIconic(target)) ShowWindow(target, 9);   // SW_RESTORE
-                    SetForegroundWindow(target);
-                    Thread.Sleep(150);
+                    Thread.Sleep(220);                             // 等目标窗口把输入框准备好
                     keybd_event(0x11, 0, 0, IntPtr.Zero);          // Ctrl 按下
                     keybd_event(0x56, 0, 0, IntPtr.Zero);          // V 按下
                     keybd_event(0x56, 0, 2, IntPtr.Zero);          // V 抬起

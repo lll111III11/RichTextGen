@@ -617,7 +617,7 @@ try{
         <textarea id="out" readonly></textarea>
         <div class="row" style="margin-top:10px">
           <button class="b p" onclick="copyOut()">复制代码</button>
-          <button class="b" onclick="syncOutNow()" title="把生成的代码粘贴到最近点击的那个窗口">同步到窗口</button>
+          <button class="b" onclick="syncOutNow()" title="先备好文字，再点一下目标窗口，随后自动粘贴">同步到窗口</button>
           <button class="b" onclick="host('exportHtml|'+encodeURIComponent(out.value))">导出 HTML（浏览器预览）</button>
           <span class="stat"><span>字符数 <b id="len">0</b></span><span>标签数 <b id="tagc">0</b></span></span>
         </div>
@@ -752,7 +752,7 @@ try{
         <div class="row">
           <label class="chk"><input type="checkbox" id="winTop" onchange="setWinTop(this.checked)"> 窗口始终置顶</label>
           <span class="hint">与标题栏 📌 相同：本窗口显示在所有窗口之前，像任务管理器一样不会被遮挡</span></div>
-        <div class="row"><span class="hint">同步输出：先点一下要接收文字的窗口（游戏聊天框、记事本等），再回到本程序。启用后「复制代码」「同步到窗口」以及给选区套颜色，都会把结果自动粘贴到那个窗口；默认关闭。</span></div>
+        <div class="row"><span class="hint">同步输出分两步：先「复制代码 / 同步到窗口 / 给选区套颜色」把文字准备好，再点一次目标窗口让它聚焦，程序随后自动按 Ctrl+V 粘贴（不会自己抢焦点）。默认关闭。</span></div>
       </div>
       <div class="card"><h3>⚡ 快捷组件与全局热键</h3>
         <div class="row"><span class="hint" id="hotkeyInfo">热键状态读取中…</span>
