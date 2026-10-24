@@ -1092,6 +1092,8 @@ namespace RichTextGen
                 case "exportTxt": ExportTxt(Un(arg)); break;
                 case "dropFile": DropFile(Un(arg)); break;
                 case "tearTab": TearTab(Un(arg)); break;        // 标签拖出窗口 → 同进程新窗口
+                case "newWindow": TearTab("{}"); break;         // 文件 → 新建窗口
+                case "openRecent": OpenPath(Un(arg)); break;    // 文件 → 最近使用
                 case "dirty": { int dn; if (int.TryParse(arg, out dn)) _dirtyCount = dn; break; }
                 case "musicHost": MusicHost(Un(arg)); break;    // 拖入音乐 → 生成本地 URL
                 case "musicPick": MusicPick(); break;           // 点按钮选音乐文件

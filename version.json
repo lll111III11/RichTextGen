@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.10",
+    "version":  "5.9.0.11",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "fix",
+    "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.10/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.10/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.11/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.11/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.10 更新（安装器权限与安全软件误报修复）：\n· 【不再需要管理员权限】安装器改为以普通权限运行，装到 %LOCALAPPDATA%\\Programs\\RichTextGen，只写当前用户注册表，全程不弹 UAC\n· 【不再安装证书】安装过程不再向系统「受信任的根证书」写入任何证书。之前把自签证书塞进根存储容易被安全软件判定为可疑行为，这一项已彻底移除\n· 【安装包不再附带证书文件】载荷里移除 rtg-codesign.cer\n· 【彻底卸载工具修复】RichTextGen-FullUninstall.exe 的管理员清单之前被链接器忽略，导致无法真正清理旧证书；现已修复，可正常清理旧版本装过的证书\n· 【兼容】老版本装过的证书不会被自动删除，需要时请运行彻底卸载工具；程序本体签名不受影响",
+    "notes":  "v5.9.0.11 更新（界面与菜单功能）：\n· 【工作台功能入口移到顶部】原来竖排在左侧的功能入口（工作台 / 生成 / 图片 / 翻译 / AI / TXT / 音乐 / 设置）改为横向排在内容上方，窗口变窄时自动折行，不再挤占编辑区宽度\n· 【顶部菜单补全】新增「查看」菜单；「文件」「编辑」菜单按记事本补齐\n· 【文件菜单】新建标签页、新建窗口、新建 Markdown 选项卡、打开、最近使用、保存、另存为、全部保存、页面设置、打印、关闭选项卡、关闭窗口、退出\n· 【编辑菜单】撤销、重做、剪切、复制、粘贴、删除、清除格式设置、使用必应搜索、查找、查找下一个、查找上一个、替换、转到、全选、时间/日期、字体\n· 【查看菜单】放大 / 缩小 / 还原默认缩放、状态栏开关、自动换行开关（Markdown 预览预留）\n· 【编辑器新增】浮动查找条（支持计数、上一个/下一个、替换、全部替换、转到行）、字体与字号设置、页面边距设置、打印\n· 【最近使用】打开或保存过的文件会记入「文件 → 最近使用」，可直接重新打开\n· 快捷键：Ctrl+F 查找、Ctrl+H 替换、Ctrl+G 转到、Ctrl+E 必应搜索、F3 / Shift+F3 上下一处、F5 插入时间、Ctrl+加号/减号/0 缩放、Ctrl+W 关闭选项卡、Ctrl+Shift+N 新建窗口、Ctrl+Alt+S 全部保存",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

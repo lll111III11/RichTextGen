@@ -59,18 +59,23 @@
   .wbtn.close:hover{background:#c42b1c;color:#fff}
   /* 主体 */
   #main{flex:1;display:flex;min-height:0;padding:0 12px 12px;gap:12px}
-  nav{width:190px;flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding-top:4px}
-  nav button{text-align:left;padding:10px 12px;border:0;background:transparent;color:var(--text);
-             border-radius:var(--r4);cursor:pointer;font-size:13.5px;display:flex;gap:10px;align-items:center}
+  /* 工作台功能区：横排在工作区上方，保持单行，窄了横向滚动 */
+  nav{width:100%;flex:0 0 auto;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:4px;
+      padding:2px 0 6px;margin-bottom:8px;border-bottom:1px solid var(--line);
+      overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+  nav::-webkit-scrollbar{height:4px}
+  nav::-webkit-scrollbar-thumb{background:var(--inputLine);border-radius:2px}
+  nav button{text-align:center;padding:5px 8px;border:1px solid transparent;background:transparent;color:var(--text);
+             border-radius:8px;cursor:pointer;font-size:12.5px;display:flex;gap:5px;align-items:center;
+             white-space:nowrap;flex:0 0 auto}
   nav button:hover{background:var(--hover)}
-  nav button.on{background:var(--card);box-shadow:var(--shadow);font-weight:600}
-  nav button.on::before{content:"";position:absolute}
-  /* AI 对话打开时，本项收起，下面几项平滑上移；关闭窗口后滑回 */
-  nav button{max-height:40px;line-height:20px;overflow:hidden;
+  nav button.on{background:var(--card);border-color:var(--line);box-shadow:var(--shadow);font-weight:600}
+  /* AI 对话打开时，本项收起；关闭窗口后滑回 */
+  nav button{max-height:32px;line-height:20px;overflow:hidden;
              transition:max-height .26s ease,opacity .2s ease,padding .26s ease,transform .12s ease,background-color .18s ease,box-shadow .18s ease}
-  nav button.nav-gone{max-height:0;opacity:0;padding-top:0;padding-bottom:0;
-                      transform:translateX(-14px);pointer-events:none}
-  nav .g{width:16px;text-align:center;opacity:.85}
+  nav button.nav-gone{max-height:0;opacity:0;padding-top:0;padding-bottom:0;border:0;
+                      transform:translateY(-10px);pointer-events:none}
+  nav .g{width:14px;text-align:center;opacity:.85}
   #pages{flex:1;min-width:0;overflow:auto}
   .page{display:none}
   .page.on{display:block}
@@ -152,10 +157,10 @@
   .card{min-width:0}
   @media (max-width:1150px){ #mdHint{display:none} }
   @media (max-width:1000px){ .qk-row{flex-wrap:wrap} }
-  /* 工作台变窄时：左侧导航改成横向排布，把宽度让给内容卡片 */
-  #ws.narrow #wsBody{flex-direction:column;min-width:0;padding:0 10px 10px}
-  #ws.narrow nav{width:100%!important;flex-direction:row;flex-wrap:wrap;gap:2px;padding-top:2px}
-  #ws.narrow nav button{flex:0 0 auto;max-height:none;padding:6px 9px;font-size:12px}
+  /* 工作台变窄时：允许折成两行，保证 8 个入口都看得到 */
+  #ws.narrow #wsBody{min-width:0;padding:0 10px 10px}
+  #ws.narrow nav{flex-wrap:wrap;overflow-x:visible}
+  #ws.narrow nav button{padding:4px 7px;font-size:12px}
   #ws.narrow #navSplit{display:none}
   button.p{background:var(--accent);color:var(--accentText);border-color:transparent;font-weight:600}
   button.p:hover{filter:brightness(1.06)}
@@ -328,6 +333,8 @@
   #menuDrop .mi-item:hover{background:var(--accent);color:var(--accentText);filter:none}
   #menuDrop .mi-item .k{opacity:.6;font-size:11.5px;white-space:nowrap}
   #menuDrop .mi-sep{height:1px;background:var(--line);margin:4px 6px}
+  #menuDrop .mi-item.dis,#menuDrop2 .mi-item.dis{opacity:.42;cursor:default}
+  #menuDrop .mi-item.dis:hover,#menuDrop2 .mi-item.dis:hover{background:transparent;color:inherit;filter:none}
   #main{padding:0 12px 12px;gap:12px}
   #splitter{flex:0 0 6px;cursor:ew-resize;border-radius:3px;align-self:stretch;transition:background .15s ease}
   #splitter:hover,#splitter:active{background:var(--accent);opacity:.7}
@@ -347,6 +354,23 @@
           border-radius:var(--r8);padding:10px 12px;overflow:auto;font-size:15px;line-height:1.6;outline:none;
           user-select:text;white-space:pre-wrap;word-break:break-word;display:none}
   #edRich:focus{border-color:var(--accent)}
+  /* 查找 / 字体 工具条 */
+  #findBar,#fontBar{flex:0 0 auto;display:none;align-items:center;gap:6px;padding:5px 6px;
+    background:var(--input);border:1px solid var(--inputLine);border-radius:var(--r8)}
+  #findBar.on,#fontBar.on{display:flex}
+  #findBar input,#fontBar select{border:1px solid var(--inputLine);background:var(--card);color:var(--text);
+    border-radius:6px;padding:4px 8px;font-size:12.5px;font-family:inherit;outline:none}
+  #findBar input:focus,#fontBar select:focus{border-color:var(--accent)}
+  #findText{flex:0 1 170px}
+  #replaceText{flex:0 1 150px}
+  .fbInfo{font-size:12px;color:var(--sub);min-width:56px;text-align:center}
+  .fbBtn{border:1px solid var(--inputLine);background:var(--card);color:var(--text);border-radius:6px;
+    padding:4px 9px;font-size:12px;cursor:pointer;font-family:inherit}
+  .fbBtn:hover{background:var(--hover)}
+  .fbBtn:disabled{opacity:.45;cursor:default}
+  .fbChk{display:inline-flex;gap:4px;align-items:center;font-size:12px;color:var(--sub)}
+  #findBar .sp,#fontBar .sp{flex:1}
+  #edSrc.nowrap,#edRich.nowrap{white-space:pre!important;word-break:normal;overflow-x:auto}
   #ws{flex:0 0 540px;min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);transition:flex-basis .18s ease;position:relative}
   #ws.cold{flex-basis:38px !important}   /* 折叠优先于内联拖拽宽度 */
   #wsHead{flex:0 0 auto;height:40px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px}
@@ -356,9 +380,8 @@
           border-radius:var(--r4);cursor:pointer;font-size:14px;line-height:1}
   #wsFold:hover{background:var(--hover)}
   #wsInner{flex:1;min-height:0;display:flex;flex-direction:column}
-  #wsBody{flex:1;min-height:0;display:flex;gap:12px;min-width:0;padding:0 12px 12px 10px}
-  #navSplit{flex:0 0 6px;cursor:ew-resize;border-radius:3px;align-self:stretch;transition:background .15s ease}
-  #navSplit:hover,#navSplit.dragging{background:var(--accent);opacity:.7}
+  #wsBody{flex:1;min-height:0;display:flex;flex-direction:column;gap:0;min-width:0;padding:0 12px 12px 10px}
+  #navSplit{display:none}
   #ws.cold #wsHead,#ws.cold #wsInner{display:none}
   #wsFold2{display:none}
   #ws.cold #wsFold2{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;height:100%;border:0;
@@ -387,6 +410,7 @@
 <div id="menubar">
   <span class="mi" data-m="file">文件</span>
   <span class="mi" data-m="edit">编辑</span>
+  <span class="mi" data-m="view">查看</span>
   <span class="mi" data-m="format">格式</span>
   <span class="mi" data-m="help">帮助</span>
 </div>
@@ -404,6 +428,36 @@
       </span>
       <span class="hint" id="mdHint">渲染模式：文本实时按 Unity/TMP 标签渲染，标签与本文双向转换</span>
     </div>
+    <div id="findBar">
+      <input id="findText" type="text" placeholder="查找内容" />
+      <span class="fbInfo" id="findInfo">0 / 0</span>
+      <button class="fbBtn" id="findPrev">上一个</button>
+      <button class="fbBtn" id="findNext">下一个</button>
+      <input id="replaceText" type="text" placeholder="替换为" />
+      <button class="fbBtn" id="replaceOne">替换</button>
+      <button class="fbBtn" id="replaceAll">全部替换</button>
+      <span class="sp"></span>
+      <button class="fbBtn" id="findClose" title="关闭 (Esc)">✕</button>
+    </div>
+    <div id="fontBar">
+      <select id="fontFamily">
+        <option value="Cascadia Mono">Cascadia Mono</option>
+        <option value="Consolas">Consolas</option>
+        <option value="Microsoft YaHei UI">微软雅黑</option>
+        <option value="SimSun">宋体</option>
+        <option value="KaiTi">楷体</option>
+        <option value="Segoe UI">Segoe UI</option>
+      </select>
+      <select id="fontSize">
+        <option>11</option><option>12</option><option>13</option><option>13.5</option>
+        <option>14</option><option>15</option><option>16</option><option>18</option><option>20</option><option>24</option>
+      </select>
+      <label class="fbChk"><input type="checkbox" id="fontBold" /> 加粗</label>
+      <label class="fbChk"><input type="checkbox" id="fontItalic" /> 斜体</label>
+      <span class="sp"></span>
+      <button class="fbBtn" id="fontApply">应用</button>
+      <button class="fbBtn" id="fontClose">✕</button>
+    </div>
     <textarea id="edSrc" spellcheck="false" placeholder="在这里输入文本（支持多标签）…（M3 里程碑将接入标签 / HTML 双向实时渲染）"></textarea>
     <div id="edRich" contenteditable="true"></div>
   </div>
@@ -420,12 +474,12 @@
     <div id="wsInner">
       <div id="wsBody">
         <nav>
-    <button class="on" data-p="work"><span class="g">◈</span>工作台</button>
-    <button data-p="gen"><span class="g">✎</span>文本生成</button>
-    <button data-p="img"><span class="g">▦</span>图片系统</button>
-    <button data-p="trans"><span class="g">⇄</span>在线翻译</button>
-    <button data-p="chatwin"><span class="g">✦</span>AI 对话</button>
-    <button data-p="set"><span class="g">⚙</span>设置</button>
+    <button class="on" data-p="work" title="工作台"><span class="g">◈</span>工作台</button>
+    <button data-p="gen" title="文本生成"><span class="g">✎</span>生成</button>
+    <button data-p="img" title="图片系统"><span class="g">▦</span>图片</button>
+    <button data-p="trans" title="在线翻译"><span class="g">⇄</span>翻译</button>
+    <button data-p="chatwin" title="AI 对话"><span class="g">✦</span>AI</button>
+    <button data-p="set" title="设置"><span class="g">⚙</span>设置</button>
   </nav>
 
     <div id="navSplit" title="拖动调整导航栏宽度（双击恢复默认）"></div>
@@ -3089,7 +3143,8 @@ host('ready');
   const nav = document.querySelector('nav');
   const btn = document.createElement('button');
   btn.dataset.p = 'txtproc';
-  btn.innerHTML = '<span class="g">≣</span>TXT 全面处理';
+  btn.title = 'TXT 全面处理';
+  btn.innerHTML = '<span class="g">≣</span>TXT';
   btn.onclick = () => go('txtproc');
   nav.insertBefore(btn, nav.querySelector('button[data-p="set"]'));
 
@@ -3697,22 +3752,57 @@ host('ready');
   ];
   const MENUS = {
     file: [
-      { t: '新建',            k: 'Ctrl+N',    fn: () => { DocM.newTab(); } },
-      { t: '打开…',           k: 'Ctrl+O',    fn: () => { host('openFile'); } },
+      { t: '新建标签页',        k: 'Ctrl+N',        fn: () => { DocM.newTab(); } },
+      { t: '新建窗口',          k: 'Ctrl+Shift+N',  fn: () => { host('newWindow'); } },
+      { t: '“新建 Markdown”选项卡', k: '',          fn: () => { menuNewMarkdown(); } },
       { sep: true },
-      { t: '保存',            k: 'Ctrl+S',    fn: () => { DocM.save(); } },
-      { t: '另存为…',         k: 'Ctrl+Shift+S', fn: () => { DocM.saveAs(); } },
+      { t: '打开…',             k: 'Ctrl+O',        fn: () => { host('openFile'); } },
+      { t: '最近使用',          k: '',              sub: () => recentList() },
       { sep: true },
-      { t: '在线文档…',       k: '',          sub: DOCS }
+      { t: '保存',              k: 'Ctrl+S',        fn: () => { DocM.save(); } },
+      { t: '另存为…',           k: 'Ctrl+Shift+S',  fn: () => { DocM.saveAs(); } },
+      { t: '全部保存',          k: 'Ctrl+Alt+S',    fn: () => { DocM.saveAll(); } },
+      { sep: true },
+      { t: '页面设置…',         k: '',              fn: () => { menuPageSetup(); } },
+      { t: '打印…',             k: 'Ctrl+P',        fn: () => { menuPrint(); } },
+      { sep: true },
+      { t: '关闭选项卡',        k: 'Ctrl+W',        fn: () => { DocM.closeActive(); } },
+      { t: '关闭窗口',          k: 'Ctrl+Shift+W',  fn: () => { host('close'); } },
+      { t: '退出',              k: '',              fn: () => { host('quit'); } }
     ],
     edit: [
-      { t: '撤销',            k: 'Ctrl+Z',    fn: () => edCmd('undo') },
-      { t: '重做',            k: 'Ctrl+Y',    fn: () => edCmd('redo') },
+      { t: '撤销',              k: 'Ctrl+Z',        fn: () => { edCmd('undo'); } },
+      { t: '重做',              k: 'Ctrl+Y',        fn: () => { edCmd('redo'); } },
       { sep: true },
-      { t: '剪切',            k: 'Ctrl+X',    fn: () => edCmd('cut') },
-      { t: '复制',            k: 'Ctrl+C',    fn: () => edCmd('copy') },
-      { t: '粘贴',            k: 'Ctrl+V',    fn: () => edCmd('paste') },
-      { t: '全选',            k: 'Ctrl+A',    fn: () => edCmd('selectAll') }
+      { t: '剪切',              k: 'Ctrl+X',        fn: () => { edCmd('cut'); } },
+      { t: '复制',              k: 'Ctrl+C',        fn: () => { edCmd('copy'); } },
+      { t: '粘贴',              k: 'Ctrl+V',        fn: () => { menuPaste(); } },
+      { t: '删除',              k: 'Del',           fn: () => { menuDelete(); } },
+      { sep: true },
+      { t: '清除格式设置',      k: '',              fn: () => { menuClearFormat(); } },
+      { t: '使用必应搜索',      k: 'Ctrl+E',        fn: () => { menuBing(); } },
+      { sep: true },
+      { t: '查找…',             k: 'Ctrl+F',        fn: () => { menuFind(false); } },
+      { t: '查找下一个',        k: 'F3',            fn: () => { menuFind(false, true, 1); } },
+      { t: '查找上一个',        k: 'Shift+F3',      fn: () => { menuFind(false, true, -1); } },
+      { t: '替换…',             k: 'Ctrl+H',        fn: () => { menuFind(true); } },
+      { t: '转到…',             k: 'Ctrl+G',        fn: () => { menuGoto(); } },
+      { sep: true },
+      { t: '全选',              k: 'Ctrl+A',        fn: () => { edCmd('selectAll'); } },
+      { t: '时间/日期',         k: 'F5',            fn: () => { menuDateTime(); } },
+      { t: '字体…',             k: '',              fn: () => { menuFont(); } }
+    ],
+    view: [
+      { t: '缩放',              k: '',  sub: [
+        { t: '放大',            flag: 'Ctrl+加号',  fn: () => { viewZoom(10); } },
+        { t: '缩小',            flag: 'Ctrl+减号',  fn: () => { viewZoom(-10); } },
+        { t: '还原默认缩放',    flag: 'Ctrl+0',     fn: () => { viewZoom(0); } }
+      ] },
+      { sep: true },
+      { t: '状态栏',            k: '', checked: () => ViewOpt.sb,   fn: () => { ViewOpt.sb = !ViewOpt.sb; viewApply(); } },
+      { t: '自动换行',          k: '', checked: () => ViewOpt.wrap, fn: () => { ViewOpt.wrap = !ViewOpt.wrap; viewApply(); } },
+      { sep: true },
+      { t: 'Markdown',          k: '', disabled: true, sub: [ { t: '预览（即将支持）', disabled: true } ] }
     ],
     format: [
       { t: '颜色系统…',       k: '',          fn: () => { showWork('work'); } },
@@ -3742,22 +3832,28 @@ host('ready');
     drop.innerHTML = '';
     items.forEach(it => {
       if (it.sep){ const d = document.createElement('div'); d.className = 'mi-sep'; drop.appendChild(d); return; }
-      const d = document.createElement('div'); d.className = 'mi-item' + (it.sub ? ' has-sub' : '');
-      const s1 = document.createElement('span'); s1.textContent = it.t;
-      const s2 = document.createElement('span'); s2.className = 'k'; s2.textContent = it.sub ? '▸' : (it.k || '');
+      const hasSub = !!it.sub;
+      const d = document.createElement('div');
+      d.className = 'mi-item' + (hasSub ? ' has-sub' : '') + (it.disabled ? ' dis' : '');
+      const s1 = document.createElement('span');
+      s1.textContent = (it.checked && it.checked()) ? '✓ ' + it.t : it.t;
+      const s2 = document.createElement('span'); s2.className = 'k';
+      s2.textContent = hasSub ? '▸' : (it.k || '');
       d.appendChild(s1); d.appendChild(s2);
-      if (it.sub){
+      if (hasSub){
         d.addEventListener('mouseenter', () => {
           closeSub();
           const r = d.getBoundingClientRect();
           drop2.innerHTML = '';
-          it.sub.forEach(p => {
+          const subItems = (typeof it.sub === 'function') ? it.sub() : it.sub;
+          (subItems || []).forEach(p => {
             if (p.sep){ const x = document.createElement('div'); x.className = 'mi-sep'; drop2.appendChild(x); return; }
-            const x = document.createElement('div'); x.className = 'mi-item';
-            const a = document.createElement('span'); a.textContent = p.t;
+            const x = document.createElement('div'); x.className = 'mi-item' + (p.disabled ? ' dis' : '');
+            const a = document.createElement('span');
+            a.textContent = (p.checked && p.checked()) ? '✓ ' + p.t : p.t;
             x.appendChild(a);
             if (p.flag){ const f = document.createElement('span'); f.className = 'k'; f.textContent = p.flag; x.appendChild(f); }
-            x.onclick = () => { closeSub(); drop.classList.remove('on'); p.fn(); };
+            if (!p.disabled && p.fn) x.onclick = () => { closeSub(); drop.classList.remove('on'); p.fn(); };
             drop2.appendChild(x);
           });
           drop2.classList.add('on');
@@ -3767,6 +3863,8 @@ host('ready');
           drop2.style.left = x2 + 'px'; drop2.style.top = y2 + 'px';
         });
         d.onclick = ev => ev.stopPropagation();   // 不退主菜单
+      } else if (it.disabled){
+        d.onclick = ev => ev.stopPropagation();
       } else {
         d.onclick = () => { drop.classList.remove('on'); it.fn(); };
       }
@@ -3919,6 +4017,7 @@ const DocM = (function(){
       loadEditor(cur);
       render();
       status(msg || '已打开 ' + (o.name || ''));
+      try{ if (typeof addRecent === 'function') addRecent(o.name, path); }catch(e){}
       try{ if (typeof updateSb === 'function') updateSb(); }catch(e){}
       return;
     }
@@ -3930,6 +4029,7 @@ const DocM = (function(){
       if (o.dirty) { d.dirty = true; render(); }
     }
     status(msg || '已打开 ' + (o.name || ''));
+    try{ if (typeof addRecent === 'function') addRecent(o.name, path); }catch(e){}
     try{ if (typeof updateSb === 'function') updateSb(); }catch(e){}
   }
   function saved(o){
@@ -3939,6 +4039,7 @@ const DocM = (function(){
     if (o.encoding) a.enc = o.encoding;
     render();
     status('已保存 ' + (o.name || ''));
+    try{ if (typeof addRecent === 'function') addRecent(o.name, o.path); }catch(e){}
     try{ if (typeof updateSb === 'function') updateSb(); }catch(e){}
   }
   function activeMeta(){
@@ -4002,6 +4103,21 @@ const DocM = (function(){
     return false;
   }
   function closeActive(){ if (activeId) closeTab(activeId); }
+  /* 全部保存：有路径的直接写回，没有路径的走另存为 */
+  function saveAll(){
+    let n = 0;
+    for (const d of docs){
+      const text = (d.id === activeId) ? getActiveText() : (d.buffer || '');
+      if (d.path){
+        host('saveFile|' + encodeURIComponent(d.path) + '|' + encodeURIComponent(text));
+        n++;
+      } else if ((text || '').length){
+        host('saveAsFile|' + encodeURIComponent(d.name || '无标题.txt') + '|' + encodeURIComponent(text));
+        n++;
+      }
+    }
+    status(n ? ('已提交保存 ' + n + ' 个文档') : '没有需要保存的内容');
+  }
   function tabNames(){ return docs.map(d => d.name); }
 
   /* 把标签拖到窗口外 → 交给宿主在本进程里开一个新窗口（像记事本一样） */
@@ -4065,7 +4181,7 @@ const DocM = (function(){
     return out;
   }
 
-  return { newTab, switchTab, closeTab, save, saveAs, addDoc, openFromHost, saved, markDirty,
+  return { newTab, switchTab, closeTab, save, saveAs, saveAll, addDoc, openFromHost, saved, markDirty,
            setActiveBuffer, setViewHook: f => { viewHook = f; },
            activeText, activeName, setActiveText, setActiveName,
            switchByName, closeActive, tabNames, allTabs, activeMeta };
@@ -4728,7 +4844,8 @@ const EdMode = (function(){
   const nav = document.querySelector('nav');
   const btn = document.createElement('button');
   btn.dataset.p = 'music';
-  btn.innerHTML = '<span class="g">♪</span>音乐链接';
+  btn.title = '音乐链接';
+  btn.innerHTML = '<span class="g">♪</span>音乐';
   btn.onclick = () => go('music');
   const setBtn = nav.querySelector('button[data-p="set"]');
   nav.insertBefore(btn, setBtn);
@@ -4820,5 +4937,363 @@ const EdMode = (function(){
     musicAdd(o.name, o.url);
   };
 })();
-</script></body>
+</script>
+<script>
+/* ================= 追加：记事本式菜单功能（视图 / 查找替换 / 字体 / 日期 / 最近使用） ================= */
+const ViewOpt = Object.assign(
+  { zoom: 100, wrap: true, sb: true, font: 'Cascadia Mono', size: '13.5', bold: false, italic: false },
+  (function(){ try { return JSON.parse(localStorage.getItem('rtg.view') || '{}'); } catch(e){ return {}; } })()
+);
+
+function viewApply(){
+  const me = document.getElementById('mainEditor');
+  const src = document.getElementById('edSrc');
+  const rich = document.getElementById('edRich');
+  if (me) me.style.zoom = String(ViewOpt.zoom / 100);
+  if (src){
+    try { src.wrap = ViewOpt.wrap ? 'soft' : 'off'; } catch(e){}
+    src.classList.toggle('nowrap', !ViewOpt.wrap);
+    src.style.fontFamily = '"' + ViewOpt.font + '", Consolas, monospace';
+    src.style.fontSize = ViewOpt.size + 'px';
+    src.style.fontWeight = ViewOpt.bold ? '700' : '400';
+    src.style.fontStyle = ViewOpt.italic ? 'italic' : 'normal';
+  }
+  if (rich){
+    rich.classList.toggle('nowrap', !ViewOpt.wrap);
+    rich.style.fontFamily = '"' + ViewOpt.font + '", "Microsoft YaHei UI", sans-serif';
+    rich.style.fontSize = ViewOpt.size + 'px';
+    rich.style.fontWeight = ViewOpt.bold ? '700' : '400';
+    rich.style.fontStyle = ViewOpt.italic ? 'italic' : 'normal';
+  }
+  const sb = document.getElementById('statusbar');
+  if (sb) sb.style.display = ViewOpt.sb ? '' : 'none';
+  try { localStorage.setItem('rtg.view', JSON.stringify(ViewOpt)); } catch(e){}
+}
+function viewZoom(d){
+  if (!d) ViewOpt.zoom = 100;
+  else ViewOpt.zoom = Math.max(60, Math.min(200, ViewOpt.zoom + d));
+  viewApply();
+  if (typeof status === 'function') status('缩放 ' + ViewOpt.zoom + '%');
+}
+
+/* ---------- 编辑器读写 ---------- */
+function isRichMode(){
+  try { return typeof EdMode !== 'undefined' && EdMode.current && EdMode.current() === 'rich'; } catch(e){ return false; }
+}
+function srcEl(){ return document.getElementById('edSrc'); }
+function richEl(){ return document.getElementById('edRich'); }
+function fireInput(el){
+  if (!el) return;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function insertText(s){
+  if (isRichMode()){
+    const r = richEl(); if (!r) return;
+    r.focus();
+    document.execCommand('insertText', false, s);
+    return;
+  }
+  const t = srcEl(); if (!t) return;
+  t.focus();
+  t.setRangeText(s, t.selectionStart, t.selectionEnd, 'end');
+  fireInput(t);
+}
+function selectedText(){
+  if (isRichMode()){
+    const s = window.getSelection();
+    return (s && s.rangeCount) ? String(s) : '';
+  }
+  const t = srcEl();
+  if (!t) return '';
+  return t.value.substring(t.selectionStart, t.selectionEnd);
+}
+
+/* ---------- 编辑菜单 ---------- */
+function menuPaste(){
+  if (navigator.clipboard && navigator.clipboard.readText){
+    navigator.clipboard.readText().then(function(txt){
+      if (txt) insertText(txt); else status('剪贴板为空');
+    }).catch(function(){ status('未获得剪贴板读取权限，请用 Ctrl+V'); });
+  } else status('请用 Ctrl+V 粘贴');
+}
+function menuDelete(){
+  if (isRichMode()){
+    const r = richEl(); if (!r) return;
+    r.focus();
+    document.execCommand('delete');
+    return;
+  }
+  const t = srcEl(); if (!t) return;
+  if (t.selectionStart !== t.selectionEnd){
+    t.setRangeText('', t.selectionStart, t.selectionEnd, 'end');
+    fireInput(t);
+  } else if (t.selectionEnd < t.value.length){
+    t.setRangeText('', t.selectionEnd, t.selectionEnd + 1, 'end');
+    fireInput(t);
+  }
+}
+function menuClearFormat(){
+  if (isRichMode()){
+    const r = richEl(); if (!r) return;
+    r.focus();
+    document.execCommand('removeFormat');
+    if (typeof DocM !== 'undefined' && DocM.markDirty) DocM.markDirty();
+    status('已清除选区格式');
+  } else {
+    status('源码模式下不转换标签；切到渲染模式可一键清除格式');
+  }
+}
+function menuBing(){
+  const q = selectedText().trim();
+  if (!q){ status('请先选中要搜索的文字'); return; }
+  host('openUrl|https://www.bing.com/search?q=' + encodeURIComponent(q));
+}
+function menuDateTime(){
+  const d = new Date();
+  const p = function(n){ return n < 10 ? '0' + n : '' + n; };
+  insertText(d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
+            p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()));
+}
+function menuFont(){
+  const bar = document.getElementById('fontBar');
+  if (!bar) return;
+  bar.classList.add('on');
+  document.getElementById('fontFamily').value = ViewOpt.font;
+  document.getElementById('fontSize').value = String(ViewOpt.size);
+  document.getElementById('fontBold').checked = !!ViewOpt.bold;
+  document.getElementById('fontItalic').checked = !!ViewOpt.italic;
+}
+
+/* ---------- 查找 / 替换 / 转到 ---------- */
+function findEls(){
+  return {
+    bar: document.getElementById('findBar'),
+    inp: document.getElementById('findText'),
+    rep: document.getElementById('replaceText'),
+    info: document.getElementById('findInfo'),
+    one: document.getElementById('replaceOne'),
+    all: document.getElementById('replaceAll')
+  };
+}
+function menuFind(showReplace, jump, dir){
+  const e = findEls();
+  if (!e.bar) return;
+  if (jump){ findStep(dir || 1); return; }
+  e.bar.classList.add('on');
+  const disp = showReplace ? '' : 'none';
+  e.rep.style.display = disp;
+  e.one.style.display = disp;
+  e.all.style.display = disp;
+  const sel = selectedText().trim();
+  if (sel && sel.length <= 60) e.inp.value = sel;
+  e.inp.focus();
+  e.inp.select();
+  findCount();
+}
+function findCount(){
+  const e = findEls(); if (!e.inp) return;
+  const q = e.inp.value;
+  const t = srcEl();
+  if (!q || !t || isRichMode()){ e.info.textContent = q ? '渲染模式' : '0 / 0'; return; }
+  let n = 0, i = 0;
+  const low = t.value.toLowerCase(), ql = q.toLowerCase();
+  while ((i = low.indexOf(ql, i)) >= 0){ n++; i += ql.length || 1; }
+  e.info.textContent = n ? ('共 ' + n + ' 处') : '未找到';
+}
+function findStep(dir){
+  const e = findEls(); if (!e.inp) return;
+  const q = e.inp.value;
+  if (!q) return;
+  if (isRichMode()){
+    const r = richEl(); if (r) r.focus();
+    const ok = window.find(q, false, dir < 0, true);
+    e.info.textContent = ok ? '已定位' : '未找到';
+    return;
+  }
+  const t = srcEl(); if (!t) return;
+  const v = t.value, low = v.toLowerCase(), ql = q.toLowerCase();
+  let at;
+  if (dir > 0) at = low.indexOf(ql, t.selectionEnd);
+  else {
+    const from = Math.max(0, t.selectionStart - 1);
+    at = low.lastIndexOf(ql, from);
+  }
+  if (at < 0) at = dir > 0 ? low.indexOf(ql) : low.lastIndexOf(ql);   // 首尾循环
+  if (at < 0){ e.info.textContent = '未找到'; return; }
+  t.focus();
+  t.setSelectionRange(at, at + q.length);
+  const line = v.slice(0, at).split('\n').length;
+  const lh = parseFloat(getComputedStyle(t).lineHeight) || 20;
+  t.scrollTop = Math.max(0, (line - 1) * lh - t.clientHeight / 2);
+  e.info.textContent = '第 ' + line + ' 行';
+}
+function replaceOne(){
+  if (isRichMode()){ status('替换需要切换到源码模式'); return; }
+  const e = findEls(); if (!e.inp) return;
+  const q = e.inp.value, r = e.rep.value;
+  const t = srcEl();
+  if (!q || !t) return;
+  const sel = t.value.substring(t.selectionStart, t.selectionEnd);
+  if (sel.toLowerCase() === q.toLowerCase()){
+    t.setRangeText(r, t.selectionStart, t.selectionEnd, 'end');
+    fireInput(t);
+  }
+  findStep(1);
+}
+function replaceAll(){
+  if (isRichMode()){ status('替换需要切换到源码模式'); return; }
+  const e = findEls(); if (!e.inp) return;
+  const q = e.inp.value, r = e.rep.value;
+  const t = srcEl();
+  if (!q || !t) return;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const n = (t.value.match(re) || []).length;
+  if (!n){ status('未找到匹配内容'); return; }
+  t.value = t.value.replace(re, r);
+  fireInput(t);
+  findCount();
+  status('已替换 ' + n + ' 处');
+}
+function menuGoto(){
+  if (isRichMode()){ status('转到行需要切换到源码模式'); return; }
+  const t = srcEl(); if (!t) return;
+  const total = t.value.split('\n').length;
+  const ans = prompt('转到行号（1 - ' + total + '）：', '1');
+  if (ans === null) return;
+  const n = parseInt(ans, 10);
+  if (!n || n < 1 || n > total){ status('行号超出范围'); return; }
+  let at = 0;
+  for (let i = 1; i < n; i++) at = t.value.indexOf('\n', at) + 1;
+  t.focus();
+  t.setSelectionRange(at, at);
+  t.scrollTop = (n - 1) * (parseFloat(getComputedStyle(t).lineHeight) || 20) - t.clientHeight / 2;
+  status('已转到第 ' + n + ' 行');
+}
+
+/* ---------- 文件菜单附加项 ---------- */
+function menuNewMarkdown(){
+  DocM.newTab();
+  DocM.setActiveName('无标题.md');
+  DocM.setActiveText('# 新文档\n\n- \n');
+  status('已新建 Markdown 选项卡（Markdown 预览将在后续版本加入）');
+}
+function menuPrint(){
+  status('正在打开打印对话框…');
+  setTimeout(function(){
+    try { window.print(); } catch(e){ status('当前环境不支持打印'); }
+  }, 100);
+}
+function menuPageSetup(){
+  let cur = { top: 19, right: 19, bottom: 19, left: 19 };
+  try { Object.assign(cur, JSON.parse(localStorage.getItem('rtg.page') || '{}')); } catch(e){}
+  const ans = prompt('页边距（毫米，依次为 上 右 下 左）：',
+    [cur.top, cur.right, cur.bottom, cur.left].join(' '));
+  if (!ans) return;
+  const p = ans.trim().split(/[\s,]+/).map(Number).filter(function(n){ return !isNaN(n); });
+  if (p.length !== 4){ status('请填写 4 个数字，例如：19 19 19 19'); return; }
+  try { localStorage.setItem('rtg.page', JSON.stringify({ top:p[0], right:p[1], bottom:p[2], left:p[3] })); } catch(e){}
+  applyPageRule();
+  status('页面设置已保存（打印时生效）');
+}
+function applyPageRule(){
+  let el = document.getElementById('pageRule');
+  if (!el){ el = document.createElement('style'); el.id = 'pageRule'; document.head.appendChild(el); }
+  let c = { top: 19, right: 19, bottom: 19, left: 19 };
+  try { Object.assign(c, JSON.parse(localStorage.getItem('rtg.page') || '{}')); } catch(e){}
+  el.textContent = '@page{size:auto;margin:' + c.top + 'mm ' + c.right + 'mm ' + c.bottom + 'mm ' + c.left + 'mm}';
+}
+
+/* ---------- 最近使用 ---------- */
+function addRecent(name, path){
+  if (!path) return;
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('rtg.recent') || '[]'); } catch(e){}
+  list = list.filter(function(r){ return r && r.path && r.path.toLowerCase() !== path.toLowerCase(); });
+  list.unshift({ name: name || path.split(/[\\/]/).pop(), path: path });
+  try { localStorage.setItem('rtg.recent', JSON.stringify(list.slice(0, 10))); } catch(e){}
+}
+function recentList(){
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem('rtg.recent') || '[]'); } catch(e){}
+  const out = (list || []).map(function(r){
+    return { t: r.name, fn: function(){ host('openRecent|' + encodeURIComponent(r.path)); } };
+  });
+  if (out.length) out.push({ sep: true });
+  out.push({ t: '清除列表', fn: function(){
+    try { localStorage.removeItem('rtg.recent'); } catch(e){}
+    status('已清除最近使用');
+  } });
+  return out;
+}
+
+/* ---------- 工具条事件与快捷键 ---------- */
+(function(){
+  const fm = document.getElementById('fontApply');
+  if (fm) fm.onclick = function(){
+    ViewOpt.font = document.getElementById('fontFamily').value;
+    ViewOpt.size = document.getElementById('fontSize').value;
+    ViewOpt.bold = document.getElementById('fontBold').checked;
+    ViewOpt.italic = document.getElementById('fontItalic').checked;
+    viewApply();
+    document.getElementById('fontBar').classList.remove('on');
+    status('已应用字体设置');
+  };
+  const fc = document.getElementById('fontClose');
+  if (fc) fc.onclick = function(){ document.getElementById('fontBar').classList.remove('on'); };
+
+  const inp = document.getElementById('findText');
+  if (inp){
+    inp.addEventListener('input', findCount);
+    inp.addEventListener('keydown', function(ev){
+      if (ev.key === 'Enter'){ ev.preventDefault(); findStep(ev.shiftKey ? -1 : 1); }
+      if (ev.key === 'Escape'){ document.getElementById('findBar').classList.remove('on'); }
+    });
+  }
+  const nx = document.getElementById('findNext');
+  if (nx) nx.onclick = function(){ findStep(1); };
+  const pv = document.getElementById('findPrev');
+  if (pv) pv.onclick = function(){ findStep(-1); };
+  const ro = document.getElementById('replaceOne');
+  if (ro) ro.onclick = replaceOne;
+  const ra = document.getElementById('replaceAll');
+  if (ra) ra.onclick = replaceAll;
+  const cl = document.getElementById('findClose');
+  if (cl) cl.onclick = function(){ document.getElementById('findBar').classList.remove('on'); };
+
+  document.addEventListener('keydown', function(ev){
+    if (typeof hkCapture !== 'undefined' && hkCapture) return;
+    const ctrl = ev.ctrlKey || ev.metaKey;
+    const k = (ev.key || '').toLowerCase();
+    if (ctrl && !ev.altKey && !ev.shiftKey){
+      if (k === 'f'){ ev.preventDefault(); menuFind(false); return; }
+      if (k === 'h'){ ev.preventDefault(); menuFind(true); return; }
+      if (k === 'g'){ ev.preventDefault(); menuGoto(); return; }
+      if (k === 'e'){ ev.preventDefault(); menuBing(); return; }
+      if (k === 'p'){ ev.preventDefault(); menuPrint(); return; }
+      if (k === 'w'){ ev.preventDefault(); DocM.closeActive(); return; }
+      if (k === '=' || k === '+'){ ev.preventDefault(); viewZoom(10); return; }
+      if (k === '-' || k === '_'){ ev.preventDefault(); viewZoom(-10); return; }
+      if (k === '0'){ ev.preventDefault(); viewZoom(0); return; }
+    }
+    if (ctrl && ev.shiftKey && !ev.altKey){
+      if (k === 'n'){ ev.preventDefault(); host('newWindow'); return; }
+      if (k === 'w'){ ev.preventDefault(); host('close'); return; }
+    }
+    if (ctrl && ev.altKey && k === 's'){ ev.preventDefault(); DocM.saveAll(); return; }
+    if (ev.key === 'F5'){ ev.preventDefault(); menuDateTime(); return; }
+    if (ev.key === 'F3'){ ev.preventDefault(); menuFind(false, true, ev.shiftKey ? -1 : 1); return; }
+    if (ev.key === 'Escape'){
+      const bar = document.getElementById('findBar');
+      if (bar) bar.classList.remove('on');
+      const fb = document.getElementById('fontBar');
+      if (fb) fb.classList.remove('on');
+    }
+  });
+})();
+
+/* 启动时套用记住的视图设置 */
+applyPageRule();
+viewApply();
+</script>
+</body>
 </html>
