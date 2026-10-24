@@ -143,6 +143,16 @@ namespace RichTextGen
         /// <summary>本窗口里未保存的标签数量（界面每次变化时回报，用于副窗口关闭前确认）。</summary>
         private int _dirtyCount;
 
+        // ============================================================ 置顶 / 同步输出
+        /// <summary>是否把结果自动粘贴到「最近点击的外部窗口」（游戏聊天框等）。</summary>
+        private bool _syncOut;
+        /// <summary>最近一次处于前台的外部窗口（不是本进程的窗口）。</summary>
+        private static IntPtr _lastExternal;
+        private static string _lastExternalTitle = "";
+        private System.Windows.Forms.Timer _fgTimer;
+        private string _lastSent = "";
+        private DateTime _lastSentAt = DateTime.MinValue;
+
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
         [DllImport("user32.dll")]
@@ -153,6 +163,22 @@ namespace RichTextGen
         private static extern bool ShowWindow(IntPtr h, int cmd);
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wp, IntPtr lp);
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")]
+        private static extern int GetWindowTextLength(IntPtr h);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+        [DllImport("user32.dll")]
+        private static extern bool IsWindow(IntPtr h);
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr h);
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr h);
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
 
         // 无边框窗口的鼠标拖拽缩放：WebView2 铺满客户区时窗体收不到边上的命中测试，
         // 因此留出一圈 resizeBand 宽的「拖拽边」（WebView2 随 Padding 内缩），由 WndProc 返回 HT* 交系统缩放。
@@ -186,6 +212,11 @@ namespace RichTextGen
             ApplyResizeBand();                           // 留出可拖拽缩放的边（WebView2 随 Padding 内缩）
             BackColor = Color.FromArgb(243, 243, 243);
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+
+            // 置顶 / 同步输出：从 ui.json 恢复上次的选择（关掉再打开依然生效）
+            try { TopMost = UIPrefs.Topmost; } catch { }
+            _syncOut = UIPrefs.SyncOut;
+            StartForegroundWatch();
 
             // WebView2 用户数据目录放到 %APPDATA%，避免把缓存写进安装目录（装到只读目录时也不会启动失败）
             try
@@ -852,6 +883,11 @@ namespace RichTextGen
             }
 
             public static bool Gpu { get { return ReadBool("gpu", true); } }
+            public static bool Topmost { get { return ReadBool("topmost", false); } }
+            public static bool SyncOut { get { return ReadBool("syncOut", false); } }
+            public static bool CopyNl { get { return ReadBool("copyNl", false); } }
+
+            private static readonly string[] Keys = { "gpu", "topmost", "syncOut", "copyNl" };
 
             private static bool ReadBool(string key, bool def)
             {
@@ -867,15 +903,34 @@ namespace RichTextGen
                 catch { return def; }
             }
 
+            /// <summary>只覆盖 json 里出现的键，其余保持原值（前端每次只报变化的那一项）。</summary>
             public static void Save(string json)
             {
                 try
                 {
-                    Match m = Regex.Match(json ?? "", "\"gpu\"\\s*:\\s*(true|false)", RegexOptions.IgnoreCase);
-                    if (!m.Success) return;
-                    bool gpu = m.Groups[1].Value.Equals("true", StringComparison.OrdinalIgnoreCase);
-                    File.WriteAllText(FilePath, "{\"gpu\":" + (gpu ? "true" : "false") + "}",
-                                      new UTF8Encoding(false));
+                    bool changed = false;
+                    Dictionary<string, bool> vals = new Dictionary<string, bool>();
+                    foreach (string k in Keys) vals[k] = ReadBool(k, k == "gpu");
+
+                    foreach (string k in Keys)
+                    {
+                        Match m = Regex.Match(json ?? "", "\"" + k + "\"\\s*:\\s*(true|false)", RegexOptions.IgnoreCase);
+                        if (!m.Success) continue;
+                        vals[k] = m.Groups[1].Value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                        changed = true;
+                    }
+                    if (!changed) return;
+
+                    StringBuilder sb = new StringBuilder("{");
+                    bool first = true;
+                    foreach (string k in Keys)
+                    {
+                        if (!first) sb.Append(',');
+                        first = false;
+                        sb.Append('"').Append(k).Append("\":").Append(vals[k] ? "true" : "false");
+                    }
+                    sb.Append('}');
+                    File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
                 }
                 catch { }
             }
@@ -1129,6 +1184,7 @@ namespace RichTextGen
                     }
                     CallStr("aiSettings", AiConfig.ToJson());
                     LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
+                    Call("syncState", SyncStateJson());   // 置顶 / 同步输出 / 换行开关的当前状态
 
                     // Live2D：把模型列表与配置回传（只主窗口显示，副窗口不重复出角色）
                     if (!_secondary)
@@ -1218,6 +1274,14 @@ namespace RichTextGen
                 case "newWindow": TearTab("{}"); break;         // 文件 → 新建窗口
                 case "openRecent": OpenPath(Un(arg)); break;    // 文件 → 最近使用
                 case "uiPrefs": UIPrefs.Save(Un(arg)); break;   // 界面偏好（GPU 开关等）
+                case "setTopmost": SetTopmost(arg == "1"); break;
+                case "setSyncOut": SetSyncOut(arg == "1"); break;
+                case "syncTarget": RecordForeground(); Call("syncState", SyncStateJson()); break;
+                case "syncSend": SyncOutput(Un(arg)); break;
+                case "setCopyNl":
+                    UIPrefs.Save("{\"copyNl\":" + (arg == "1" ? "true" : "false") + "}");
+                    CallStr("status", arg == "1" ? "复制时会用字面量 \\n 代替换行" : "复制时保持真实换行");
+                    break;
                 case "dirty": { int dn; if (int.TryParse(arg, out dn)) _dirtyCount = dn; break; }
                 case "musicHost": MusicHost(Un(arg)); break;    // 拖入音乐 → 生成本地 URL
                 case "musicPick": MusicPick(); break;           // 点按钮选音乐文件
@@ -1299,7 +1363,13 @@ namespace RichTextGen
                 case "easterEgg": PlayNetSound(); break;
                 case "uninstall": UninstallApp(); break;
                 case "exportHtml": ExportHtml(Un(arg)); break;
-                case "copy": try { Clipboard.SetText(Un(arg)); CallStr("status", "已复制到剪贴板"); } catch { } break;
+                case "copy":
+                {
+                    string txt = Un(arg);
+                    try { Clipboard.SetText(txt); CallStr("status", "已复制到剪贴板"); } catch { }
+                    if (_syncOut) SyncOutput(txt);   // 开了同步输出时，复制同时也粘贴到目标窗口
+                    break;
+                }
             }
         }
 
@@ -1860,6 +1930,112 @@ namespace RichTextGen
             }
             return end >= start;
         }
+
+        // ============================================================ 置顶 / 同步输出
+        private void SetTopmost(bool on)
+        {
+            try { TopMost = on; } catch { }
+            UIPrefs.Save("{\"topmost\":" + (on ? "true" : "false") + "}");
+            Call("syncState", SyncStateJson());
+            CallStr("status", on ? "窗口已置顶：始终显示在其他窗口之前" : "已取消窗口置顶");
+        }
+
+        private void SetSyncOut(bool on)
+        {
+            _syncOut = on;
+            UIPrefs.Save("{\"syncOut\":" + (on ? "true" : "false") + "}");
+            if (on && (_lastExternal == IntPtr.Zero || !IsWindow(_lastExternal))) RecordForeground();
+            Call("syncState", SyncStateJson());
+            CallStr("status", on
+                ? "已开启同步输出：生成后会把结果自动粘贴到最近点击的窗口"
+                : "已关闭同步输出");
+        }
+
+        private string SyncStateJson()
+        {
+            return "{\"enabled\":" + (_syncOut ? "true" : "false") +
+                   ",\"topmost\":" + (TopMost ? "true" : "false") +
+                   ",\"copyNl\":" + (UIPrefs.CopyNl ? "true" : "false") +
+                   ",\"target\":" + Quote(_lastExternalTitle) + "}";
+        }
+
+        /// <summary>0.5 秒记一次前台窗口。本进程的窗口会被跳过，所以「最后点过的外部窗口」一直保留。</summary>
+        private void StartForegroundWatch()
+        {
+            _fgTimer = new System.Windows.Forms.Timer();
+            _fgTimer.Interval = 500;
+            _fgTimer.Tick += delegate { RecordForeground(); };
+            _fgTimer.Start();
+            FormClosed += delegate
+            {
+                try { _fgTimer.Stop(); _fgTimer.Dispose(); } catch { }
+            };
+        }
+
+        private void RecordForeground()
+        {
+            try
+            {
+                IntPtr fg = GetForegroundWindow();
+                if (fg == IntPtr.Zero || fg == Handle) return;
+                uint pid;
+                GetWindowThreadProcessId(fg, out pid);
+                if (pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id) return;   // 本程序的另一个窗口也不算
+                if (!IsWindowVisible(fg)) return;
+                int len = GetWindowTextLength(fg);
+                if (len <= 0) return;
+                StringBuilder sb = new StringBuilder(len + 2);
+                if (GetWindowText(fg, sb, sb.Capacity) <= 0) return;
+                string title = sb.ToString().Trim();
+                if (title.Length == 0 || title == "Program Manager") return;
+                _lastExternal = fg;
+                _lastExternalTitle = title;
+            }
+            catch { }
+        }
+
+        /// <summary>把文字粘到最近点击的外部窗口：先写剪贴板，再切回目标窗口按 Ctrl+V。</summary>
+        private void SyncOutput(string text)
+        {
+            if (!_syncOut) return;
+            if (text == null || text.Length == 0) { CallStr("status", "同步输出：没有可发送的文字"); return; }
+
+            IntPtr target = _lastExternal;
+            if (target == IntPtr.Zero || !IsWindow(target))
+            {
+                CallStr("status", "同步输出：还没有目标窗口，请先点一下要接收文字的窗口");
+                return;
+            }
+            // 连续改颜色时避免 0.5 秒内重复粘贴同一份内容
+            if (text == _lastSent && (DateTime.Now - _lastSentAt).TotalMilliseconds < 1200) return;
+            _lastSent = text;
+            _lastSentAt = DateTime.Now;
+            string title = _lastExternalTitle;
+
+            try { Clipboard.SetText(text); }
+            catch
+            {
+                try { Thread.Sleep(60); Clipboard.SetText(text); }
+                catch (Exception ex) { CallStr("status", "同步输出失败（剪贴板被占用）：" + ex.Message); return; }
+            }
+
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    if (IsIconic(target)) ShowWindow(target, 9);   // SW_RESTORE
+                    SetForegroundWindow(target);
+                    Thread.Sleep(150);
+                    keybd_event(0x11, 0, 0, IntPtr.Zero);          // Ctrl 按下
+                    keybd_event(0x56, 0, 0, IntPtr.Zero);          // V 按下
+                    keybd_event(0x56, 0, 2, IntPtr.Zero);          // V 抬起
+                    keybd_event(0x11, 0, 2, IntPtr.Zero);          // Ctrl 抬起
+                    CallStr("status", "已同步到窗口：" + title);
+                }
+                catch (Exception ex) { CallStr("status", "同步输出失败：" + ex.Message); }
+            });
+        }
+
 
         /// <summary>JS 侧对含中文/换行的载荷统一做了 encodeURIComponent，这里还原</summary>
         private static string Un(string s)

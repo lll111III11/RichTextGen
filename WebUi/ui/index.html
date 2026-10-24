@@ -58,6 +58,10 @@
         border-radius:var(--r4);font-size:13px;cursor:pointer}
   .wbtn:hover{background:var(--hover)}
   .wbtn.close:hover{background:#c42b1c;color:#fff}
+  .wbtn.pin{font-size:13px;opacity:.45;transition:opacity .15s ease,background-color .15s ease}
+  .wbtn.pin:hover{opacity:.85}
+  .wbtn.pin.on{opacity:1;color:var(--accent);background:var(--hover);
+              filter:drop-shadow(0 0 5px rgba(110,168,255,.45))}
   /* 主体 */
   #main{flex:1;display:flex;min-height:0;padding:0 12px 12px;gap:12px}
   /* 工作台功能区：横排在工作区上方，保持单行，窄了横向滚动 */
@@ -438,6 +442,7 @@ try{
   <div class="sp"></div>
   <button id="upBtn" class="upbtn" onclick="host('doUpdate')">⬆ 更新到 <span id="upVer"></span></button>
   <div class="sp"></div>
+  <button id="pinBtn" class="wbtn pin" title="窗口置顶：始终显示在其他窗口之前（类似任务管理器）" onclick="togglePin()">📌</button>
   <button class="wbtn" onclick="zoomPulse();host('minimize')">—</button>
   <button class="wbtn" onclick="zoomPulse();host('maximize')">▢</button>
   <button class="wbtn close" onclick="host('close')">✕</button>
@@ -611,7 +616,8 @@ try{
         <h3>生成的代码</h3>
         <textarea id="out" readonly></textarea>
         <div class="row" style="margin-top:10px">
-          <button class="b p" onclick="host('copy|'+encodeURIComponent(out.value))">复制代码</button>
+          <button class="b p" onclick="copyOut()">复制代码</button>
+          <button class="b" onclick="syncOutNow()" title="把生成的代码粘贴到最近点击的那个窗口">同步到窗口</button>
           <button class="b" onclick="host('exportHtml|'+encodeURIComponent(out.value))">导出 HTML（浏览器预览）</button>
           <span class="stat"><span>字符数 <b id="len">0</b></span><span>标签数 <b id="tagc">0</b></span></span>
         </div>
@@ -735,6 +741,19 @@ try{
         <div class="row"><span class="hint">支持图片 PNG / JPG / BMP / GIF / WebP / AVIF / SVG 与视频 MP4 / WebM / OGV / MOV / MKV / AVI（视频能否解码取决于 WebView2 内置的 Chromium，推荐 MP4 H.264）。网络地址会先下载到本机再启用，离线也能继续用，且图片 / 视频都静音、自动循环。</span></div>
         <div class="row"><span class="hint">开启后背景铺在内容下方，通过半透明面板像水印一样透出来，不会盖住文字；文件保存在本机 <code>%APPDATA%\RichTextGen</code>，不会上传。</span></div>
       </div>
+      <div class="card"><h3>输出与同步</h3>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="copyNl" onchange="setCopyNl(this.checked)"> 复制时把换行转成 \n</label>
+          <span class="hint">打开后点「复制代码」得到一整行，行与行之间用字面量 \n 连接；默认关闭</span></div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="syncOut" onchange="setSyncOut(this.checked)"> 同步输出到最近点击的窗口</label>
+          <button class="b" onclick="host('syncTarget')">刷新目标窗口</button>
+          <span class="hint" id="syncTip">当前目标：未记录</span></div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="winTop" onchange="setWinTop(this.checked)"> 窗口始终置顶</label>
+          <span class="hint">与标题栏 📌 相同：本窗口显示在所有窗口之前，像任务管理器一样不会被遮挡</span></div>
+        <div class="row"><span class="hint">同步输出：先点一下要接收文字的窗口（游戏聊天框、记事本等），再回到本程序。启用后「复制代码」「同步到窗口」以及给选区套颜色，都会把结果自动粘贴到那个窗口；默认关闭。</span></div>
+      </div>
       <div class="card"><h3>⚡ 快捷组件与全局热键</h3>
         <div class="row"><span class="hint" id="hotkeyInfo">热键状态读取中…</span>
           <button class="b" onclick="host('registerHotkeys')">重新注册</button>
@@ -832,7 +851,9 @@ try{
       </div>
       <div class="card"><h3>更新</h3>
         <div class="row"><button class="b" onclick="host('checkUpdate')">立即检测更新</button>
+          <button class="b" onclick="host('openUrl|https://richtextgen-dl.pages.dev/')">打开下载页</button>
           <span class="hint" id="upInfo"></span></div>
+        <div class="row"><span class="hint">下载页同时提供安装版、免安装版与使用手册，也可从 GitHub Releases 下载。</span></div>
       </div>
       <div class="card"><h3>关于</h3>
         <div class="stat"><span>产品 <b>Rich text &amp; multifunctional tool</b></span>
@@ -3933,6 +3954,8 @@ host('ready');
       { sep: true },
       { t: '状态栏',            k: '', checked: () => ViewOpt.sb,   fn: () => { ViewOpt.sb = !ViewOpt.sb; viewApply(); } },
       { t: '自动换行',          k: '', checked: () => ViewOpt.wrap, fn: () => { ViewOpt.wrap = !ViewOpt.wrap; viewApply(); } },
+      { t: '窗口置顶',          k: '', checked: () => winPinned,    fn: () => { togglePin(); } },
+      { t: '同步输出到目标窗口', k: '', checked: () => { const c = document.getElementById('syncOut'); return !!(c && c.checked); }, fn: () => { const c = document.getElementById('syncOut'); if (c) { c.checked = !c.checked; setSyncOut(c.checked); } } },
       { sep: true },
       { t: 'Markdown',          k: '', disabled: true, sub: [ { t: '预览（即将支持）', disabled: true } ] }
     ],
@@ -4691,7 +4714,7 @@ const EdMode = (function(){
   }
   // 有选区 → 把该控件对应的样式套到选区；无选区 → 维持原有「整段生成」
   function genOrApply(aspect){
-    if (hasSel() && applyToSel(aspect)){ refreshCard(); return; }
+    if (hasSel() && applyToSel(aspect)){ refreshCard(); syncEditorNow(); return; }
     gen();
   }
 
@@ -5498,6 +5521,10 @@ function setGpuAccel(on){
   host('uiPrefs|' + encodeURIComponent(JSON.stringify({ gpu: !!on })));
   status('GPU 加速已' + (on ? '开启' : '关闭') + '，重启程序后生效');
 }
+/* ---------- 置顶 / 同步输出 / 复制换行（状态要先声明，uiInit 会用到） ---------- */
+var winPinned = false;
+var copyNlState = false;
+
 function uiInit(){
   let nav = 'top', motion = 'full', gpu = true;
   try { nav = localStorage.getItem('rtg.navLayout') || 'top'; } catch(e){}
@@ -5508,8 +5535,74 @@ function uiInit(){
   const nv = document.getElementById('navLayout'); if (nv) nv.value = document.body.dataset.nav;
   const mv = document.getElementById('motionLevel'); if (mv) mv.value = motion;
   const gv = document.getElementById('gpuAccel'); if (gv) gv.checked = gpu;
+  let pin = false;
+  try { pin = localStorage.getItem('rtg.pin') === '1'; } catch(e){}
+  pinApply(pin);
+  try { copyNlState = localStorage.getItem('rtg.copyNl') === '1'; } catch(e){}
 }
 uiInit();
+
+function pinApply(on){
+  winPinned = !!on;
+  const b = document.getElementById('pinBtn');
+  if (b){
+    b.classList.toggle('on', winPinned);
+    b.title = winPinned ? '已置顶，点击取消' : '窗口置顶：始终显示在其他窗口之前（类似任务管理器）';
+  }
+  try { localStorage.setItem('rtg.pin', winPinned ? '1' : '0'); } catch(e){}
+}
+function togglePin(){
+  pinApply(!winPinned);
+  host('setTopmost|' + (winPinned ? '1' : '0'));
+}
+function setWinTop(on){
+  pinApply(on);
+  host('setTopmost|' + (on ? '1' : '0'));
+}
+function setSyncOut(on){
+  host('setSyncOut|' + (on ? '1' : '0'));
+}
+function setCopyNl(on){
+  copyNlState = !!on;
+  try { localStorage.setItem('rtg.copyNl', on ? '1' : '0'); } catch(e){}
+  host('setCopyNl|' + (on ? '1' : '0'));
+}
+/* 复制用的文本：开了「换行转 \n」就压成一行 */
+function outForCopy(){
+  const el = document.getElementById('out');
+  const s = el ? el.value : '';
+  if (!copyNlState) return s;
+  return s.replace(/\r\n/g, '\n').replace(/\n/g, '\\n');
+}
+function copyOut(){ host('copy|' + encodeURIComponent(outForCopy())); }
+function syncOutNow(){ host('syncSend|' + encodeURIComponent(outForCopy())); }
+/* 给选区套完颜色后，把整篇正文同步到目标窗口（没开同步时宿主会直接忽略） */
+function syncEditorNow(){
+  let s = '';
+  try {
+    const src = document.getElementById('edSrc');
+    if (typeof EdMode !== 'undefined' && EdMode.current && EdMode.current() === 'rich' &&
+        typeof EdMode.serializeNow === 'function') s = EdMode.serializeNow();
+    else s = src ? src.value : '';
+  } catch(e){ s = ''; }
+  if (s) host('syncSend|' + encodeURIComponent(s));
+}
+
+/* 宿主回报的开关状态（启动与每次切换后各来一次） */
+window.ui.syncState = function(o){
+  if (!o) return;
+  winPinned = !!o.topmost;
+  const pin = document.getElementById('pinBtn');
+  if (pin) pin.classList.toggle('on', winPinned);
+  const so = document.getElementById('syncOut'); if (so) so.checked = !!o.enabled;
+  const cn = document.getElementById('copyNl'); if (cn) cn.checked = !!o.copyNl;
+  const wt = document.getElementById('winTop'); if (wt) wt.checked = !!o.topmost;
+  const tip = document.getElementById('syncTip');
+  if (tip) tip.textContent = o.enabled
+    ? '目标窗口：' + (o.target || '尚未记录，请先点一下要接收文字的窗口')
+    : '当前目标：' + (o.target || '未记录');
+};
+
 </script>
 </body>
 </html>

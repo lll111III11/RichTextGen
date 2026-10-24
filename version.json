@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.0.15",
+    "version":  "5.9.0.16",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.15/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.15/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.16/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.0.16/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.0.15 更新（背景视频 + 网络背景）：\n· 【背景视频】设置 → 外观 → 背景水印 现在可以直接选视频：MP4 / WebM / OGV / MOV / MKV / AVI，静音自动循环，像水印一样铺在内容最下层（推荐 MP4 H.264，能否解码取决于系统的 WebView2）\n· 【更多格式】图片新增 AVIF / SVG；图片上限 16MB，视频上限 48MB\n· 【网络背景】新增「网络背景」输入框：粘贴图片或视频直链，会自动下载到本机再启用，离线也能继续用；可选只应用到深色 / 亮色 / 两者\n· 【每日壁纸】一键获取 Bing 每日图作为背景\n· 背景视频走本地虚拟源 + Range 播放，循环与拖动都不额外占内存",
+    "notes":  "v5.9.0.16 更新（置顶 + 同步输出 + 复制换行）：\n· 【窗口置顶】标题栏新增 📌 按钮，也可在「查看」菜单或设置里切换；开启后本窗口像任务管理器一样始终显示在其他窗口之前，下次启动自动恢复\n· 【同步输出】先点一下要接收文字的窗口（游戏聊天框、记事本等），再回到本程序开启此项；之后「复制代码」「同步到窗口」以及给选区套颜色，都会把结果自动粘贴到那个窗口\n· 【复制换行】设置里新增开关，默认关闭；打开后复制代码会把真实换行转成字面量 \\n，方便部分游戏聊天框\n· 【更新入口】设置 → 更新 里补上「打开下载页」按钮，检测更新旁边直接跳转",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
