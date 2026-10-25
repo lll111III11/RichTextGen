@@ -21,7 +21,7 @@
   html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--text);
        font:14px/1.6 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif;
-       display:flex;flex-direction:column;overflow:hidden;user-select:none}
+       display:flex;flex-direction:column;overflow:hidden;user-select:none;position:relative}
   /* 主题切换过渡：只过渡颜色类属性，深浅色切换不再「硬切」 */
   body, body *{
     transition: background-color .26s ease, color .26s ease, border-color .26s ease,
@@ -450,8 +450,22 @@
   /* 排版模式：控件不可操作，卡片可拖动 */
   body.layout-mode #pages .card{outline:1px dashed var(--accent);cursor:move;transition:none}
   body.layout-mode #pages .card *{pointer-events:none!important}
+  body.layout-mode #menubar *,
+  body.layout-mode #tabBar *,
+  body.layout-mode #mainEditor *,
+  body.layout-mode #ws *,
+  body.layout-mode #statusbar *{pointer-events:none!important}
+  /* 卡片本身仍要能拖（它在上面的容器里） */
+  body.layout-mode #pages .page.on>.card{pointer-events:auto!important}
+  body.layout-free #menubar,
+  body.layout-free #tabBar,
+  body.layout-free #mainEditor,
+  body.layout-free #ws,
+  body.layout-free #statusbar{outline:1px dashed var(--accent);cursor:move}
   body.layout-free .page.on{position:relative;min-height:1200px;display:block!important}
   body.layout-free .page.on>.card{position:absolute;margin:0}
+  body.layout-free #main{display:block;padding:0;min-height:0}
+  body.layout-free #splitter{display:none!important}
   #layoutBar{display:none;position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;
              background:var(--cardA);border:1px solid var(--line);border-radius:12px;padding:8px 14px;gap:10px;
              align-items:center;box-shadow:0 8px 28px rgba(0,0,0,.25);backdrop-filter:blur(10px)}
@@ -820,8 +834,9 @@ try{
           <button class="b p" onclick="LayoutMode.enter(false)">进入排版模式</button>
           <button class="b" onclick="LayoutMode.enter(true)">自由摆放</button>
           <button class="b" onclick="LayoutMode.reset()">恢复默认布局</button>
-          <span class="hint">排版模式下所有选项不可操作，只能拖动卡片；保存后立即生效</span>
+          <span class="hint">排版模式下所有选项不可操作，只能拖动</span>
         </div>
+        <div class="row"><span class="hint">排序模式：拖动卡片调整上下顺序。<br>自由摆放：菜单栏、标签栏、编辑区、工作台、状态栏以及工作台里的每张卡片都能拖到任意位置，顶部标题栏（图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭）保持固定。<br>自由摆放时可开启「网格对齐」，拖动会自动吸附到不可见的网格；关掉即可完全自由摆放。窗口缩放时布局按比例跟着缩放，保存后一直生效。</span></div>
       </div>
       <div class="card"><h3>输出与同步</h3>
         <div class="row">
@@ -1139,6 +1154,11 @@ try{
 <div id="layoutBar">
   <b>排版模式</b>
   <label class="chk"><input type="checkbox" id="layoutFree" onchange="LayoutMode.setFree(this.checked)"> 自由摆放</label>
+  <label class="chk" id="gridWrap"><input type="checkbox" id="layoutGrid" checked onchange="LayoutMode.setGrid(this.checked)"> 网格对齐</label>
+  <select id="layoutGridSize" onchange="LayoutMode.setGridSize(this.value)" title="网格大小（隐形）">
+    <option value="8">8px</option><option value="10" selected>10px</option>
+    <option value="16">16px</option><option value="20">20px</option>
+  </select>
   <button class="b p" onclick="LayoutMode.saveNow()">保存布局</button>
   <button class="b" onclick="LayoutMode.cancel()">退出</button>
 </div>
@@ -5938,15 +5958,68 @@ function uiDesignApply(){
   });
 })();
 
-/* ---------- 排版模式：拖动排序 / 自由摆放 ---------- */
+/* ---------- 排版模式：拖动排序 / 整窗自由摆放（隐形网格吸附） ---------- */
 const LayoutMode = (function(){
+  // 可自由移动的整块区域（标题栏的图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭 始终锁定）
+  const UNITS = ['menubar', 'tabBar', 'mainEditor', 'ws', 'statusbar'];
+  const ROOT_KEY = 'rtg.layout.root';
   let on = false, free = false, start = null;
+  let grid = true, gridSize = 10;
 
   function page(){ return document.querySelector('#pages .page.on'); }
   function cards(){ return page() ? Array.from(page().children).filter(function(e){ return e.classList.contains('card'); }) : []; }
   function keyOf(c){ const h = c.querySelector('h3'); return h ? h.textContent.trim().slice(0, 50) : ''; }
   function storeKey(p){ return 'rtg.layout.' + p; }
+  function unitEl(id){ return document.getElementById(id); }
+  function snap(v){ return grid ? Math.round(v / gridSize) * gridSize : Math.round(v); }
 
+  function loadRoot(){
+    try { return JSON.parse(localStorage.getItem(ROOT_KEY) || 'null'); } catch(e){ return null; }
+  }
+  function saveRoot(d){
+    try { localStorage.setItem(ROOT_KEY, JSON.stringify(d)); } catch(e){}
+  }
+  function bodySize(){
+    return { w: Math.max(1, document.body.clientWidth), h: Math.max(1, document.body.clientHeight) };
+  }
+
+  /* 把保存的整窗布局套回去（窗口大小变化时按比例缩放） */
+  function applyRoot(){
+    const lay = loadRoot();
+    if (!lay || !lay.units){ return false; }
+    const bs = bodySize();
+    const sx = lay.vw ? bs.w / lay.vw : 1;
+    const sy = lay.vh ? bs.h / lay.vh : 1;
+    UNITS.forEach(function(id){
+      const el = unitEl(id); if (!el) return;
+      const u = lay.units[id];
+      if (!u){
+        el.style.position = ''; el.style.left = ''; el.style.top = '';
+        el.style.width = ''; el.style.height = ''; el.style.zIndex = '';
+        return;
+      }
+      el.style.position = 'absolute';
+      el.style.left = Math.max(0, Math.round(u.x * sx)) + 'px';
+      el.style.top = Math.max(0, Math.round(u.y * sy)) + 'px';
+      if (u.w) el.style.width = Math.max(120, Math.round(u.w * sx)) + 'px';
+      if (u.h) el.style.height = Math.max(40, Math.round(u.h * sy)) + 'px';
+    });
+    const sp = document.getElementById('splitter');
+    if (sp) sp.style.display = 'none';
+    return true;
+  }
+
+  function clearRoot(){
+    UNITS.forEach(function(id){
+      const el = unitEl(id); if (!el) return;
+      el.style.position = ''; el.style.left = ''; el.style.top = '';
+      el.style.width = ''; el.style.height = ''; el.style.zIndex = '';
+    });
+    const sp = document.getElementById('splitter');
+    if (sp) sp.style.display = '';
+  }
+
+  /* 页面内卡片的顺序 / 自由坐标 */
   function apply(p){
     const pg = document.getElementById('p-' + p); if (!pg) return;
     let d = null;
@@ -5977,6 +6050,18 @@ const LayoutMode = (function(){
   }
   function applyAll(){ ['work', 'set'].forEach(apply); }
 
+  function recordUnits(){
+    UNITS.forEach(function(id){
+      const el = unitEl(id); if (!el) return;
+      const r = el.getBoundingClientRect();
+      el.style.position = 'absolute';
+      el.style.left = Math.round(r.left) + 'px';
+      el.style.top = Math.round(r.top) + 'px';
+      el.style.width = Math.round(r.width) + 'px';
+      el.style.height = Math.round(r.height) + 'px';
+    });
+  }
+
   function enter(f){
     on = true; free = !!f;
     document.body.classList.add('layout-mode');
@@ -5984,23 +6069,29 @@ const LayoutMode = (function(){
     else document.body.classList.remove('layout-free');
     document.getElementById('layoutBar').style.display = 'flex';
     const chk = document.getElementById('layoutFree'); if (chk) chk.checked = free;
+    const gw = document.getElementById('gridWrap'); if (gw) gw.style.display = free ? 'inline-flex' : 'none';
+
     if (free){
+      recordUnits();
       const pg = page();
-      if (!pg) return;
-      pg.style.position = 'relative';
-      const pr = pg.getBoundingClientRect();
-      cards().forEach(function(c){
-        const r = c.getBoundingClientRect();
-        c.style.position = 'absolute';
-        c.style.left = (r.left - pr.left) + 'px';
-        c.style.top = (r.top - pr.top + pg.scrollTop) + 'px';
-        c.style.width = r.width + 'px';
-      });
+      if (pg){
+        pg.style.position = 'relative';
+        const pr = pg.getBoundingClientRect();
+        cards().forEach(function(c){
+          const r = c.getBoundingClientRect();
+          c.style.position = 'absolute';
+          c.style.left = Math.round(r.left - pr.left) + 'px';
+          c.style.top = Math.round(r.top - pr.top + pg.scrollTop) + 'px';
+          c.style.width = Math.round(r.width) + 'px';
+        });
+      }
+      status('自由摆放：拖动菜单栏 / 标签栏 / 编辑区 / 工作台 / 状态栏与卡片；网格对齐' + (grid ? '已开启（' + gridSize + 'px）' : '已关闭'));
+    } else {
+      status('排版模式：拖动卡片调整顺序，完成后点「保存布局」');
     }
-    status('排版模式：拖动卡片' + (free ? '调整位置' : '调整顺序') + '，完成后点「保存布局」');
   }
 
-  function clearStyles(){
+  function clearCardStyles(){
     const pg = page(); if (!pg) return;
     pg.style.position = ''; pg.style.minHeight = '';
     cards().forEach(function(c){
@@ -6012,56 +6103,122 @@ const LayoutMode = (function(){
     on = false;
     document.body.classList.remove('layout-mode', 'layout-free');
     document.getElementById('layoutBar').style.display = 'none';
-    clearStyles();
+    clearCardStyles();
+    if (!applyRoot()) clearRoot();
     applyAll();
   }
 
   function saveNow(){
-    const pg = page(); if (!pg) return;
-    const p = pg.id.replace('p-', '');
-    const order = cards().map(keyOf);
-    let freeMap = null, minH = 0;
+    const pg = page();
     if (free){
-      freeMap = {};
-      cards().forEach(function(c){
-        const x = parseInt(c.style.left || '0', 10);
-        const y = parseInt(c.style.top || '0', 10);
-        freeMap[keyOf(c)] = { x: x, y: y, w: c.offsetWidth, h: c.offsetHeight };
-        minH = Math.max(minH, y + c.offsetHeight + 40);
+      const bs = bodySize();
+      const units = {};
+      UNITS.forEach(function(id){
+        const el = unitEl(id); if (!el) return;
+        if (!el.style.position) return;
+        const x = parseInt(el.style.left || '0', 10);
+        const y = parseInt(el.style.top || '0', 10);
+        units[id] = { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
       });
+      saveRoot({ vw: bs.w, vh: bs.h, units: units });
     }
-    try { localStorage.setItem(storeKey(p), JSON.stringify({ order: order, free: freeMap, minH: minH })); } catch(e){}
+    if (pg){
+      const p = pg.id.replace('p-', '');
+      const order = cards().map(keyOf);
+      let freeMap = null, minH = 0;
+      if (free){
+        freeMap = {};
+        cards().forEach(function(c){
+          const x = parseInt(c.style.left || '0', 10);
+          const y = parseInt(c.style.top || '0', 10);
+          freeMap[keyOf(c)] = { x: x, y: y, w: c.offsetWidth, h: c.offsetHeight };
+          minH = Math.max(minH, y + c.offsetHeight + 40);
+        });
+      }
+      try { localStorage.setItem(storeKey(p), JSON.stringify({ order: order, free: freeMap, minH: minH })); } catch(e){}
+    }
     exit();
     status('布局已保存');
   }
 
   function cancel(){ exit(); status('已退出排版模式（未保存）'); }
-
   function setFree(f){ if (!on) return; if (f !== free) enter(f); }
+
+  function setGrid(v){
+    grid = !!v;
+    try { localStorage.setItem('rtg.layoutGrid', grid ? '1' : '0'); } catch(e){}
+    const gw = document.getElementById('gridWrap');
+    if (gw) gw.style.display = free ? 'inline-flex' : 'none';
+    status('网格对齐' + (grid ? '已开启（' + gridSize + 'px，网格不可见）' : '已关闭，可任意摆放'));
+  }
+  function setGridSize(v){
+    gridSize = Math.max(2, parseInt(v, 10) || 10);
+    try { localStorage.setItem('rtg.layoutGridSize', String(gridSize)); } catch(e){}
+    status('网格大小：' + gridSize + 'px（不可见）');
+  }
 
   function reset(){
     ['work', 'set'].forEach(function(p){ try { localStorage.removeItem(storeKey(p)); } catch(e){} });
-    if (on) exit(); else applyAll();
+    try { localStorage.removeItem(ROOT_KEY); } catch(e){}
+    if (on) exit(); else { clearRoot(); applyAll(); }
     status('已恢复默认布局');
+  }
+
+  /* ---------- 拖动 ---------- */
+  function beginUnit(el, e){
+    const r = el.getBoundingClientRect();
+    el.style.position = 'absolute';
+    el.style.left = Math.round(r.left) + 'px';
+    el.style.top = Math.round(r.top) + 'px';
+    el.style.width = Math.round(r.width) + 'px';
+    el.style.height = Math.round(r.height) + 'px';
+    el.style.zIndex = '50';
+    start = { type: 'unit', el: el, x: e.clientX, y: e.clientY, ox: r.left, oy: r.top };
+  }
+  function beginCard(c, e){
+    const pg = c.parentElement, pr = pg.getBoundingClientRect(), r = c.getBoundingClientRect();
+    start = { type: 'card', el: c, x: e.clientX, y: e.clientY,
+              ox: r.left - pr.left, oy: r.top - pr.top + pg.scrollTop };
   }
 
   document.addEventListener('pointerdown', function(e){
     if (!on) return;
-    const c = e.target.closest('#pages .page.on > .card'); if (!c) return;
-    e.preventDefault();
-    const pg = c.parentElement, pr = pg.getBoundingClientRect(), r = c.getBoundingClientRect();
-    start = { c: c, x: e.clientX, y: e.clientY, ox: r.left - pr.left, oy: r.top - pr.top + pg.scrollTop };
-    try { c.setPointerCapture(e.pointerId); } catch(err){}
-  });
+    if (e.target.closest('#titlebar')) return;      // 标题栏锁定：图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭
+    if (e.target.closest('#layoutBar')) return;     // 浮动条本身可点
+
+    const c = e.target.closest('#pages .page.on > .card');
+    if (c){
+      e.preventDefault();
+      if (free) beginCard(c, e); else beginCard(c, e);
+      try { c.setPointerCapture(e.pointerId); } catch(err){}
+      return;
+    }
+    if (free){
+      const el = UNITS.map(unitEl).filter(Boolean).find(function(u){ return u.contains(e.target); });
+      if (el){
+        e.preventDefault();
+        beginUnit(el, e);
+        try { el.setPointerCapture(e.pointerId); } catch(err){}
+      }
+    }
+  }, true);
 
   document.addEventListener('pointermove', function(e){
     if (!start) return;
-    const c = start.c, pg = c.parentElement;
+    if (start.type === 'unit'){
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      const l = Math.max(0, snap(start.ox + dx));
+      const t = Math.max(0, snap(start.oy + dy));
+      start.el.style.left = l + 'px';
+      start.el.style.top = t + 'px';
+      return;
+    }
+    const c = start.el, pg = c.parentElement;
     if (free){
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
       c.style.position = 'absolute';
-      c.style.left = Math.max(0, start.ox + dx) + 'px';
-      c.style.top = Math.max(0, start.oy + dy) + 'px';
+      c.style.left = Math.max(0, snap(start.ox + dx)) + 'px';
+      c.style.top = Math.max(0, snap(start.oy + dy)) + 'px';
       c.style.width = c.offsetWidth + 'px';
     } else {
       if (Math.abs(e.clientY - start.y) < 8) return;
@@ -6078,12 +6235,37 @@ const LayoutMode = (function(){
     }
   });
 
-  document.addEventListener('pointerup', function(){ start = null; });
+  document.addEventListener('pointerup', function(){
+    if (start && start.type === 'unit') start.el.style.zIndex = '';
+    start = null;
+  });
   document.addEventListener('pointercancel', function(){ start = null; });
+  document.addEventListener('keydown', function(e){
+    if (on && e.key === 'Escape'){ e.preventDefault(); cancel(); }
+  });
+  window.addEventListener('resize', function(){ if (!on) applyRoot(); });
 
-  return { enter: enter, setFree: setFree, saveNow: saveNow, cancel: cancel, reset: reset, applyAll: applyAll };
+  /* 恢复上次的网格选项 */
+  try {
+    const g = localStorage.getItem('rtg.layoutGrid');
+    if (g !== null) grid = (g === '1');
+    const gs = localStorage.getItem('rtg.layoutGridSize');
+    if (gs) gridSize = Math.max(2, parseInt(gs, 10) || 10);
+  } catch(e){}
+
+  return {
+    enter: enter, setFree: setFree, saveNow: saveNow, cancel: cancel, reset: reset,
+    setGrid: setGrid, setGridSize: setGridSize, applyAll: applyAll, applyRoot: applyRoot
+  };
 })();
 
+try {
+  const gi = document.getElementById('layoutGrid');
+  if (gi) gi.checked = (localStorage.getItem('rtg.layoutGrid') !== '0');
+  const gs = document.getElementById('layoutGridSize');
+  if (gs) gs.value = localStorage.getItem('rtg.layoutGridSize') || '10';
+} catch(e){}
+try { LayoutMode.applyRoot(); } catch(e){}
 try { LayoutMode.applyAll(); } catch(e){}
 
 

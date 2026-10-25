@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.0",
+    "version":  "5.10.0.1",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.0/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.0/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.1/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.1/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.0 更新（大瘦身 + 排版模式）：\\n· OCR 拆分为桌面独立应用「RichTextGen OCR」，主程序移除 Tesseract，安装包回到约 2MB\\n· 移除：最小化功能（修复窗口无法显示）、Live2D、在线翻译、图片系统、AI 页面与对话窗口、Android 公告；音乐并入设置\\n· 新增：切换标签页会记住每页滚动位置，切回来不再跳回顶部\\n· 新增：排版与主题（紧凑/舒适/宽松、单栏/双栏、蓝/护眼绿/灰配色）\\n· 新增：排版模式——选项全部不可操作，可拖动卡片排序或自由摆放，保存到本机\\n· 强制刷新、同步输出、窗口置顶、音乐播放列表继续保留",
+    "notes":  "v5.10.0.1 更新（自由排版 + 网格对齐）：\\n· 自由摆放升级为整窗排版：菜单栏、标签栏、编辑区、工作台、状态栏以及工作台内每张卡片都能拖到任意位置\\n· 标题栏的图标、名称、版本号与置顶 / 最大化 / 关闭按钮保持固定，不会被误拖\\n· 新增「网格对齐」开关与网格尺寸（8/10/16/20px）：开启后拖动自动吸附到不可见网格，关闭即完全自由\\n· 布局保存到本机，窗口缩放时按比例同步缩放；设置里可一键恢复默认布局，排版中按 Esc 退出",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
