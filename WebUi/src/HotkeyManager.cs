@@ -45,8 +45,6 @@ namespace RichTextGen
                             Desc = "重新生成（完成后自动隐藏）" },
             new HotkeyDef { Action = "quit",     Keys = Keys.Control | Keys.Alt | Keys.Q,
                             Desc = "退出应用" },
-            new HotkeyDef { Action = "minimize", Keys = Keys.Control | Keys.Alt | Keys.M,
-                            Desc = "最小化窗口" },
             new HotkeyDef { Action = "music",    Keys = Keys.Control | Keys.Alt | Keys.N,
                             Desc = "切换下一首音乐 / 背景视频声音" },
             new HotkeyDef { Action = "theme",    Keys = Keys.Control | Keys.Alt | Keys.T,

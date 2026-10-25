@@ -435,6 +435,26 @@
              transition:background-color .15s ease,border-color .15s ease,color .15s ease}
   #musicZone.on{background:var(--hover);border-color:var(--accent);color:var(--text)}
   #musicBar{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  /* 已移除的功能页：保留 DOM 兼容旧脚本，但不再显示 */
+  #p-gen,#p-img,#p-trans,#p-ocr,#p-chat{display:none!important}
+  /* 排版设计：间距 / 分栏 / 配色 */
+  body[data-density="compact"] .card{padding:10px 12px}
+  body[data-density="compact"] .row{margin-bottom:6px}
+  body[data-density="loose"] .card{padding:20px 24px}
+  body[data-density="loose"] .row{margin-bottom:14px}
+  body[data-cols="2"] .page.on{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start;align-items:start}
+  body[data-cols="2"] .page.on>.card{margin-bottom:0}
+  body[data-palette="blue"]{--accent:#2f6fed;--hover:rgba(47,111,237,.10)}
+  body[data-palette="green"]{--accent:#1f8a5b;--hover:rgba(31,138,91,.10)}
+  body[data-palette="gray"]{--accent:#5a5a5a;--hover:rgba(90,90,90,.10)}
+  /* 排版模式：控件不可操作，卡片可拖动 */
+  body.layout-mode #pages .card{outline:1px dashed var(--accent);cursor:move;transition:none}
+  body.layout-mode #pages .card *{pointer-events:none!important}
+  body.layout-free .page.on{position:relative;min-height:1200px;display:block!important}
+  body.layout-free .page.on>.card{position:absolute;margin:0}
+  #layoutBar{display:none;position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;
+             background:var(--cardA);border:1px solid var(--line);border-radius:12px;padding:8px 14px;gap:10px;
+             align-items:center;box-shadow:0 8px 28px rgba(0,0,0,.25);backdrop-filter:blur(10px)}
 </style>
 </head>
 <body data-nav="top">
@@ -457,7 +477,6 @@ try{
   <button id="upBtn" class="upbtn" onclick="host('doUpdate')">⬆ 更新到 <span id="upVer"></span></button>
   <div class="sp"></div>
   <button id="pinBtn" class="wbtn pin" title="窗口置顶：始终显示在其他窗口之前（类似任务管理器）" onclick="togglePin()">📌</button>
-  <button class="wbtn" onclick="zoomPulse();host('minimize')">—</button>
   <button class="wbtn" onclick="zoomPulse();host('maximize')">▢</button>
   <button class="wbtn close" onclick="host('close')">✕</button>
 </div>
@@ -531,11 +550,6 @@ try{
       <div id="wsBody">
         <nav>
     <button class="on" data-p="work" title="工作台"><span class="g">◈</span>工作台</button>
-    <button data-p="gen" title="文本生成"><span class="g">✎</span>生成</button>
-    <button data-p="img" title="图片系统"><span class="g">▦</span>图片</button>
-    <button data-p="trans" title="在线翻译"><span class="g">⇄</span>翻译</button>
-    <button data-p="ocr" title="图片文字提取（OCR）"><span class="g">⌗</span>提取</button>
-    <button data-p="chatwin" title="AI 对话"><span class="g">✦</span>AI</button>
     <button data-p="set" title="设置"><span class="g">⚙</span>设置</button>
   </nav>
 
@@ -785,6 +799,29 @@ try{
         </div>
         <div class="row"><span class="hint">支持图片 PNG / JPG / BMP / GIF / WebP / AVIF / SVG 与视频 MP4 / WebM / OGV / MOV / MKV / AVI（视频能否解码取决于 WebView2 内置的 Chromium，推荐 MP4 H.264）。网络地址会先下载到本机再启用，离线也能继续用，且图片 / 视频都静音、自动循环。</span></div>
         <div class="row"><span class="hint">开启后背景铺在内容下方，通过半透明面板像水印一样透出来，不会盖住文字；文件保存在本机 <code>%APPDATA%\RichTextGen</code>，不会上传。</span></div>
+      </div>
+      <div class="card" id="layoutCard"><h3>排版与主题</h3>
+        <div class="row">
+          <label class="f">间距</label>
+          <select id="uiDensity" onchange="uiDesignApply()">
+            <option value="cozy">舒适</option><option value="compact">紧凑</option><option value="loose">宽松</option>
+          </select>
+          <label class="f">分栏</label>
+          <select id="uiCols" onchange="uiDesignApply()">
+            <option value="1">单栏</option><option value="2">双栏</option>
+          </select>
+          <label class="f">配色</label>
+          <select id="uiPalette" onchange="uiDesignApply()">
+            <option value="default">默认</option><option value="blue">蓝色</option>
+            <option value="green">护眼绿</option><option value="gray">灰色</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="b p" onclick="LayoutMode.enter(false)">进入排版模式</button>
+          <button class="b" onclick="LayoutMode.enter(true)">自由摆放</button>
+          <button class="b" onclick="LayoutMode.reset()">恢复默认布局</button>
+          <span class="hint">排版模式下所有选项不可操作，只能拖动卡片；保存后立即生效</span>
+        </div>
       </div>
       <div class="card"><h3>输出与同步</h3>
         <div class="row">
@@ -1098,6 +1135,12 @@ try{
   <span id="sbEnc">UTF-8</span>
   <span id="sbEol">LF</span>
   <span class="badge">Unity 6 / TextMeshPro</span>
+</div>
+<div id="layoutBar">
+  <b>排版模式</b>
+  <label class="chk"><input type="checkbox" id="layoutFree" onchange="LayoutMode.setFree(this.checked)"> 自由摆放</label>
+  <button class="b p" onclick="LayoutMode.saveNow()">保存布局</button>
+  <button class="b" onclick="LayoutMode.cancel()">退出</button>
 </div>
 <div id="updatedMask" onclick="this.classList.remove('on')">
   <div id="updatedBox" onclick="event.stopPropagation()">
@@ -3275,14 +3318,10 @@ window.addEventListener('drop', e=>{
   const audio = files.filter(isAudio);
   const video = files.filter(isVideo);
   const docs = files.filter(f => !isImg(f) && !isAudio(f) && !isVideo(f));
-  // 图片 / 音频各取第一个进对应面板，其余文本文件依次开成标签
-  if (img.length){
-    const curNav = document.querySelector('nav button.on');
-    if (curNav && curNav.dataset.p === 'ocr') ocrDropFile(pathOf(img[0]));
-    else { go('img'); host('blockArt|' + encodeURIComponent(pathOf(img[0]))); }
-  }
-  if (audio.length){ go('music'); host('musicAdd|' + encodeURIComponent(pathOf(audio[0]))); }
-  else if (video.length){ go('music'); host('musicAdd|' + encodeURIComponent(pathOf(video[0]))); }
+  // 图片系统已移除：图片不再转色块图（OCR 也已拆成独立应用）
+  if (img.length){ status('图片系统已移除；需要设背景请到 设置 → 外观'); }
+  if (audio.length){ go('set'); host('musicAdd|' + encodeURIComponent(pathOf(audio[0]))); }
+  else if (video.length){ go('set'); host('musicAdd|' + encodeURIComponent(pathOf(video[0]))); }
   docs.slice(0, 10).forEach(f => host('openRecent|' + encodeURIComponent(pathOf(f))));
   if (docs.length > 10) status('一次最多打开 10 个文本文件');
   else if (docs.length > 1) status('正在打开 ' + docs.length + ' 个文件…');
@@ -4041,7 +4080,6 @@ host('ready');
     help: [
       { t: '立即检测更新',    k: '',          fn: () => { host('checkUpdate'); } },
       { t: '查看发布页',      k: '',          fn: () => { host('openUrl|https://richtextgen-dl.pages.dev/'); } },
-      { t: 'Android（APK）版 · 已研发完成', k: '', fn: () => { showWork('set'); status('Android（APK）版已完成，APK 在项目 android/RichTextGen.apk'); } },
       { sep: true },
       { t: '关于',            k: '',          fn: () => { status('彩色文本生成器 · Win11 记事本概念版 · 采用 MIT 许可'); } }
     ]
@@ -4133,7 +4171,7 @@ const DocM = (function(){
   function addDoc(name, path, buffer, activate){
     seq++;
     const d = { id: seq, name: name || '无标题', path: path || '', buffer: buffer || '', dirty: false,
-                enc: 'UTF-8', eol: 'LF' };
+                enc: 'UTF-8', eol: 'LF', scrollTop: 0, richScroll: 0 };
     docs.push(d);
     if (activate !== false){ activeId = d.id; loadEditor(d); }
     render();
@@ -4194,10 +4232,21 @@ const DocM = (function(){
   function switchTab(id){
     if (id === activeId) return;
     const prev = byId(activeId);
-    if (prev) prev.buffer = getActiveText();
+    if (prev){
+      prev.buffer = getActiveText();
+      prev.scrollTop = edSrc().scrollTop;
+      const pr = document.getElementById('edRich');
+      if (pr) prev.richScroll = pr.scrollTop;
+    }
     activeId = id;
     syncEditor();
     render();
+    const d = byId(id);
+    if (d){
+      edSrc().scrollTop = d.scrollTop || 0;
+      const r = document.getElementById('edRich');
+      if (r) r.scrollTop = d.richScroll || 0;
+    }
     edSrc().focus();
   }
   function closeTab(id){
@@ -4418,11 +4467,12 @@ const DocM = (function(){
   /* 强制应用刷新前：把所有标签页（含未保存正文）完整打包；刷新后原样恢复 */
   function snapshot(){
     const cur = byId(activeId);
-    if (cur) cur.buffer = getActiveText();
+    if (cur) { cur.buffer = getActiveText(); cur.scrollTop = edSrc().scrollTop; }
     return {
       active: docs.findIndex(d => d.id === activeId),
       tabs: docs.map(d => ({ name: d.name, path: d.path, text: d.buffer || '',
-                             dirty: !!d.dirty, enc: d.enc || 'UTF-8', eol: d.eol || 'LF' }))
+                             dirty: !!d.dirty, enc: d.enc || 'UTF-8', eol: d.eol || 'LF',
+                             scrollTop: d.scrollTop || 0, richScroll: d.richScroll || 0 }))
     };
   }
   function restoreTabs(o){
@@ -4434,6 +4484,8 @@ const DocM = (function(){
       d.dirty = !!t.dirty;
       d.enc = t.enc || 'UTF-8';
       d.eol = t.eol || 'LF';
+      d.scrollTop = t.scrollTop || 0;
+      d.richScroll = t.richScroll || 0;
     }
     const idx = (o.active >= 0 && o.active < docs.length) ? o.active : 0;
     activeId = docs[idx].id;
@@ -5113,17 +5165,9 @@ const EdMode = (function(){
    URL 形如 http://127.0.0.1:17861/media/歌曲名.mp3 —— 本机任何软件（浏览器 / 播放器 / SCP:SL 等）都能直接访问。
    注意：链接在「本程序运行期间」有效；部分播放器需要从 0 开始缓冲，已支持 Range 分段。            */
 (function(){
-  const nav = document.querySelector('nav');
-  const btn = document.createElement('button');
-  btn.dataset.p = 'music';
-  btn.title = '音乐链接';
-  btn.innerHTML = '<span class="g">♪</span>音乐';
-  btn.onclick = () => go('music');
-  const setBtn = nav.querySelector('button[data-p="set"]');
-  nav.insertBefore(btn, setBtn);
-
-  const page = document.createElement('section');
-  page.className = 'page'; page.id = 'p-music';
+  // 音乐已并入「设置」页，不再单独占一个工作台标签
+  const page = document.createElement('div');
+  page.id = 'musicBox';
   page.innerHTML =
     '<div class="card"><h3>🎵 音乐播放列表</h3>' +
       '<div class="row">' +
@@ -5147,7 +5191,7 @@ const EdMode = (function(){
       '<button class="b" onclick="go(\'set\')">去设置</button>' +
     '</div>' +
     '<audio id="musicAudio" preload="auto"></audio>';
-  document.getElementById('pages').appendChild(page);
+  document.getElementById('p-set').appendChild(page);
 
   const audio = document.getElementById('musicAudio');
   let cur = { index: -1, playing: false, url: '', tracks: [] };
@@ -5858,6 +5902,190 @@ window.ui.syncState = function(o){
 
 /* 再要一次状态：ready 那条消息可能比本段脚本先到达宿主 */
 try { host('syncTarget'); } catch(e){}
+
+/* ---------- 已删除的功能：从设置页移除卡片 ---------- */
+(function(){
+  document.querySelectorAll('#p-set .card').forEach(function(c){
+    const h = c.querySelector('h3');
+    if (h && /Live2D 角色|Android（APK）版/.test(h.textContent)) c.remove();
+  });
+})();
+
+/* ---------- 排版设计：间距 / 分栏 / 配色 ---------- */
+function uiDesignApply(){
+  const d = document.getElementById('uiDensity');
+  const c = document.getElementById('uiCols');
+  const p = document.getElementById('uiPalette');
+  const put = function(k, v){
+    document.body.dataset[k] = v;
+    try { localStorage.setItem('rtg.' + k, v); } catch(e){}
+  };
+  put('density', d ? d.value : 'cozy');
+  put('cols', c ? c.value : '1');
+  put('palette', p ? p.value : 'default');
+  status('排版已应用');
+}
+(function(){
+  ['density', 'cols', 'palette'].forEach(function(k){
+    let v = null;
+    try { v = localStorage.getItem('rtg.' + k); } catch(e){}
+    if (v) document.body.dataset[k] = v;
+  });
+  const map = { density: 'uiDensity', cols: 'uiCols', palette: 'uiPalette' };
+  Object.keys(map).forEach(function(k){
+    const el = document.getElementById(map[k]);
+    if (el && document.body.dataset[k]) el.value = document.body.dataset[k];
+  });
+})();
+
+/* ---------- 排版模式：拖动排序 / 自由摆放 ---------- */
+const LayoutMode = (function(){
+  let on = false, free = false, start = null;
+
+  function page(){ return document.querySelector('#pages .page.on'); }
+  function cards(){ return page() ? Array.from(page().children).filter(function(e){ return e.classList.contains('card'); }) : []; }
+  function keyOf(c){ const h = c.querySelector('h3'); return h ? h.textContent.trim().slice(0, 50) : ''; }
+  function storeKey(p){ return 'rtg.layout.' + p; }
+
+  function apply(p){
+    const pg = document.getElementById('p-' + p); if (!pg) return;
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(storeKey(p)) || 'null'); } catch(e){}
+    const cs = Array.from(pg.children).filter(function(e){ return e.classList.contains('card'); });
+    pg.style.position = ''; pg.style.minHeight = '';
+    cs.forEach(function(c){
+      c.style.position = ''; c.style.left = ''; c.style.top = ''; c.style.width = ''; c.style.height = '';
+    });
+    if (!d) return;
+    if (d.order) d.order.forEach(function(k){
+      const c = cs.find(function(x){ return keyOf(x) === k; });
+      if (c) pg.appendChild(c);
+    });
+    if (d.free){
+      pg.style.position = 'relative';
+      pg.style.minHeight = (d.minH || 1200) + 'px';
+      cs.forEach(function(c){
+        const f = d.free[keyOf(c)];
+        if (!f) return;
+        c.style.position = 'absolute';
+        c.style.left = f.x + 'px';
+        c.style.top = f.y + 'px';
+        c.style.width = f.w + 'px';
+        if (f.h) c.style.height = f.h + 'px';
+      });
+    }
+  }
+  function applyAll(){ ['work', 'set'].forEach(apply); }
+
+  function enter(f){
+    on = true; free = !!f;
+    document.body.classList.add('layout-mode');
+    if (free) document.body.classList.add('layout-free');
+    else document.body.classList.remove('layout-free');
+    document.getElementById('layoutBar').style.display = 'flex';
+    const chk = document.getElementById('layoutFree'); if (chk) chk.checked = free;
+    if (free){
+      const pg = page();
+      if (!pg) return;
+      pg.style.position = 'relative';
+      const pr = pg.getBoundingClientRect();
+      cards().forEach(function(c){
+        const r = c.getBoundingClientRect();
+        c.style.position = 'absolute';
+        c.style.left = (r.left - pr.left) + 'px';
+        c.style.top = (r.top - pr.top + pg.scrollTop) + 'px';
+        c.style.width = r.width + 'px';
+      });
+    }
+    status('排版模式：拖动卡片' + (free ? '调整位置' : '调整顺序') + '，完成后点「保存布局」');
+  }
+
+  function clearStyles(){
+    const pg = page(); if (!pg) return;
+    pg.style.position = ''; pg.style.minHeight = '';
+    cards().forEach(function(c){
+      c.style.position = ''; c.style.left = ''; c.style.top = ''; c.style.width = ''; c.style.height = '';
+    });
+  }
+
+  function exit(){
+    on = false;
+    document.body.classList.remove('layout-mode', 'layout-free');
+    document.getElementById('layoutBar').style.display = 'none';
+    clearStyles();
+    applyAll();
+  }
+
+  function saveNow(){
+    const pg = page(); if (!pg) return;
+    const p = pg.id.replace('p-', '');
+    const order = cards().map(keyOf);
+    let freeMap = null, minH = 0;
+    if (free){
+      freeMap = {};
+      cards().forEach(function(c){
+        const x = parseInt(c.style.left || '0', 10);
+        const y = parseInt(c.style.top || '0', 10);
+        freeMap[keyOf(c)] = { x: x, y: y, w: c.offsetWidth, h: c.offsetHeight };
+        minH = Math.max(minH, y + c.offsetHeight + 40);
+      });
+    }
+    try { localStorage.setItem(storeKey(p), JSON.stringify({ order: order, free: freeMap, minH: minH })); } catch(e){}
+    exit();
+    status('布局已保存');
+  }
+
+  function cancel(){ exit(); status('已退出排版模式（未保存）'); }
+
+  function setFree(f){ if (!on) return; if (f !== free) enter(f); }
+
+  function reset(){
+    ['work', 'set'].forEach(function(p){ try { localStorage.removeItem(storeKey(p)); } catch(e){} });
+    if (on) exit(); else applyAll();
+    status('已恢复默认布局');
+  }
+
+  document.addEventListener('pointerdown', function(e){
+    if (!on) return;
+    const c = e.target.closest('#pages .page.on > .card'); if (!c) return;
+    e.preventDefault();
+    const pg = c.parentElement, pr = pg.getBoundingClientRect(), r = c.getBoundingClientRect();
+    start = { c: c, x: e.clientX, y: e.clientY, ox: r.left - pr.left, oy: r.top - pr.top + pg.scrollTop };
+    try { c.setPointerCapture(e.pointerId); } catch(err){}
+  });
+
+  document.addEventListener('pointermove', function(e){
+    if (!start) return;
+    const c = start.c, pg = c.parentElement;
+    if (free){
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      c.style.position = 'absolute';
+      c.style.left = Math.max(0, start.ox + dx) + 'px';
+      c.style.top = Math.max(0, start.oy + dy) + 'px';
+      c.style.width = c.offsetWidth + 'px';
+    } else {
+      if (Math.abs(e.clientY - start.y) < 8) return;
+      const list = Array.from(pg.children).filter(function(x){ return x.classList.contains('card') && x !== c; });
+      const target = list.find(function(x){
+        const r = x.getBoundingClientRect();
+        return e.clientY > r.top && e.clientY < r.bottom;
+      });
+      if (target){
+        const r = target.getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) pg.insertBefore(c, target);
+        else pg.insertBefore(c, target.nextSibling);
+      }
+    }
+  });
+
+  document.addEventListener('pointerup', function(){ start = null; });
+  document.addEventListener('pointercancel', function(){ start = null; });
+
+  return { enter: enter, setFree: setFree, saveNow: saveNow, cancel: cancel, reset: reset, applyAll: applyAll };
+})();
+
+try { LayoutMode.applyAll(); } catch(e){}
+
 
 </script>
 </body>

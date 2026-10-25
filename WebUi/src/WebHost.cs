@@ -267,16 +267,7 @@ namespace RichTextGen
                 hotkeys = new HotkeyManager(this, OnHotkey);
                 LoadCloseAction();                       // 关闭行为（询问 / 最小化 / 直接退出）
 
-                // Live2D：角色窗口里的右键菜单会改配置，改完把状态同步回界面
-                Live2D.Load();
-                Live2D.Changed = delegate
-                {
-                    try { CallStr("live2dState", Live2D.StateJson()); } catch { }
-                };
-                Live2D.OpenSettings = delegate
-                {
-                    try { RestoreWindow(); Activate(); RunJs("go('set')"); } catch { }
-                };
+                // Live2D 功能已移除，不再初始化角色窗口
 
                 // 命令行/右键传人的待打开文件（界面 ready 后逐个打开）
                 foreach (string f in Program.StartupFiles)
@@ -551,7 +542,7 @@ namespace RichTextGen
             switch ((action ?? "").Trim().ToLowerInvariant())
             {
                 case "quit": _allowClose = true; Close(); break;
-                case "minimize": MinimizeAnimated(); break;
+                case "minimize": break;   // 最小化功能已移除（会导致窗口无法正常显示）
                 case "theme": RunJs("toggleTheme()"); break;
                 case "hide": if (Visible) HideWindow(); else RestoreWindow(); break;
                 case "music": MusicNext(); break;
@@ -570,7 +561,7 @@ namespace RichTextGen
                 case "import": ImportTxt(); HideWindow(); break;        // 导入完自动收后台
                 case "generate": RunJs("gen()"); HideWindow(); break;   // 重新生成完自动收后台
                 case "quit": _allowClose = true; Close(); break;        // 快捷组件：退出应用
-                case "minimize": MinimizeAnimated(); break;             // 快捷组件：最小化
+                case "minimize": break;   // 最小化功能已移除（会导致窗口无法正常显示）             // 快捷组件：最小化
                 case "theme": RunJs("toggleTheme()"); break;            // 快捷组件：切换深浅色
                 case "music": MusicNext(); break;                       // 切换下一首音乐
             }
@@ -1236,7 +1227,6 @@ namespace RichTextGen
                     {
                         CheckUpdate(false);
                         CheckShellRegistration();   // 首次启动自动注册右键菜单（HKCU 免管理员）
-                        StartAiServerIfEnabled();   // 上次开着端口则自动恢复
                     }
                     CallStr("aiSettings", AiConfig.ToJson());
                     LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
@@ -1253,14 +1243,7 @@ namespace RichTextGen
                     }
                     else if (_refreshing) _refreshing = false;
 
-                    // Live2D：把模型列表与配置回传（只主窗口显示，副窗口不重复出角色）
-                    if (!_secondary)
-                    {
-                        Live2D.Load();
-                        CallStr("live2dModels", Live2D.ModelsJson());
-                        CallStr("live2dState", Live2D.StateJson());
-                        Live2D.Sync();
-                    }
+                    // Live2D 功能已移除
 
                     // 启动提示：等界面稳定后再弹，避免和首屏渲染抢焦点
                     if (!_secondary) SetTimeout(1200, ShowStartupTip);
@@ -1314,7 +1297,7 @@ namespace RichTextGen
                 case "generate":
                     DoGenerate(arg);
                     break;
-                case "minimize": MinimizeAnimated(); break;
+                case "minimize": break;   // 最小化功能已移除（会导致窗口无法正常显示）
                 case "maximize": ToggleMaximizeAnimated(); break;
                 case "close": if (_secondary) CloseAnimated(); else RequestClose(); break;   // 主窗口按「关闭行为」处理
                 case "runAction": RunQuickAction(arg); break;

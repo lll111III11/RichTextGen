@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.9.1.0",
+    "version":  "5.10.0.0",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.1.0/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.9.1.0/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.0/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.0/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.9.1.0 更新（OCR 换引擎 + 音乐系统）：\n· 【OCR】改用开源 Tesseract 5（Apache-2.0）+ 内置中英文模型，识别明显更准；深色截图自动反色、小字自动放大 2 倍，长截图仍自动分段去重，系统 OCR 作为回退\n· 【音乐】工作台「音乐」页改成播放列表：可多选添加音乐或带声音的 MP4，点列表切歌，支持上一首 / 下一首 / 播放暂停 / 音量 / 移除，列表自动保存\n· 【切歌】状态栏「♪」点一下切下一首；全局热键 Ctrl+Alt+N 也能切歌（可在设置里改键）\n· 【背景声音】设置 → 外观 → 背景水印 新增「播放背景视频的声音」与音量，背景 MP4 带音轨时可直接出声（默认静音）\n· 【体积】安装包变大到约 12MB：内置 Tesseract 引擎与 6.6MB 中英文模型，全部离线",
+    "notes":  "v5.10.0.0 更新（大瘦身 + 排版模式）：\\n· OCR 拆分为桌面独立应用「RichTextGen OCR」，主程序移除 Tesseract，安装包回到约 2MB\\n· 移除：最小化功能（修复窗口无法显示）、Live2D、在线翻译、图片系统、AI 页面与对话窗口、Android 公告；音乐并入设置\\n· 新增：切换标签页会记住每页滚动位置，切回来不再跳回顶部\\n· 新增：排版与主题（紧凑/舒适/宽松、单栏/双栏、蓝/护眼绿/灰配色）\\n· 新增：排版模式——选项全部不可操作，可拖动卡片排序或自由摆放，保存到本机\\n· 强制刷新、同步输出、窗口置顶、音乐播放列表继续保留",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

@@ -37,12 +37,6 @@ copy /y "%OUT%\Microsoft.Web.WebView2.WinForms.dll" "%PAY%\" >nul
 if errorlevel 1 goto fail
 copy /y "%OUT%\WebView2Loader.dll" "%PAY%\" >nul
 if errorlevel 1 goto fail
-rem OCR: managed wrapper + x86 native engine (embedded payload keeps sub-directory)
-copy /y "%OUT%\Tesseract.dll" "%PAY%\" >nul
-if errorlevel 1 goto fail
-if not exist "%PAY%\x86" mkdir "%PAY%\x86"
-copy /y "%OUT%\x86\*.dll" "%PAY%\x86\" >nul
-if errorlevel 1 goto fail
 rem The signing certificate is no longer shipped: setup never writes the cert stores.
 
 echo [4/6] build native installer (C++, zero dependency) ...
