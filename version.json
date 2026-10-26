@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.6",
+    "version":  "5.10.0.7",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "bugfix",
+    "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.6/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.6/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.7/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.7/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.6 更新（布局交互）：\n· 自由摆放新增边缘缩放：区域拖到离窗口边缘 12px 内会自动吸附贴边，之后从贴边方向拖拽就是放大缩小，不再移动\n· 指针移到区域边缘时光标变成双向箭头，提示此处可缩放；中间拖动仍是移动\n· 四边四角均可缩放，缩放时对角保持不动，最小 160x60",
+    "notes":  "v5.10.0.7 更新（预设布局）：\n· 排版改为预设方案，不再需要手动拖拽：编辑区左/工作台右、工作台左/编辑区右、编辑区上/工作台下、编辑区下/工作台上、只显示编辑区\n· 切换预设后自动记住，下次打开保持一致\n· 上下分隔时，中间分隔条改为上下拖动来调整高度；左右分隔时仍是左右拖动\n· 旧版自由摆放残留的绝对定位会在启动时自动清除，不会再出现面板错位",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
