@@ -457,18 +457,38 @@
   body.layout-mode #statusbar *{pointer-events:none!important}
   /* 卡片本身仍要能拖（它在上面的容器里） */
   body.layout-mode #pages .page.on>.card{pointer-events:auto!important}
+  /* 自由摆放：只在显式进入该模式时才把区域脱离默认三栏；未保存过布局时永远是默认布局 */
   body.layout-free #menubar,
   body.layout-free #tabBar,
   body.layout-free #mainEditor,
   body.layout-free #ws,
-  body.layout-free #statusbar{outline:1px dashed var(--accent);cursor:move}
-  body.layout-free .page.on{position:relative;min-height:1200px;display:block!important}
-  body.layout-free .page.on>.card{position:absolute;margin:0}
-  body.layout-free #main{display:block;padding:0;min-height:0}
+  body.layout-free #statusbar{outline:1px dashed var(--accent);cursor:move;position:absolute;margin:0}
+  body.layout-free #main{position:fixed;inset:0;display:block;padding:0;pointer-events:none}
+  body.layout-free #mainEditor,
+  body.layout-free #ws{pointer-events:auto}
+  body.layout-free #titlebar{position:relative;z-index:80}
   body.layout-free #splitter{display:none!important}
-  #layoutBar{display:none;position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;
-             background:var(--cardA);border:1px solid var(--line);border-radius:12px;padding:8px 14px;gap:10px;
-             align-items:center;box-shadow:0 8px 28px rgba(0,0,0,.25);backdrop-filter:blur(10px)}
+  body.layout-free .page.on{position:relative;display:block!important;min-height:100%;width:100%;box-sizing:border-box}
+  body.layout-free .page.on>.card{position:absolute;margin:0;resize:both}
+  /* 区域右下角缩放手柄（自由摆放时可拖动改长宽） */
+  .lm-grip{position:absolute;right:2px;bottom:2px;width:15px;height:15px;cursor:nwse-resize;z-index:10000;
+           pointer-events:auto!important;opacity:.8;
+           background:
+             linear-gradient(135deg,transparent 42%,var(--accent) 42%,var(--accent) 54%,transparent 54%),
+             linear-gradient(135deg,transparent 68%,var(--accent) 68%,var(--accent) 80%,transparent 80%)}
+  .lm-grip:hover{opacity:1}
+  /* 分区透明度：顶部 / 编辑区 / 工作区 / 状态栏 */
+  #titlebar,#menubar,#tabBar{opacity:var(--opTop,1)}
+  #mainEditor{opacity:var(--opEditor,1)}
+  #ws{opacity:var(--opWs,1)}
+  #statusbar{opacity:var(--opStatus,1)}
+  #layoutBar{display:none;position:fixed;left:50%;top:46px;transform:translateX(-50%);z-index:9999;
+             background:var(--cardA);border:1px solid var(--line);border-radius:10px;padding:5px 10px;gap:8px;
+             align-items:center;justify-content:center;flex-wrap:wrap;max-width:calc(100vw - 24px);
+             font-size:12.5px;box-shadow:0 8px 28px rgba(0,0,0,.25);backdrop-filter:blur(10px)}
+  #layoutBar .b{padding:5px 11px;font-size:12.5px}
+  #layoutBar select{padding:4px 6px;font-size:12px}
+  #layoutBar>*,  #layoutBar .chk{white-space:nowrap;margin-right:0}
 </style>
 </head>
 <body data-nav="top">
@@ -830,13 +850,25 @@ try{
             <option value="green">护眼绿</option><option value="gray">灰色</option>
           </select>
         </div>
+        <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+          <label class="f">透明度</label>
+          <span class="hint">顶部</span>
+          <input type="range" id="opTop" min="20" max="100" value="100" style="width:86px" oninput="opacityApply()"><span class="hint" id="opTopVal">100%</span>
+          <span class="hint">编辑区</span>
+          <input type="range" id="opEditor" min="20" max="100" value="100" style="width:86px" oninput="opacityApply()"><span class="hint" id="opEditorVal">100%</span>
+          <span class="hint">工作区</span>
+          <input type="range" id="opWs" min="20" max="100" value="100" style="width:86px" oninput="opacityApply()"><span class="hint" id="opWsVal">100%</span>
+          <span class="hint">状态栏</span>
+          <input type="range" id="opStatus" min="20" max="100" value="100" style="width:86px" oninput="opacityApply()"><span class="hint" id="opStatusVal">100%</span>
+          <button class="b" onclick="opacityReset()">全部不透明</button>
+        </div>
         <div class="row">
           <button class="b p" onclick="LayoutMode.enter(false)">进入排版模式</button>
           <button class="b" onclick="LayoutMode.enter(true)">自由摆放</button>
           <button class="b" onclick="LayoutMode.reset()">恢复默认布局</button>
           <span class="hint">排版模式下所有选项不可操作，只能拖动</span>
         </div>
-        <div class="row"><span class="hint">排序模式：拖动卡片调整上下顺序。<br>自由摆放：菜单栏、标签栏、编辑区、工作台、状态栏以及工作台里的每张卡片都能拖到任意位置，顶部标题栏（图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭）保持固定。<br>自由摆放时可开启「网格对齐」，拖动会自动吸附到不可见的网格；关掉即可完全自由摆放。窗口缩放时布局按比例跟着缩放，保存后一直生效。</span></div>
+        <div class="row"><span class="hint">默认布局就是打开时看到的三栏：菜单栏 / 标签栏 / 编辑器 + 工作台 / 状态栏，自由摆放不会改动它，只有你点「自由摆放」并「保存布局」后才会生效。<br>排序模式：拖动卡片调整上下顺序。<br>自由摆放：顶部标题栏（图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭）固定；菜单栏、标签栏、编辑区、工作台、状态栏以及每张卡片都能拖到任意位置，拖动每个区域右下角的小三角还能改长宽；卡片右下角也能双向拉伸。<br>可开启「网格对齐」自动吸附到不可见网格；点「恢复默认布局」随时回到初始三栏。</span></div>
       </div>
       <div class="card"><h3>输出与同步</h3>
         <div class="row">
@@ -1152,14 +1184,14 @@ try{
   <span class="badge">Unity 6 / TextMeshPro</span>
 </div>
 <div id="layoutBar">
-  <b>排版模式</b>
   <label class="chk"><input type="checkbox" id="layoutFree" onchange="LayoutMode.setFree(this.checked)"> 自由摆放</label>
-  <label class="chk" id="gridWrap"><input type="checkbox" id="layoutGrid" checked onchange="LayoutMode.setGrid(this.checked)"> 网格对齐</label>
+  <label class="chk" id="gridWrap"><input type="checkbox" id="layoutGrid" checked onchange="LayoutMode.setGrid(this.checked)"> 网格</label>
   <select id="layoutGridSize" onchange="LayoutMode.setGridSize(this.value)" title="网格大小（隐形）">
     <option value="8">8px</option><option value="10" selected>10px</option>
     <option value="16">16px</option><option value="20">20px</option>
   </select>
-  <button class="b p" onclick="LayoutMode.saveNow()">保存布局</button>
+  <button class="b p" onclick="LayoutMode.saveNow()">保存</button>
+  <button class="b" onclick="LayoutMode.reset()">默认</button>
   <button class="b" onclick="LayoutMode.cancel()">退出</button>
 </div>
 <div id="updatedMask" onclick="this.classList.remove('on')">
@@ -1176,7 +1208,7 @@ try{
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.9.0.5";
+const VERSION = "5.10.0.3";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -4696,6 +4728,9 @@ const EdMode = (function(){
   /* ---------- 1) 选区追踪 ---------- */
   // 渲染模式下点击工作台控件会让焦点离开、window 选区丢失，因此克隆保存一份
   let savedRange = null;
+  // 源码模式同理：点复选框会让 textarea 失焦，这里额外记住最后一次选区
+  let savedSrc = null;
+  let lastAspect = null;
 
   function richRangeValid(){
     if (!savedRange) return false;
@@ -4705,12 +4740,25 @@ const EdMode = (function(){
     if (!c) return false;
     return c === richEl() || richEl().contains(c);
   }
+  function snapshotSrc(){
+    const ed = edSrcEl(); if (!ed) return;
+    savedSrc = (ed.selectionStart !== ed.selectionEnd)
+      ? { s: ed.selectionStart, e: ed.selectionEnd }
+      : null;
+  }
   function srcSel(){
     if (EdMode.current() !== 'src') return null;
     const ed = edSrcEl();
-    if (!ed || ed.selectionStart === ed.selectionEnd) return null;
-    return { s: ed.selectionStart, e: ed.selectionEnd,
-             text: ed.value.slice(ed.selectionStart, ed.selectionEnd) };
+    if (!ed) return null;
+    if (ed.selectionStart !== ed.selectionEnd){
+      return { s: ed.selectionStart, e: ed.selectionEnd,
+               text: ed.value.slice(ed.selectionStart, ed.selectionEnd) };
+    }
+    // 焦点刚离开编辑区时 live 选区会折叠，用刚才记住的那一段
+    if (savedSrc && savedSrc.e <= ed.value.length && savedSrc.s < savedSrc.e){
+      return { s: savedSrc.s, e: savedSrc.e, text: ed.value.slice(savedSrc.s, savedSrc.e) };
+    }
+    return null;
   }
   function currentSel(){
     if (EdMode.current() === 'rich') return richRangeValid() ? { text: savedRange.toString() } : null;
@@ -4780,6 +4828,7 @@ const EdMode = (function(){
     const out = pair ? pair[0] + inner + pair[1] : inner;
     ed.value = ed.value.slice(0, sel.s) + out + ed.value.slice(sel.e);
     ed.selectionStart = sel.s; ed.selectionEnd = sel.s + out.length;
+    savedSrc = { s: sel.s, e: sel.s + out.length };
     DocM.markDirty();
     return true;
   }
@@ -4886,7 +4935,13 @@ const EdMode = (function(){
   }
   // 有选区 → 把该控件对应的样式套到选区；无选区 → 维持原有「整段生成」
   function genOrApply(aspect){
-    if (hasSel() && applyToSel(aspect)){ refreshCard(); syncEditorNow(); return; }
+    lastAspect = aspect;
+    const s = currentSel();
+    if (s && applyToSel(aspect)){
+      refreshCard(); syncEditorNow();
+      try { ui.status('已套用到选中的 ' + (s.text || '').length + ' 个字'); } catch (e) {}
+      return;
+    }
     gen();
   }
 
@@ -4910,6 +4965,7 @@ const EdMode = (function(){
       const inner = sel.text.replace(MANAGED_RE, '');
       ed.value = ed.value.slice(0, sel.s) + inner + ed.value.slice(sel.e);
       ed.selectionStart = sel.s; ed.selectionEnd = sel.s + inner.length;
+      savedSrc = { s: sel.s, e: sel.s + inner.length };
       DocM.markDirty();
       ui.status('已清除选中文字里的标签');
     }
@@ -4924,13 +4980,18 @@ const EdMode = (function(){
     '<div id="selTarget" class="hint" style="white-space:pre-wrap;word-break:break-all;user-select:text;min-height:20px"></div>' +
     '<div class="row" style="margin-top:10px">' +
       '<span class="hint" id="selInfo"></span>' +
+      '<button class="b" id="selApplyBtn">重新应用到选区</button>' +
       '<button class="b" id="selClearBtn">清除选中格式</button>' +
       '<button class="b" id="selToWork">载入工作台生成</button>' +
     '</div>' +
-    '<div class="hint">在左侧编辑区选中文字后，下面「颜色系统」「样式与渐变」里改任何一项都会<b>实时套用到这段选中文字</b>；未选中时这些控件仍按整段生成。</div>';
+    '<div class="hint">在左侧编辑区选中文字后，下面「颜色系统」「样式与渐变」里改任何一项都会<b>实时套用到这段选中文字</b>；如果某项没打上（比如先点了别处导致选区丢了），改完再点「重新应用到选区」即可补上。未选中时这些控件仍按整段生成。</div>';
   const pWork = $('p-work');
   pWork.insertBefore(card, pWork.firstChild);
   $('selClearBtn').onclick = clearSelStyle;
+  $('selApplyBtn').onclick = () => {
+    if (!lastAspect){ ui.status('先在上面任意改动一项样式，再点这里重试'); return; }
+    genOrApply(lastAspect);
+  };
   $('selToWork').onclick = () => {
     const s = currentSel();
     if (!s){ ui.status('请先在左侧编辑区选中一段文字'); return; }
@@ -4960,17 +5021,19 @@ const EdMode = (function(){
       if (sel && sel.rangeCount && !sel.isCollapsed &&
           richEl().contains(sel.anchorNode) && richEl().contains(sel.focusNode)){
         savedRange = sel.getRangeAt(0).cloneRange();
-      } else if (sel && sel.rangeCount && sel.isCollapsed && richEl().contains(sel.anchorNode)){
-        savedRange = null;                                 // 在渲染区内点掉选区
+      } else if (sel && sel.rangeCount && sel.isCollapsed && richEl().contains(sel.anchorNode) &&
+                 richEl().contains(document.activeElement)){
+        savedRange = null;                                 // 只在「点进渲染区」时才算清掉选区
       }
       // 焦点移到工作台控件导致的空选区：保留上次的 savedRange，改颜色才能作用到它
     } else {
       savedRange = null;
+      snapshotSrc();
     }
     refreshCard();
   });
   ['select', 'keyup', 'mouseup', 'input'].forEach(ev => {
-    edSrcEl().addEventListener(ev, refreshCard);
+    edSrcEl().addEventListener(ev, () => { snapshotSrc(); refreshCard(); });
     richEl().addEventListener(ev, refreshCard);
   });
   ['mdSrc', 'mdRich'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', () => setTimeout(refreshCard, 0)); });
@@ -5958,23 +6021,63 @@ function uiDesignApply(){
   });
 })();
 
+/* ---------- 分区透明度：顶部 / 编辑区 / 工作区 / 状态栏 ---------- */
+const OPACITY_VARS = { top: '--opTop', editor: '--opEditor', ws: '--opWs', status: '--opStatus' };
+function opacityId(k){ return 'op' + k.charAt(0).toUpperCase() + k.slice(1); }
+function opacityApply(){
+  Object.keys(OPACITY_VARS).forEach(function(k){
+    const el = document.getElementById(opacityId(k));
+    let v = el ? parseInt(el.value, 10) : 100;
+    if (!(v >= 20 && v <= 100)) v = 100;
+    document.body.style.setProperty(OPACITY_VARS[k], (v / 100).toFixed(2));
+    const lab = document.getElementById(opacityId(k) + 'Val');
+    if (lab) lab.textContent = v + '%';
+    try { localStorage.setItem('rtg.op.' + k, String(v)); } catch(e){}
+  });
+}
+function opacityReset(){
+  Object.keys(OPACITY_VARS).forEach(function(k){
+    const el = document.getElementById(opacityId(k));
+    if (el) el.value = '100';
+  });
+  opacityApply();
+  status('已恢复全部不透明');
+}
+(function(){
+  Object.keys(OPACITY_VARS).forEach(function(k){
+    let v = null;
+    try { v = localStorage.getItem('rtg.op.' + k); } catch(e){}
+    const el = document.getElementById(opacityId(k));
+    if (el && v){ const n = parseInt(v, 10); if (n >= 20 && n <= 100) el.value = String(n); }
+    const lab = document.getElementById(opacityId(k) + 'Val');
+    if (lab && el) lab.textContent = el.value + '%';
+  });
+  opacityApply();
+})();
+
 /* ---------- 排版模式：拖动排序 / 整窗自由摆放（隐形网格吸附） ---------- */
 const LayoutMode = (function(){
   // 可自由移动的整块区域（标题栏的图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭 始终锁定）
   const UNITS = ['menubar', 'tabBar', 'mainEditor', 'ws', 'statusbar'];
-  const ROOT_KEY = 'rtg.layout.root';
+  const ROOT_KEY = 'rtg.layout.v2.root';           // v2：旧版的整窗坐标会打乱默认布局，直接弃用
+  const LEGACY_KEYS = ['rtg.layout.root', 'rtg.layout.work', 'rtg.layout.set'];
   let on = false, free = false, start = null;
   let grid = true, gridSize = 10;
 
   function page(){ return document.querySelector('#pages .page.on'); }
   function cards(){ return page() ? Array.from(page().children).filter(function(e){ return e.classList.contains('card'); }) : []; }
   function keyOf(c){ const h = c.querySelector('h3'); return h ? h.textContent.trim().slice(0, 50) : ''; }
-  function storeKey(p){ return 'rtg.layout.' + p; }
+  function storeKey(p){ return 'rtg.layout.v2.' + p; }
   function unitEl(id){ return document.getElementById(id); }
   function snap(v){ return grid ? Math.round(v / gridSize) * gridSize : Math.round(v); }
 
   function loadRoot(){
-    try { return JSON.parse(localStorage.getItem(ROOT_KEY) || 'null'); } catch(e){ return null; }
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(ROOT_KEY) || 'null'); } catch(e){ return null; }
+    // 数据不完整（例如只有部分区域）时视为无效，避免出现半截错位布局
+    if (!d || d.v !== 2 || !d.units) return null;
+    if (UNITS.some(function(id){ return !d.units[id]; })) return null;
+    return d;
   }
   function saveRoot(d){
     try { localStorage.setItem(ROOT_KEY, JSON.stringify(d)); } catch(e){}
@@ -5986,7 +6089,7 @@ const LayoutMode = (function(){
   /* 把保存的整窗布局套回去（窗口大小变化时按比例缩放） */
   function applyRoot(){
     const lay = loadRoot();
-    if (!lay || !lay.units){ return false; }
+    if (!lay){ try { localStorage.removeItem(ROOT_KEY); } catch(e){} return false; }
     const bs = bodySize();
     const sx = lay.vw ? bs.w / lay.vw : 1;
     const sy = lay.vh ? bs.h / lay.vh : 1;
@@ -6037,13 +6140,15 @@ const LayoutMode = (function(){
     if (d.free){
       pg.style.position = 'relative';
       pg.style.minHeight = (d.minH || 1200) + 'px';
+      const pw = pg.clientWidth;      // 隐藏页宽度为 0，此时不做宽度夹取
       cs.forEach(function(c){
         const f = d.free[keyOf(c)];
         if (!f) return;
+        const w = pw > 0 ? Math.min(f.w, pw) : f.w;
         c.style.position = 'absolute';
-        c.style.left = f.x + 'px';
+        c.style.left = (pw > 0 ? Math.max(0, Math.min(f.x, pw - w)) : f.x) + 'px';
         c.style.top = f.y + 'px';
-        c.style.width = f.w + 'px';
+        c.style.width = w + 'px';
         if (f.h) c.style.height = f.h + 'px';
       });
     }
@@ -6051,61 +6156,110 @@ const LayoutMode = (function(){
   function applyAll(){ ['work', 'set'].forEach(apply); }
 
   function recordUnits(){
+    // 先一次性量完所有区域，再统一改成绝对定位：
+    // 若边量边改，前面的区域一脱流后面的区域就会移位，存下来的坐标全是错的（上一版界面错乱的主因）
+    const rects = {};
     UNITS.forEach(function(id){
       const el = unitEl(id); if (!el) return;
       const r = el.getBoundingClientRect();
+      rects[id] = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+    });
+    UNITS.forEach(function(id){
+      const el = unitEl(id), u = rects[id]; if (!el || !u) return;
       el.style.position = 'absolute';
-      el.style.left = Math.round(r.left) + 'px';
-      el.style.top = Math.round(r.top) + 'px';
-      el.style.width = Math.round(r.width) + 'px';
-      el.style.height = Math.round(r.height) + 'px';
+      el.style.left = u.x + 'px';
+      el.style.top = u.y + 'px';
+      el.style.width = u.w + 'px';
+      el.style.height = u.h + 'px';
+    });
+  }
+
+  function addGrips(){
+    UNITS.forEach(function(id){
+      const el = unitEl(id); if (!el || el.__lmGrip) return;
+      const g = document.createElement('div');
+      g.className = 'lm-grip';
+      g.title = '拖动改变大小 / 长宽';
+      el.appendChild(g);
+      el.__lmGrip = g;
+    });
+  }
+  function removeGrips(){
+    UNITS.forEach(function(id){
+      const el = unitEl(id); if (!el) return;
+      const g = el.querySelector(':scope > .lm-grip');
+      if (g) g.remove();
+      el.__lmGrip = null;
     });
   }
 
   function enter(f){
     on = true; free = !!f;
+    let cardBox = null;
+    if (free){
+      recordUnits();          // 必须先在默认布局下量好，再切到绝对定位
+      const pg = page();
+      if (pg){
+        // 同样先量完卡片再改样式：一旦加上 layout-free，卡片会立刻变绝对定位并叠到同一点
+        const pr = pg.getBoundingClientRect();
+        cardBox = { pg: pg, pw: Math.max(120, Math.round(pr.width)), list: [] };
+        cards().forEach(function(c){
+          const r = c.getBoundingClientRect();
+          cardBox.list.push({ c: c, l: Math.round(r.left - pr.left), t: Math.round(r.top - pr.top),
+                              w: Math.round(r.width), h: Math.round(r.height) });
+        });
+      }
+    } else {
+      removeGrips();
+      clearCardStyles();
+      if (!applyRoot()) clearRoot();
+    }
     document.body.classList.add('layout-mode');
-    if (free) document.body.classList.add('layout-free');
-    else document.body.classList.remove('layout-free');
+    document.body.classList.toggle('layout-free', free);
     document.getElementById('layoutBar').style.display = 'flex';
     const chk = document.getElementById('layoutFree'); if (chk) chk.checked = free;
     const gw = document.getElementById('gridWrap'); if (gw) gw.style.display = free ? 'inline-flex' : 'none';
 
     if (free){
-      recordUnits();
-      const pg = page();
-      if (pg){
-        pg.style.position = 'relative';
-        const pr = pg.getBoundingClientRect();
-        cards().forEach(function(c){
-          const r = c.getBoundingClientRect();
-          c.style.position = 'absolute';
-          c.style.left = Math.round(r.left - pr.left) + 'px';
-          c.style.top = Math.round(r.top - pr.top + pg.scrollTop) + 'px';
-          c.style.width = Math.round(r.width) + 'px';
+      if (cardBox){
+        cardBox.pg.style.position = 'relative';
+        cardBox.list.forEach(function(it){
+          const w = Math.min(it.w, cardBox.pw);
+          it.c.style.position = 'absolute';
+          it.c.style.left = Math.max(0, Math.min(cardBox.pw - w, it.l)) + 'px';
+          it.c.style.top = Math.max(0, it.t) + 'px';
+          it.c.style.width = w + 'px';
+          it.c.style.height = it.h + 'px';
         });
       }
-      status('自由摆放：拖动菜单栏 / 标签栏 / 编辑区 / 工作台 / 状态栏与卡片；网格对齐' + (grid ? '已开启（' + gridSize + 'px）' : '已关闭'));
+      addGrips();
+      status('自由摆放：拖动菜单栏 / 标签栏 / 编辑区 / 工作台 / 状态栏与卡片；拖右下角小三角可改长宽；网格对齐' + (grid ? '已开启（' + gridSize + 'px）' : '已关闭'));
     } else {
       status('排版模式：拖动卡片调整顺序，完成后点「保存布局」');
     }
   }
 
   function clearCardStyles(){
-    const pg = page(); if (!pg) return;
-    pg.style.position = ''; pg.style.minHeight = '';
-    cards().forEach(function(c){
-      c.style.position = ''; c.style.left = ''; c.style.top = ''; c.style.width = ''; c.style.height = '';
+    document.querySelectorAll('#pages .page').forEach(function(pg){
+      pg.style.position = ''; pg.style.minHeight = '';
+      Array.prototype.forEach.call(pg.children, function(c){
+        if (!c.classList || !c.classList.contains('card')) return;
+        c.style.position = ''; c.style.left = ''; c.style.top = ''; c.style.width = ''; c.style.height = '';
+      });
     });
   }
 
   function exit(){
     on = false;
+    const pagesEl = document.getElementById('pages');
+    const sc = pagesEl ? pagesEl.scrollTop : 0;
     document.body.classList.remove('layout-mode', 'layout-free');
     document.getElementById('layoutBar').style.display = 'none';
+    removeGrips();
     clearCardStyles();
     if (!applyRoot()) clearRoot();
     applyAll();
+    if (pagesEl) pagesEl.scrollTop = sc;      // 退出排版后保持原来的滚动位置
   }
 
   function saveNow(){
@@ -6115,12 +6269,12 @@ const LayoutMode = (function(){
       const units = {};
       UNITS.forEach(function(id){
         const el = unitEl(id); if (!el) return;
-        if (!el.style.position) return;
-        const x = parseInt(el.style.left || '0', 10);
-        const y = parseInt(el.style.top || '0', 10);
-        units[id] = { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+        // 夹回窗口内，避免不小心拖出屏幕后下次打开找不到面板
+        const x = Math.max(0, Math.min(bs.w - 80, parseInt(el.style.left || '0', 10)));
+        const y = Math.max(0, Math.min(bs.h - 40, parseInt(el.style.top || '0', 10)));
+        units[id] = { x: x, y: y, w: Math.min(el.offsetWidth, bs.w), h: Math.min(el.offsetHeight, bs.h) };
       });
-      saveRoot({ vw: bs.w, vh: bs.h, units: units });
+      saveRoot({ v: 2, vw: bs.w, vh: bs.h, units: units });
     }
     if (pg){
       const p = pg.id.replace('p-', '');
@@ -6138,7 +6292,7 @@ const LayoutMode = (function(){
       try { localStorage.setItem(storeKey(p), JSON.stringify({ order: order, free: freeMap, minH: minH })); } catch(e){}
     }
     exit();
-    status('布局已保存');
+    status('布局已保存（下次打开保持，点「恢复默认布局」可还原）');
   }
 
   function cancel(){ exit(); status('已退出排版模式（未保存）'); }
@@ -6158,10 +6312,17 @@ const LayoutMode = (function(){
   }
 
   function reset(){
+    if (on) exit();
     ['work', 'set'].forEach(function(p){ try { localStorage.removeItem(storeKey(p)); } catch(e){} });
     try { localStorage.removeItem(ROOT_KEY); } catch(e){}
-    if (on) exit(); else { clearRoot(); applyAll(); }
-    status('已恢复默认布局');
+    LEGACY_KEYS.forEach(function(k){ try { localStorage.removeItem(k); } catch(e){} });
+    removeGrips();
+    document.body.classList.remove('layout-mode', 'layout-free');
+    const bar = document.getElementById('layoutBar'); if (bar) bar.style.display = 'none';
+    clearCardStyles();
+    clearRoot();                                  // 清掉所有内联绝对定位，回到默认三栏
+    status('正在恢复默认布局…');
+    setTimeout(function(){ try { location.reload(); } catch(e){} }, 60);
   }
 
   /* ---------- 拖动 ---------- */
@@ -6175,6 +6336,10 @@ const LayoutMode = (function(){
     el.style.zIndex = '50';
     start = { type: 'unit', el: el, x: e.clientX, y: e.clientY, ox: r.left, oy: r.top };
   }
+  function beginGrip(el, e){
+    const r = el.getBoundingClientRect();
+    start = { type: 'grip', el: el, x: e.clientX, y: e.clientY, w: r.width, h: r.height };
+  }
   function beginCard(c, e){
     const pg = c.parentElement, pr = pg.getBoundingClientRect(), r = c.getBoundingClientRect();
     start = { type: 'card', el: c, x: e.clientX, y: e.clientY,
@@ -6186,10 +6351,18 @@ const LayoutMode = (function(){
     if (e.target.closest('#titlebar')) return;      // 标题栏锁定：图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭
     if (e.target.closest('#layoutBar')) return;     // 浮动条本身可点
 
+    const grip = e.target.closest('.lm-grip');
+    if (free && grip){
+      e.preventDefault(); e.stopPropagation();
+      beginGrip(grip.parentElement, e);
+      try { grip.setPointerCapture(e.pointerId); } catch(err){}
+      return;
+    }
+
     const c = e.target.closest('#pages .page.on > .card');
     if (c){
       e.preventDefault();
-      if (free) beginCard(c, e); else beginCard(c, e);
+      beginCard(c, e);
       try { c.setPointerCapture(e.pointerId); } catch(err){}
       return;
     }
@@ -6205,6 +6378,12 @@ const LayoutMode = (function(){
 
   document.addEventListener('pointermove', function(e){
     if (!start) return;
+    if (start.type === 'grip'){
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      start.el.style.width = Math.max(140, snap(start.w + dx)) + 'px';
+      start.el.style.height = Math.max(28, snap(start.h + dy)) + 'px';
+      return;
+    }
     if (start.type === 'unit'){
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
       const l = Math.max(0, snap(start.ox + dx));
@@ -6264,6 +6443,12 @@ try {
   if (gi) gi.checked = (localStorage.getItem('rtg.layoutGrid') !== '0');
   const gs = document.getElementById('layoutGridSize');
   if (gs) gs.value = localStorage.getItem('rtg.layoutGridSize') || '10';
+} catch(e){}
+/* 旧版（5.10.0.1 及更早）保存的整窗坐标会把默认布局打乱，启动时直接清掉，回到默认三栏 */
+try {
+  ['rtg.layout.root', 'rtg.layout.work', 'rtg.layout.set'].forEach(function(k){
+    try { localStorage.removeItem(k); } catch(e){}
+  });
 } catch(e){}
 try { LayoutMode.applyRoot(); } catch(e){}
 try { LayoutMode.applyAll(); } catch(e){}

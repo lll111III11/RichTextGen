@@ -17,15 +17,11 @@ set OUT=%ROOT%..\WebUi\bin\Release\net48
 set PAY=%ROOT%payload_web
 set SIGN=%ROOT%..\signing
 
-echo [1/6] build app (Release, x86) ...
+echo [1/5] build app (Release, x86) ...
 dotnet build "%APP%" -c Release -v m
 if errorlevel 1 goto fail
 
-echo [2/6] sign app exe ...
-for %%F in ("%OUT%\*.exe") do powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%sign.ps1" "%%~fF"
-if errorlevel 1 goto fail
-
-echo [3/6] refresh installer payload ...
+echo [2/5] refresh installer payload ...
 if exist "%PAY%" rd /s /q "%PAY%"
 if not exist "%PAY%" mkdir "%PAY%"
 copy /y "%OUT%\*.exe" "%PAY%\" >nul
@@ -39,19 +35,15 @@ copy /y "%OUT%\WebView2Loader.dll" "%PAY%\" >nul
 if errorlevel 1 goto fail
 rem The signing certificate is no longer shipped: setup never writes the cert stores.
 
-echo [4/6] build native installer (C++, zero dependency) ...
+echo [3/5] build native installer (C++, zero dependency) ...
 call "%ROOT%build_native.bat"
 if errorlevel 1 goto fail
 
-echo [5/6] build full uninstall tool ...
+echo [4/5] build full uninstall tool ...
 call "%ROOT%build_fulluninstall.bat"
 if errorlevel 1 goto fail
 
-echo [6/6] sign installer + tool ...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%sign.ps1" "%ROOT%RichTextGen-Setup.exe"
-if errorlevel 1 goto fail
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%sign.ps1" "%ROOT%RichTextGen-FullUninstall.exe"
-if errorlevel 1 goto fail
+rem Code signing was retired: products are published unsigned on purpose.
 
 echo.
 echo DONE -^> %ROOT%RichTextGen-Setup.exe

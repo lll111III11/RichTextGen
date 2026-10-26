@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.1",
+    "version":  "5.10.0.3",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "feature",
+    "type":  "bugfix",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.1/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.1/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.3/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.3/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.1 更新（自由排版 + 网格对齐）：\\n· 自由摆放升级为整窗排版：菜单栏、标签栏、编辑区、工作台、状态栏以及工作台内每张卡片都能拖到任意位置\\n· 标题栏的图标、名称、版本号与置顶 / 最大化 / 关闭按钮保持固定，不会被误拖\\n· 新增「网格对齐」开关与网格尺寸（8/10/16/20px）：开启后拖动自动吸附到不可见网格，关闭即完全自由\\n· 布局保存到本机，窗口缩放时按比例同步缩放；设置里可一键恢复默认布局，排版中按 Esc 退出",
+    "notes":  "v5.10.0.3 更新（修复选区样式不生效）：\\n· 修复「勾选样式后没有作用到选中文字」的问题：点复选框/改颜色会让编辑区失焦，选区被清掉后控件退化成整段生成\\n· 源码模式新增选区快照，焦点离开编辑区后仍记得上次选中的那一段\\n· 渲染模式只在确实点进渲染区时才清空选区，点工作台控件不再丢目标\\n· 「选中文字 · 实时样式」卡片新增「重新应用到选区」按钮：改完样式随时补应用一次\\n· 每次套用后在状态栏提示「已套用到选中的 N 个字」，能直观确认作用范围\\n· 连续应用多种样式（粗体 + 斜体 + 颜色）按替换处理，不会层层嵌套标签",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
