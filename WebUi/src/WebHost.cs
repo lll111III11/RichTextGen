@@ -1279,6 +1279,146 @@ namespace RichTextGen
             return sb.ToString();
         }
 
+        /* ================= 语言文件（程序目录 lang\*.txt） =================
+           形如 SCP:SL 的语言文件：每行「键 = 值」，# 开头是注释。
+           首次运行自动生成 5 个常用语言文件；用户可自行增删改，界面随即生效。 */
+
+        private static readonly string[] LangSeed = { "zh", "en", "es", "fr", "ru" };
+        private static readonly Dictionary<string, string> LangNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "zh", "简体中文" }, { "en", "English" }, { "es", "Español" },
+            { "fr", "Français" }, { "ru", "Русский" }
+        };
+
+        private static string LangDir()
+        {
+            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lang");
+            try
+            {
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                return dir;
+            }
+            catch
+            {
+                dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen", "lang");
+                try { if (!Directory.Exists(dir)) Directory.CreateDirectory(dir); } catch { }
+                return dir;
+            }
+        }
+
+        private static string LangHeader(string code)
+        {
+            string nm = LangNames.ContainsKey(code) ? LangNames[code] : code;
+            return "# 彩色文本生成器 · 语言文件\r\n" +
+                   "# name = " + nm + "\r\n" +
+                   "# 左侧是界面元素标识，请勿修改；右侧是显示文字，可以随意改。\r\n" +
+                   "# 以 # 开头的是注释；用 \\n 表示换行；留空则回退到简体中文。\r\n" +
+                   "\r\n";
+        }
+
+        /// <summary>确保 lang 目录存在并有 5 个初始文件（已存在的绝不覆盖）</summary>
+        private static void EnsureLangFiles()
+        {
+            try
+            {
+                string dir = LangDir();
+                foreach (string code in LangSeed)
+                {
+                    string f = Path.Combine(dir, code + ".txt");
+                    if (!File.Exists(f)) File.WriteAllText(f, LangHeader(code), new UTF8Encoding(false));
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>语言清单：[{file,name,count}]</summary>
+        private static string LangListJson()
+        {
+            EnsureLangFiles();
+            StringBuilder sb = new StringBuilder("[");
+            bool first = true;
+            try
+            {
+                foreach (string path in Directory.GetFiles(LangDir(), "*.txt"))
+                {
+                    string code = Path.GetFileNameWithoutExtension(path);
+                    string name = LangNames.ContainsKey(code) ? LangNames[code] : code;
+                    int count = 0;
+                    foreach (string line in File.ReadAllLines(path, Encoding.UTF8))
+                    {
+                        string t = line.Trim();
+                        if (t.Length == 0 || t[0] == '#') continue;
+                        if (t.IndexOf('=') > 0) count++;
+                    }
+                    if (!first) sb.Append(',');
+                    first = false;
+                    sb.Append("{\"file\":").Append(Quote(code))
+                      .Append(",\"name\":").Append(Quote(name))
+                      .Append(",\"count\":").Append(count).Append('}');
+                }
+            }
+            catch { }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
+        /// <summary>读取某个语言文件：{file, entries:{k:v}}</summary>
+        private static string LangDataJson(string code)
+        {
+            EnsureLangFiles();
+            if (string.IsNullOrEmpty(code)) code = "zh";
+            code = Regex.Replace(code, "[^A-Za-z0-9_\\-]", "");
+            string path = Path.Combine(LangDir(), code + ".txt");
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"file\":").Append(Quote(code)).Append(",\"entries\":{");
+            bool first = true;
+            try
+            {
+                if (!File.Exists(path)) File.WriteAllText(path, LangHeader(code), new UTF8Encoding(false));
+                foreach (string line in File.ReadAllLines(path, Encoding.UTF8))
+                {
+                    string t = line.Trim();
+                    if (t.Length == 0 || t[0] == '#') continue;
+                    int eq = t.IndexOf('=');
+                    if (eq <= 0) continue;
+                    string k = t.Substring(0, eq).Trim();
+                    string v = t.Substring(eq + 1).Trim().Replace("\\n", "\n");
+                    if (k.Length == 0 || v.Length == 0) continue;
+                    if (!first) sb.Append(',');
+                    first = false;
+                    sb.Append(Quote(k)).Append(':').Append(Quote(v));
+                }
+            }
+            catch { }
+            sb.Append("}}");
+            return sb.ToString();
+        }
+
+        /// <summary>保存语言文件：参数为 "code\n{entries json}"</summary>
+        private void LangSave(string arg)
+        {
+            int nl = arg.IndexOf('\n');
+            if (nl <= 0) return;
+            string code = Regex.Replace(arg.Substring(0, nl).Trim(), "[^A-Za-z0-9_\\-]", "");
+            string json = arg.Substring(nl + 1);
+            if (code.Length == 0) return;
+
+            // 逐条解析 {k:v}，按 UTF-8 写回（保留注释头）
+            StringBuilder body = new StringBuilder();
+            Match m = Regex.Match(json, "\"((?:[^\"\\\\]|\\\\.)*)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+            while (m.Success)
+            {
+                string k = Regex.Unescape(m.Groups[1].Value);
+                string v = Regex.Unescape(m.Groups[2].Value).Replace("\r\n", "\n").Replace("\r", "\n");
+                if (k.Length > 0 && v.Length > 0)
+                    body.Append(k).Append(" = ").Append(v.Replace("\n", "\\n")).Append("\r\n");
+                m = m.NextMatch();
+            }
+            string path = Path.Combine(LangDir(), code + ".txt");
+            try { File.WriteAllText(path, LangHeader(code) + body.ToString(), new UTF8Encoding(false)); }
+            catch (Exception ex) { CallStr("status", "保存语言文件失败：" + ex.Message); }
+        }
+
         private static bool _loggedOnce;
         /// <summary>关键异常落盘到 %APPDATA%\RichTextGen\error.log（只记第一次，避免刷屏）</summary>
         internal static void LogOnce(string message)
@@ -1392,6 +1532,19 @@ namespace RichTextGen
                     break;
                 case "fonts":
                     Call("fontList", FontsJson());
+                    break;
+                case "langList":
+                    Call("langList", LangListJson());
+                    break;
+                case "langLoad":
+                    Call("langData", LangDataJson(arg.Trim()));
+                    break;
+                case "langSave":
+                    LangSave(arg);
+                    break;
+                case "langDir":
+                    try { System.Diagnostics.Process.Start("explorer.exe", LangDir()); }
+                    catch (Exception ex) { CallStr("status", "打开语言文件夹失败：" + ex.Message); }
                     break;
                 case "hotkeys":
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");

@@ -941,12 +941,13 @@ try{
         </div>
         <div class="row"><span class="hint">程序目录下有一份 <b>theme\theme.txt</b>，用记事本打开即可改配色、字体和缩放，保存后点「重新加载主题」生效，不用重装。<br>每行写 <code>键=值</code>，<code>#</code> 开头的整行是注释。可改的键：<code>accent / bg / panel / input / text / sub / line / hover</code>，深色用 <code>dark.</code> 前缀；字体与缩放用 <code>ui.font / ui.size / ui.scale / editor.font / editor.size</code>。</span></div>
         <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
-          <label class="f">界面文案</label>
-          <button class="b p" onclick="textEditToggle(true)">开启编辑</button>
-          <button class="b" onclick="textEditToggle(false)">关闭并保存</button>
-          <button class="b" onclick="textReset()">恢复默认文案</button>
+          <label class="f">语言</label>
+          <select id="uiLang" onchange="langSwitch(this.value)" style="min-width:150px"></select>
+          <button class="b p" onclick="host('langDir')">打开语言文件夹</button>
+          <button class="b" onclick="langReload()">重新加载</button>
+          <button class="b" onclick="langSync()">把当前文字写入本语言</button>
         </div>
-        <div class="row"><span class="hint" id="textEditTip">开启后可以直接点界面上的文字修改，回车或点别处即保存；版本号、状态栏实时数值等系统文字不受影响，下次打开仍然生效。</span></div>
+        <div class="row"><span class="hint" id="textEditTip">程序目录 <b>lang\</b> 下自带 zh / en / es / fr / ru 五个语言文件，格式为 <code>键 = 值</code>（<code>#</code> 开头是注释，<code>\n</code> 表示换行）。<br>直接改右侧文字即可改界面显示；新建一个 <code>ja.txt</code> 就能多一种语言，重启后会出现在上面的列表里。留空的条目自动回退简体中文。</span></div>
       </div>
       <div class="card"><h3>输出与同步</h3>
         <div class="row">
@@ -1286,7 +1287,7 @@ try{
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.10.0.8";
+const VERSION = "5.10.0.9";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -6906,11 +6907,12 @@ try { LayoutMode.applyAll(); } catch(e){}
     });
   })();
 
-  /* ---------- 界面文案自定义 ---------- */
-  const TXT_KEY = 'rtg.textOverrides';
-  let txtMap = {};
-  try { txtMap = JSON.parse(ls(TXT_KEY) || '{}') || {}; } catch(e){ txtMap = {}; }
-  let textEditing = false;
+  /* ---------- 语言文件（lang\*.txt） ---------- */
+  const LANG_KEY = 'rtg.lang';
+  let langCode = ls(LANG_KEY) || 'zh';
+  let langEntries = {};
+  let langReady = false;
+  let langSeeded = false;   // 每次启动只自动补一次基准文件，避免反复写盘
 
   function pathOf(e){
     const parts = [];
@@ -6940,36 +6942,85 @@ try { LayoutMode.applyAll(); } catch(e){}
     return out;
   }
   function applyText(){
+    if (!langReady) return;
+    let missing = 0;
     editableEls().forEach(function(e){
-      const v = txtMap[pathOf(e)];
-      if (typeof v === 'string' && v && v !== e.textContent) e.textContent = v;
+      const k = keyOf(e), v = langEntries[k];
+      if (typeof v === 'string' && v){ if (e.textContent !== v) e.textContent = v; }
+      else missing++;
     });
+    // 中文是基准：缺失的键把当前文字补进 zh.txt，方便用户直接改（每次启动只补一次）
+    if (langCode === 'zh' && missing > 0 && !langSeeded){ langSeeded = true; langSync(); }
   }
 
-  window.textEditToggle = function(on){
-    textEditing = !!on;
-    document.body.classList.toggle('text-edit', textEditing);
+  function keyOf(e){ return e.id ? '#' + e.id : pathOf(e); }
+
+  /** 把界面上当前所有文字写入当前语言文件（zh 用于生成基准，其它语言用于导出） */
+  window.langSync = function(){
+    const map = {};
     editableEls().forEach(function(e){
-      if (textEditing){
-        e.setAttribute('contenteditable', 'true');
-        e.dataset.tid = pathOf(e);
-      } else {
-        e.removeAttribute('contenteditable');
-      }
+      const t = (e.textContent || '').trim();
+      if (t) map[keyOf(e)] = t;
     });
-    if (typeof status === 'function') status(textEditing ? '文案编辑已开启：点文字直接修改' : '文案已保存');
+    Object.keys(langEntries).forEach(function(k){ if (!map[k]) map[k] = langEntries[k]; });
+    langEntries = map;
+    try { host('langSave|' + langCode + '\n' + JSON.stringify(map)); } catch(e){}
+    if (typeof status === 'function') status('已写入 lang\\' + langCode + '.txt');
   };
-  window.textReset = function(){
-    try { localStorage.removeItem(TXT_KEY); } catch(e){}
-    location.reload();
+
+  window.langSwitch = function(code){
+    langCode = code || 'zh';
+    try { localStorage.setItem(LANG_KEY, langCode); } catch(e){}
+    langReady = false;
+    try { host('langLoad|' + langCode); } catch(e){}
   };
+
+  window.langReload = function(){
+    try { host('langList'); } catch(e){}
+    try { host('langLoad|' + langCode); } catch(e){}
+    if (typeof status === 'function') status('语言文件已重新加载');
+  };
+
+  /** 宿主回传语言清单 */
+  window.ui.langList = function(list){
+    if (typeof list === 'string'){ try { list = JSON.parse(list); } catch(e){ list = []; } }
+    const sel = el('uiLang'); if (!sel || !Array.isArray(list)) return;
+    sel.innerHTML = '';
+    list.forEach(function(it){
+      const o = document.createElement('option');
+      o.value = it.file;
+      o.textContent = it.name + (it.count ? '（' + it.count + ' 条）' : '（空）');
+      sel.appendChild(o);
+    });
+    sel.value = langCode;
+    if (!list.some(function(it){ return it.file === langCode; }) && list.length){
+      langCode = list[0].file;
+      sel.value = langCode;
+    }
+  };
+
+  /** 宿主回传某个语言文件的内容 */
+  window.ui.langData = function(o){
+    if (typeof o === 'string'){ try { o = JSON.parse(o); } catch(e){ return; } }
+    if (!o) return;
+    langEntries = o.entries || {};
+    langReady = true;
+    applyText();
+    // 编辑模式：点文字直接改，失焦写回语言文件
+    editableEls().forEach(function(e){
+      if (e.getAttribute('contenteditable') === 'true') e.dataset.tid = keyOf(e);
+    });
+    if (typeof status === 'function') status('语言：' + ((el('uiLang') || {}).value || langCode));
+  };
+
+  // 就地修改：失焦即写回当前语言文件
   document.addEventListener('blur', function(ev){
-    if (!textEditing) return;
     const t = ev.target;
-    if (!t || !t.dataset || !t.dataset.tid) return;
-    const k = t.dataset.tid, v = (t.textContent || '').trim();
-    if (v) txtMap[k] = v; else delete txtMap[k];
-    try { localStorage.setItem(TXT_KEY, JSON.stringify(txtMap)); } catch(e){}
+    if (!t || t.getAttribute('contenteditable') !== 'true') return;
+    const k = t.dataset.tid || keyOf(t);
+    const v = (t.textContent || '').trim();
+    if (v) langEntries[k] = v; else delete langEntries[k];
+    try { host('langSave|' + langCode + '\n' + JSON.stringify(langEntries)); } catch(e){}
   }, true);
 
   /* ---------- 卡片：允许双向拉伸并记住尺寸 ---------- */
@@ -7035,8 +7086,9 @@ try { LayoutMode.applyAll(); } catch(e){}
 
     build();
 
-    // 套用用户改过的文案；切页后补一次（新卡片是显示时才渲染）
-    applyText();
+    // 语言文件：先取清单，再加载当前语言
+    try { host('langList'); } catch(e){}
+    try { host('langLoad|' + langCode); } catch(e){}
     document.querySelectorAll('nav button').forEach(function(b){
       b.addEventListener('click', function(){ setTimeout(applyText, 60); });
     });

@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.8",
+    "version":  "5.10.0.9",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.8/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.8/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.9/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.9/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.8 更新：\n· 菜单栏新增「工作区」入口：任何布局下都能点它唤出工作台浮层，再点一次或点别处收起\n· 修复「只显示编辑区」把工作台整个拿掉的问题，现在工作台仍可随时唤出\n· 新增界面文案自定义：设置 → 外观 → 界面文案，点「开启编辑」后直接点界面上的文字就能改，回车或点别处自动保存\n· 版本号、状态栏实时数值等系统文字保持原样，不会被改坏\n· 提供「恢复默认文案」一键还原",
+    "notes":  "v5.10.0.9 更新（语言文件）：\n· 程序目录新增 lang 文件夹，首次运行自动生成 zh / en / es / fr / ru 五个语言文件\n· 格式与 SCP:SL 类似：每行 键 = 值，# 开头为注释，\\n 表示换行；左侧键请勿修改，右侧文字可任意改\n· 设置 → 外观新增语言下拉：切换即时生效并记住；「把当前文字写入本语言」可导出当前界面文字用于翻译\n· 想加语言只要在 lang 目录新建 ja.txt 之类，重启后自动出现在列表\n· 留空的条目自动回退简体中文",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
