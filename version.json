@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.3",
+    "version":  "5.10.0.4",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "bugfix",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.3/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.3/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.4/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.4/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.3 更新（修复选区样式不生效）：\\n· 修复「勾选样式后没有作用到选中文字」的问题：点复选框/改颜色会让编辑区失焦，选区被清掉后控件退化成整段生成\\n· 源码模式新增选区快照，焦点离开编辑区后仍记得上次选中的那一段\\n· 渲染模式只在确实点进渲染区时才清空选区，点工作台控件不再丢目标\\n· 「选中文字 · 实时样式」卡片新增「重新应用到选区」按钮：改完样式随时补应用一次\\n· 每次套用后在状态栏提示「已套用到选中的 N 个字」，能直观确认作用范围\\n· 连续应用多种样式（粗体 + 斜体 + 颜色）按替换处理，不会层层嵌套标签",
+    "notes":  "v5.10.0.4 更新（选中文字真正的实时样式）：\\n· 改为「全量重算」：改动颜色、字号、高亮、透明度、粗斜体、渐变、超链接中的任何一项，都会立刻按当前全部设置重算选中文字\\n· 修复渐变（含「循环」「轴对称」）完全不作用于选中文字的问题，现已与整段生成的算法一致\\n· 修复连续改色（颜色循环）时标签层层嵌套的问题：每次都先剥离受管标签再重新拼装\\n· 渲染模式下改为先算出新内容再改 DOM，出错也不会吞掉选中的文字\\n· 常用色块改用事件委托，色块重新渲染后依然能实时作用于选区\\n· 控件变化以 50ms 合并调度，拖动/连续输入不会卡顿",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.10.0.3",
-  "updated": "2026-10-25",
-  "notes": "v5.10.0.3：修复勾选样式后没有作用到选中文字的问题；新增「重新应用到选区」按钮与套用条数提示。",
+  "version": "5.10.0.4",
+  "updated": "2026-10-26",
+  "notes": "v5.10.0.4：选中文字改为全量实时重算，修复渐变（含循环/轴对称）不作用于选区、连续改色标签嵌套的问题。",
   "type": "bugfix",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.10.0.3",
-      "size": 2200064,
-      "sha256": "b18ad687dfdb6b8813590776afb72d71acaa65574a3ba7ab0369edcef968bfd2",
+      "version": "5.10.0.4",
+      "size": 2203648,
+      "sha256": "5d595da574fdd633b9b7c1be35058f788570682f5d8e219c3c8990924600a4cb",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.10.0.3",
-      "size": 440320,
-      "sha256": "427080e4034ae48f19fa97cf33ea2528aea030f7b815df5e11f6fa516850618d",
+      "version": "5.10.0.4",
+      "size": 441592,
+      "sha256": "f317314e786711c9042c730bc6f1725cf3ef3f5c0b10d04f2863ff134192b01c",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

@@ -1208,7 +1208,7 @@ try{
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.10.0.3";
+const VERSION = "5.10.0.4";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -4730,7 +4730,6 @@ const EdMode = (function(){
   let savedRange = null;
   // 源码模式同理：点复选框会让 textarea 失焦，这里额外记住最后一次选区
   let savedSrc = null;
-  let lastAspect = null;
 
   function richRangeValid(){
     if (!savedRange) return false;
@@ -4767,7 +4766,7 @@ const EdMode = (function(){
   function hasSel(){ return !!currentSel(); }
 
   /* ---------- 2) 工作台控件 → 选中文字 ---------- */
-  const MANAGED_RE = /<\/?(?:color|b|i|u|s|sub|sup|size|mark|alpha)(?:=[^>]*)?>/gi;
+  const MANAGED_RE = /<\/?(?:color|b|i|u|s|sub|sup|size|mark|alpha|link)(?:=[^>]*)?>/gi;
 
   function toCssSize(v){
     v = (v == null ? '' : String(v)).trim();
@@ -4789,43 +4788,117 @@ const EdMode = (function(){
     if (!mc) return '#FFFF0080';
     return mc.charAt(0) === '#' ? mc + '80' : mc;
   }
-  // 受管样式：控件 → 标签名 / 富文本样式键
-  const WRAP_TAGS    = ['b', 'i', 'u', 's', 'sub', 'sup'];
-  const ASPECT_TAG   = { bold:'b', italic:'i', underline:'u', strike:'s', sub:'sub', sup:'sup',
-                         size:'size', mark:'mark', alpha:'alpha', color:'color' };
-  const ASPECT_STYLE = { color:'color', size:'fontSize', alpha:'opacity', mark:'backgroundColor' };
-  const WRAP_CTRL    = { b:'bold', i:'italic', u:'underline', s:'strike', sub:'sub', sup:'sup' };
+  // 受管标签 / 控件映射：选中的文字在重算前先剥掉这些标签，再加回当前控件状态
+  const WRAP_TAGS = ['b', 'i', 'u', 's', 'sub', 'sup'];
+  const WRAP_MAP = { b: 'bold', i: 'italic', u: 'underline', s: 'strike', sub: 'sub', sup: 'sup' };
+  // 任何一项变化都会触发选区重算（含渐变与链接）
+  const STYLE_IDS = ['color', 'bold', 'italic', 'underline', 'strike', 'sub', 'sup',
+                     'size', 'mark', 'markColor', 'alpha',
+                     'grad', 'gradStart', 'gradEnd', 'axial', 'loop', 'link', 'linkText'];
 
-  // 该控件当前是否要套用；返回 [开标签, 闭标签] 或 null
-  function aspectTag(aspect){
-    const t = ASPECT_TAG[aspect];
-    if (WRAP_TAGS.indexOf(t) >= 0){
-      const el = $(WRAP_CTRL[t]);
-      return (el && el.checked) ? ['<' + t + '>', '</' + t + '>'] : null;
+  const cval = function(id){ const e = $(id); return e ? String(e.value == null ? '' : e.value).trim() : ''; };
+  const cchk = function(id){ const e = $(id); return !!(e && e.checked); };
+
+  // 颜色 → RGB（渐变插值用）；解析不了就用兜底色
+  function rgbOf(v, fb){
+    const p = asColor(v);
+    if (p && p.charAt(0) === '#'){
+      return { r: parseInt(p.substr(1, 2), 16), g: parseInt(p.substr(3, 2), 16), b: parseInt(p.substr(5, 2), 16) };
     }
-    if (aspect === 'size'){ const v = ($('size').value || '').trim(); return v ? ['<size=' + v + '>', '</size>'] : null; }
-    if (aspect === 'mark'){ return $('mark').checked ? ['<mark=' + markColorVal() + '>', '</mark>'] : null; }
-    if (aspect === 'alpha'){ const a = ($('alpha').value || '').trim(); return a ? ['<alpha=#' + a.replace(/^#/, '') + '>', '</alpha>'] : null; }
-    if (aspect === 'color'){ const c = asColor($('color').value); return c ? ['<color=' + c + '>', '</color>'] : null; }
-    return null;
+    if (p){
+      try {
+        const d = document.createElement('div');
+        d.style.color = p; d.style.display = 'none';
+        document.body.appendChild(d);
+        const c = getComputedStyle(d).color;
+        d.remove();
+        const m = c.match(/(\d+)\D+(\d+)\D+(\d+)/);
+        if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+      } catch (e) {}
+    }
+    return fb;
   }
-  // 该控件当前的富文本样式（color/fontSize/opacity/backgroundColor）或 null
-  function aspectStyle(aspect){
-    if (aspect === 'color'){ const c = asColor($('color').value); return c ? { color: c } : null; }
-    if (aspect === 'size'){ const v = toCssSize($('size').value); return v ? { fontSize: v } : null; }
-    if (aspect === 'alpha'){ const a = toAlpha($('alpha').value); return a ? { opacity: a } : null; }
-    if (aspect === 'mark'){ const m = asColor($('markColor').value); return ($('mark').checked && m) ? { backgroundColor: m } : null; }
-    return null;
+  function two(n){
+    n = Math.max(0, Math.min(255, Math.round(n)));
+    return (n < 16 ? '0' : '') + n.toString(16).toUpperCase();
+  }
+  // 与宿主 WebHost 的渐变算法一致：逐字符 lerp；循环时以 5 字符为周期往复
+  function gradientColors(len){
+    const a = rgbOf(cval('gradStart'), { r: 255, g: 0, b: 0 });
+    const b = rgbOf(cval('gradEnd'), { r: 0, g: 0, b: 255 });
+    const axial = cchk('axial'), loop = cchk('loop');
+    const span = (loop ? 5 : len) || len || 1;
+    const list = [];
+    for (let k = 0; k < len; k++){
+      const pos = loop ? (k % span) : k;
+      let t = span > 1 ? pos / (span - 1) : 0;
+      if (axial) t = 1 - Math.abs(2 * t - 1);
+      list.push('#' + two(a.r + (b.r - a.r) * t) + two(a.g + (b.g - a.g) * t) + two(a.b + (b.b - a.b) * t));
+    }
+    return list;
+  }
+  function escHtml(s){
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  // 源码模式：只重写该样式对应的标签（重复应用＝替换，不会层层嵌套）
-  function applySrc(aspect){
+  /**
+   * 把一段纯文本按「当前全部控件状态」重算成标签串（rich=false）或 HTML（rich=true）。
+   * 每次都是从纯文本重新拼装，所以连续改颜色 / 循环渐变不会层层嵌套。
+   */
+  function compose(plain, rich){
+    const grad = cchk('grad');
+    const col = asColor(cval('color'));
+    const alpha = cval('alpha').replace(/^#/, '');
+    const size = toCssSize(cval('size'));
+    const mark = cchk('mark') ? asColor(cval('markColor')) : null;
+    const wraps = WRAP_TAGS.filter(function(t){ return cchk(WRAP_MAP[t]); });
+    const link = cval('link');
+    const gradColors = grad ? gradientColors(String(plain).length) : null;
+
+    function decorate(inner){
+      let s = inner;
+      WRAP_TAGS.slice().reverse().forEach(function(t){
+        if (wraps.indexOf(t) >= 0) s = '<' + t + '>' + s + '</' + t + '>';
+      });
+      if (rich){
+        if (mark) s = '<span style="background-color:' + mark + '">' + s + '</span>';
+        if (size) s = '<span style="font-size:' + size + '">' + s + '</span>';
+        if (alpha) s = '<span style="opacity:' + alpha + '">' + s + '</span>';
+        if (col) s = '<span style="color:' + col + '">' + s + '</span>';
+        if (link) s = '<a href="' + escHtml(link) + '">' + s + '</a>';
+      } else {
+        if (mark) s = '<mark=' + markColorVal() + '>' + s + '</mark>';
+        if (size) s = '<size=' + size + '>' + s + '</size>';
+        if (alpha) s = '<alpha=#' + alpha + '>' + s + '</alpha>';
+        if (col) s = '<color=' + col + '>' + s + '</color>';
+        if (link) s = '<link="' + link + '">' + s + '</link>';
+      }
+      return s;
+    }
+
+    const lines = String(plain).replace(/\r\n?/g, '\n').split('\n');
+    return lines.map(function(line){
+      if (!line) return '';
+      let inner;
+      if (gradColors){
+        const chars = rich ? Array.from(line) : line.split('');
+        inner = chars.map(function(ch, i){
+          if (rich) return '<span style="color:' + gradColors[i] + '">' + escHtml(ch) + '</span>';
+          return '<color=' + gradColors[i] + '>' + ch + '</color>';
+        }).join('');
+      } else {
+        inner = rich ? escHtml(line) : line;
+      }
+      return decorate(inner);
+    }).join(rich ? '<br>' : '\n');
+  }
+
+  // 源码模式：整段重算（先剥掉受管标签，再按当前控件状态重新拼装）
+  function applyFullSrc(){
     const sel = srcSel(); if (!sel) return false;
     const ed = edSrcEl();
-    const tag = ASPECT_TAG[aspect];
-    const inner = sel.text.replace(new RegExp('</?' + tag + '(?:=[^>]*)?>', 'gi'), '');
-    const pair = aspectTag(aspect);
-    const out = pair ? pair[0] + inner + pair[1] : inner;
+    const plain = sel.text.replace(MANAGED_RE, '');
+    const out = compose(plain, false);
     ed.value = ed.value.slice(0, sel.s) + out + ed.value.slice(sel.e);
     ed.selectionStart = sel.s; ed.selectionEnd = sel.s + out.length;
     savedSrc = { s: sel.s, e: sel.s + out.length };
@@ -4837,20 +4910,17 @@ const EdMode = (function(){
     while (el.firstChild) p.insertBefore(el.firstChild, el);
     p.removeChild(el);
   }
-  // 清理富文本标记：给了 aspect 只清该样式，否则清全部受管样式
-  function stripRich(node, aspect){
+  // 清理富文本标记：只保留文字，把受管样式（标签 / span 样式 / 链接）全部剥掉
+  function stripRich(node){
     const els = [];
     const w = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT, null, false);
     let n = w.nextNode();
     while (n){ els.push(n); n = w.nextNode(); }
-    const tag = aspect ? ASPECT_TAG[aspect] : null;
-    const sk = aspect ? ASPECT_STYLE[aspect] : null;
-    const keys = aspect ? (sk ? [sk] : []) : ['color', 'fontSize', 'opacity', 'backgroundColor'];
     els.forEach(el => {
       const t = el.tagName.toLowerCase();
-      if (WRAP_TAGS.indexOf(t) >= 0 && (aspect ? t === tag : true)){ unwrapEl(el); return; }
-      if (t === 'span' && keys.length){
-        keys.forEach(k => { el.style[k] = ''; });
+      if (WRAP_TAGS.indexOf(t) >= 0 || t === 'a' || t === 'mark'){ unwrapEl(el); return; }
+      if (t === 'span'){
+        ['color', 'fontSize', 'opacity', 'backgroundColor'].forEach(k => { el.style[k] = ''; });
         if (!el.getAttribute('style')) unwrapEl(el);
       }
     });
@@ -4905,43 +4975,70 @@ const EdMode = (function(){
     sel.addRange(r);
     savedRange = r.cloneRange();
   }
-  function applyRich(aspect){
+  // 富文本节点的纯文本（保留 <br> 换行）
+  function fragText(node){
+    let out = '';
+    (function walk(n){
+      Array.prototype.forEach.call(n.childNodes, function(c){
+        if (c.nodeType === 3){ out += c.nodeValue; return; }
+        if (c.nodeType !== 1) return;
+        const t = c.tagName;
+        if (t === 'BR'){ out += '\n'; return; }
+        if (t === 'DIV' || t === 'P'){
+          if (out && out.charAt(out.length - 1) !== '\n') out += '\n';
+          walk(c);
+          return;
+        }
+        walk(c);
+      });
+    })(node);
+    return out;
+  }
+  // 渲染模式：同样整段重算，按纯文本重建 DOM
+  function applyFullRich(){
     if (!richRangeValid()) return false;
     const sel = window.getSelection(); if (!sel) return false;
     const range = savedRange.cloneRange();
     expandManaged(range);
-    const frag = range.extractContents();
-    stripRich(frag, aspect);
-
-    let node = frag;
-    const t = ASPECT_TAG[aspect];
-    if (WRAP_TAGS.indexOf(t) >= 0 && aspectTag(aspect)){
-      const e = document.createElement(t); e.appendChild(node); node = e;
-    }
-    const st = aspectStyle(aspect);
-    if (st){
-      const sp = document.createElement('span');
-      Object.keys(st).forEach(k => { sp.style[k] = st[k]; });
-      sp.appendChild(node);
-      node = sp;
-    }
-    range.insertNode(node);
-    reselect(sel, node);
+    // 先算出新内容再动 DOM：中途出错也不会把选中的文字吃掉
+    const plain = fragText(range.cloneContents());
+    const html = compose(plain, true);
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    const holder = document.createDocumentFragment();
+    while (box.firstChild) holder.appendChild(box.firstChild);
+    range.deleteContents();
+    range.insertNode(holder);
+    reselect(sel, holder);
     if (DocM.setActiveBuffer) DocM.setActiveBuffer(EdMode.serializeNow());
     return true;
   }
-  function applyToSel(aspect){
-    return EdMode.current() === 'rich' ? applyRich(aspect) : applySrc(aspect);
+
+  /* ---------- 2.1) 实时调度：任何控件变化都重算一次选区 ---------- */
+  let applyTimer = 0;
+  function applyToSel(){
+    return EdMode.current() === 'rich' ? applyFullRich() : applyFullSrc();
   }
-  // 有选区 → 把该控件对应的样式套到选区；无选区 → 维持原有「整段生成」
-  function genOrApply(aspect){
-    lastAspect = aspect;
+  function applyToSelection(){
     const s = currentSel();
-    if (s && applyToSel(aspect)){
-      refreshCard(); syncEditorNow();
-      try { ui.status('已套用到选中的 ' + (s.text || '').length + ' 个字'); } catch (e) {}
-      return;
-    }
+    if (!s) return false;
+    const n = (s.text || '').length;
+    if (!applyToSel()) return false;
+    refreshCard(); syncEditorNow();
+    try { ui.status('已实时套用到选中的 ' + n + ' 个字'); } catch (e) {}
+    return true;
+  }
+  function scheduleApply(){
+    if (applyTimer) return;
+    if (!hasSel()) return;                    // 没选区就交给控件自身的整段生成
+    applyTimer = setTimeout(function(){
+      applyTimer = 0;
+      applyToSelection();
+    }, 50);
+  }
+  // 常用色块 / 拾色器确定：有选区套选区，无选区整段生成
+  function genOrApply(){
+    if (applyToSelection()) return;
     gen();
   }
 
@@ -4984,13 +5081,12 @@ const EdMode = (function(){
       '<button class="b" id="selClearBtn">清除选中格式</button>' +
       '<button class="b" id="selToWork">载入工作台生成</button>' +
     '</div>' +
-    '<div class="hint">在左侧编辑区选中文字后，下面「颜色系统」「样式与渐变」里改任何一项都会<b>实时套用到这段选中文字</b>；如果某项没打上（比如先点了别处导致选区丢了），改完再点「重新应用到选区」即可补上。未选中时这些控件仍按整段生成。</div>';
+    '<div class="hint">在左侧编辑区选中文字后，「颜色系统」「样式与渐变」里<b>任何一项改动都会实时重算这段选中文字</b>：颜色、字号、高亮、透明度、粗斜体、渐变（含循环 / 轴对称）、超链接都算。没有选中文字时，这些控件仍按整段生成。</div>';
   const pWork = $('p-work');
   pWork.insertBefore(card, pWork.firstChild);
   $('selClearBtn').onclick = clearSelStyle;
   $('selApplyBtn').onclick = () => {
-    if (!lastAspect){ ui.status('先在上面任意改动一项样式，再点这里重试'); return; }
-    genOrApply(lastAspect);
+    if (!applyToSelection()) ui.status('请先在左侧编辑区选中一段文字');
   };
   $('selToWork').onclick = () => {
     const s = currentSel();
@@ -5038,26 +5134,29 @@ const EdMode = (function(){
   });
   ['mdSrc', 'mdRich'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', () => setTimeout(refreshCard, 0)); });
 
-  /* ---------- 6) 绑定工作台样式控件（摘掉旧的整段 gen()，改为按控件套用） ---------- */
-  const STYLE_CTRLS = [
-    ['color', 'input', 'color'],
-    ['bold', 'change', 'bold'], ['italic', 'change', 'italic'], ['underline', 'change', 'underline'],
-    ['strike', 'change', 'strike'], ['sub', 'change', 'sub'], ['sup', 'change', 'sup'],
-    ['size', 'input', 'size'],
-    ['mark', 'change', 'mark'], ['markColor', 'input', 'mark'],
-    ['alpha', 'input', 'alpha']
-  ];
-  STYLE_CTRLS.forEach(row => {
-    const el = $(row[0]); if (!el) return;
-    if (row[1] === 'change') el.onchange = null; else el.oninput = null;
-    el.addEventListener(row[1], () => genOrApply(row[2]));
+  /* ---------- 6) 绑定全部样式控件：任何一项变化都重算选区（实时） ---------- */
+  STYLE_IDS.forEach(function(id){
+    const el = $(id);
+    if (!el) return;
+    // 控件自身的 oninput/onchange 仍保留原来的整段 gen()，这里只额外补一次选区重算
+    el.addEventListener('input', scheduleApply);
+    el.addEventListener('change', scheduleApply);
   });
 
-  // 常用色块：点一下即把该色套到选中文字
+  // 常用色块：用事件委托，色块被重新渲染也不会丢监听
   try {
-    document.querySelectorAll('#quick > button').forEach((btn, i) => {
-      btn.onclick = () => { $('color').value = quick[i]; genOrApply('color'); };
-    });
+    const quickWrap = $('quick');
+    if (quickWrap){
+      quickWrap.addEventListener('click', function(ev){
+        const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+        if (!btn) return;
+        const idx = Array.prototype.indexOf.call(quickWrap.children, btn);
+        const c = (typeof quick !== 'undefined' && quick[idx]) ? quick[idx] : null;
+        if (!c) return;
+        $('color').value = c;
+        genOrApply();
+      }, true);
+    }
   } catch (e) { }
 
   // 拾色器「确定应用」：有选区则套到选区
@@ -5066,7 +5165,7 @@ const EdMode = (function(){
     window.pickApply = function(){
       const had = hasSel();
       _pa();
-      if (had){ applyToSel('color'); refreshCard(); }
+      if (had) applyToSelection();
     };
   }
 
