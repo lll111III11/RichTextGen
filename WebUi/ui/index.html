@@ -870,6 +870,34 @@ try{
         </div>
         <div class="row"><span class="hint">默认布局就是打开时看到的三栏：菜单栏 / 标签栏 / 编辑器 + 工作台 / 状态栏，自由摆放不会改动它，只有你点「自由摆放」并「保存布局」后才会生效。<br>排序模式：拖动卡片调整上下顺序。<br>自由摆放：顶部标题栏（图标 / 名称 / 版本 / 置顶 / 最大化 / 关闭）固定；菜单栏、标签栏、编辑区、工作台、状态栏以及每张卡片都能拖到任意位置，拖动每个区域右下角的小三角还能改长宽；卡片右下角也能双向拉伸。<br>可开启「网格对齐」自动吸附到不可见网格；点「恢复默认布局」随时回到初始三栏。</span></div>
       </div>
+      <div class="card" id="lookCard"><h3>外观 · 字体与缩放</h3>
+        <div class="row">
+          <label class="f">界面字体</label>
+          <select id="uiFont" onchange="lookApply()" style="min-width:170px"></select>
+          <label class="f">字号</label>
+          <input type="number" id="uiFontSize" min="10" max="22" step="0.5" value="14" style="width:74px" oninput="lookApply()">
+          <label class="f">缩放</label>
+          <input type="range" id="uiScale" min="80" max="170" step="5" value="100" style="width:110px" oninput="lookApply()">
+          <span class="hint" id="uiScaleVal">100%</span>
+        </div>
+        <div class="row">
+          <label class="f">编辑器字体</label>
+          <select id="edFont" onchange="lookApply()" style="min-width:170px"></select>
+          <label class="f">字号</label>
+          <input type="number" id="edFontSize" min="9" max="28" step="0.5" value="13.5" style="width:74px" oninput="lookApply()">
+          <button class="b" onclick="lookReset()">恢复默认外观</button>
+        </div>
+        <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+          <label class="f">主题文件</label>
+          <span class="hint" id="themePath" style="user-select:text;word-break:break-all">读取中…</span>
+        </div>
+        <div class="row">
+          <button class="b p" onclick="host('themeDir')">打开主题文件夹</button>
+          <button class="b" onclick="host('themeFile')">重新加载主题</button>
+          <button class="b" onclick="host('themeReset')">写入默认模板</button>
+        </div>
+        <div class="row"><span class="hint">程序目录下有一份 <b>theme\theme.txt</b>，用记事本打开即可改配色、字体和缩放，保存后点「重新加载主题」生效，不用重装。<br>每行写 <code>键=值</code>，<code>#</code> 开头的整行是注释。可改的键：<code>accent / bg / panel / input / text / sub / line / hover</code>，深色用 <code>dark.</code> 前缀；字体与缩放用 <code>ui.font / ui.size / ui.scale / editor.font / editor.size</code>。</span></div>
+      </div>
       <div class="card"><h3>输出与同步</h3>
         <div class="row">
           <label class="chk"><input type="checkbox" id="copyNl" onchange="setCopyNl(this.checked)"> 复制时把换行转成 \n</label>
@@ -1208,7 +1236,7 @@ try{
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.10.0.4";
+const VERSION = "5.10.0.5";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -6553,6 +6581,207 @@ try { LayoutMode.applyRoot(); } catch(e){}
 try { LayoutMode.applyAll(); } catch(e){}
 
 
+</script>
+<script>
+/* ================= 外观：字体 / 缩放 / 外部主题文件 / 卡片可拉伸 ================= */
+(function(){
+  window.ui = window.ui || {};
+
+  const KEY = { font:'rtgUiFont', size:'rtgUiSize', scale:'rtgUiScale', edFont:'rtgEdFont', edSize:'rtgEdSize' };
+  const DEF = { size:14, scale:100, edSize:13.5 };
+  const st = { font:'', size:DEF.size, scale:DEF.scale, edFont:'', edSize:DEF.edSize };
+  let themeVals = {};
+
+  function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function save(k, v){ try { localStorage.setItem(k, String(v)); } catch(e){} }
+  function num(v, d){ const n = parseFloat(v); return isNaN(n) ? d : n; }
+  function el(id){ return document.getElementById(id); }
+
+  function styleEl(){
+    let s = document.getElementById('lookStyle');
+    if (!s){ s = document.createElement('style'); s.id = 'lookStyle'; document.head.appendChild(s); }
+    return s;
+  }
+
+  // 颜色键 → CSS 变量
+  const VAR = { accent:'--accent', bg:'--bg', panel:'--card', input:'--input',
+                text:'--text', sub:'--sub', line:'--line', hover:'--hover' };
+  const lineVar = { panel:'--inputLine' };
+
+  function build(){
+    const out = [];
+    // 整体缩放（放在 html 上，等同浏览器缩放，布局会跟着重排）
+    if (st.scale !== 100) out.push('html{zoom:' + (st.scale / 100) + '}');
+
+    const fam = st.font ? '"' + st.font + '", ' : '';
+    out.push('body{font-family:' + fam + '"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif !important}');
+    if (st.size) out.push('body{font-size:' + st.size + 'px}');
+
+    if (st.edFont) out.push('#edSrc,#edRich,#out,#preview{font-family:"' + st.edFont + '","Cascadia Mono","Consolas",monospace !important}');
+    if (st.edSize) out.push('#edSrc,#edRich{font-size:' + st.edSize + 'px !important}');
+
+    const light = [], dark = [];
+    Object.keys(VAR).forEach(function(k){
+      const v = themeVals[k];
+      if (v) light.push(VAR[k] + ':' + v);
+      if (lineVar[k] && v) light.push(lineVar[k] + ':' + v);
+      const dv = themeVals['dark.' + k];
+      if (dv){ dark.push(VAR[k] + ':' + dv); if (lineVar[k]) dark.push(lineVar[k] + ':' + dv); }
+    });
+    if (light.length) out.push(':root{' + light.join(';') + '}');
+    if (dark.length) out.push('body.dark{' + dark.join(';') + '}');
+
+    styleEl().textContent = out.join('\n');
+  }
+
+  /** 控件 → 状态 → 存盘 → 应用 */
+  window.lookApply = function(){
+    const f = el('uiFont'), s = el('uiFontSize'), sc = el('uiScale');
+    const ef = el('edFont'), es = el('edFontSize');
+    if (f) st.font = f.value;
+    if (s) st.size = num(s.value, DEF.size);
+    if (sc) st.scale = Math.max(80, Math.min(170, num(sc.value, DEF.scale)));
+    if (ef) st.edFont = ef.value;
+    if (es) st.edSize = num(es.value, DEF.edSize);
+
+    save(KEY.font, st.font); save(KEY.size, st.size); save(KEY.scale, st.scale);
+    save(KEY.edFont, st.edFont); save(KEY.edSize, st.edSize);
+
+    const lab = el('uiScaleVal'); if (lab) lab.textContent = st.scale + '%';
+    build();
+  };
+
+  window.lookReset = function(){
+    st.font = ''; st.size = DEF.size; st.scale = DEF.scale; st.edFont = ''; st.edSize = DEF.edSize;
+    themeVals = {};
+    ['uiFont','edFont'].forEach(function(id){ const e = el(id); if (e) e.value = ''; });
+    const s = el('uiFontSize'); if (s) s.value = DEF.size;
+    const sc = el('uiScale'); if (sc) sc.value = DEF.scale;
+    const es = el('edFontSize'); if (es) es.value = DEF.edSize;
+    const lab = el('uiScaleVal'); if (lab) lab.textContent = DEF.scale + '%';
+    Object.keys(KEY).forEach(function(k){ save(KEY[k], ''); });
+    build();
+    if (typeof status === 'function') status('已恢复默认外观');
+  };
+
+  /** 系统字体清单：填充「界面字体 / 编辑器字体」，并补充到编辑器工具条的字体下拉 */
+  window.ui.fontList = function(list){
+    if (typeof list === 'string'){ try { list = JSON.parse(list); } catch(e){ list = []; } }
+    if (!Array.isArray(list)) return;
+
+    [['uiFont','（跟随系统）'], ['edFont','（默认等宽）']].forEach(function(pair){
+      const sel = el(pair[0]);
+      if (!sel) return;
+      const keep = sel.value;
+      sel.innerHTML = '';
+      const o0 = document.createElement('option');
+      o0.value = ''; o0.textContent = pair[1];
+      sel.appendChild(o0);
+      list.forEach(function(n){
+        const o = document.createElement('option'); o.value = n; o.textContent = n;
+        sel.appendChild(o);
+      });
+      sel.value = keep || '';
+    });
+
+    // 编辑器工具条原有的下拉：只补新字体，不覆盖已有项
+    const tb = el('fontFamily');
+    if (tb){
+      const have = {};
+      Array.prototype.forEach.call(tb.options, function(o){ have[o.value] = 1; });
+      list.forEach(function(n){
+        if (have[n]) return;
+        const o = document.createElement('option'); o.value = n; o.textContent = n;
+        tb.appendChild(o);
+      });
+    }
+  };
+
+  /** 宿主回传主题文件内容 */
+  window.ui.themeFile = function(o){
+    if (typeof o === 'string'){ try { o = JSON.parse(o); } catch(e){ return; } }
+    if (!o) return;
+    themeVals = o.values || {};
+
+    const p = el('themePath');
+    if (p) p.textContent = o.path || '（未找到）';
+
+    // 文件里的字体 / 字号 / 缩放优先级低于界面上的手动设置
+    if (!st.font && themeVals['ui.font']) st.font = themeVals['ui.font'];
+    if (!st.edFont && themeVals['editor.font']) st.edFont = themeVals['editor.font'];
+    if (ls(KEY.scale) == null && themeVals['ui.scale']) st.scale = Math.round(num(themeVals['ui.scale'], 1) * 100);
+    if (ls(KEY.size) == null && themeVals['ui.size']) st.size = num(themeVals['ui.size'], DEF.size);
+    if (ls(KEY.edSize) == null && themeVals['editor.size']) st.edSize = num(themeVals['editor.size'], DEF.edSize);
+
+    const f = el('uiFont'); if (f && st.font) f.value = st.font;
+    const ef = el('edFont'); if (ef && st.edFont) ef.value = st.edFont;
+    const s = el('uiFontSize'); if (s) s.value = st.size;
+    const sc = el('uiScale'); if (sc) sc.value = st.scale;
+    const es = el('edFontSize'); if (es) es.value = st.edSize;
+    const lab = el('uiScaleVal'); if (lab) lab.textContent = st.scale + '%';
+
+    build();
+  };
+
+  /* ---------- 卡片：允许双向拉伸并记住尺寸 ---------- */
+  (function(){
+    let saved = {};
+    try { saved = JSON.parse(ls('rtgCardW') || '{}'); } catch(e){ saved = {}; }
+    function flush(){ try { localStorage.setItem('rtgCardW', JSON.stringify(saved)); } catch(e){} }
+
+    function key(card){
+      const pg = card.closest('.page');
+      const pid = pg ? pg.id : 'x';
+      const idx = pg ? Array.prototype.indexOf.call(pg.querySelectorAll('.card'), card) : 0;
+      return pid + ':' + idx;
+    }
+    function apply(card){
+      if (card.__wBound) return;
+      card.__wBound = true;
+      card.style.resize = 'both';
+      const k = key(card);
+      if (saved[k]) card.style.width = saved[k] + 'px';
+      let t = null;
+      card.addEventListener('mouseup', function(){
+        clearTimeout(t);
+        t = setTimeout(function(){
+          const w = parseInt(card.style.width, 10);
+          if (w > 120) saved[k] = w; else delete saved[k];
+          flush();
+        }, 250);
+      });
+    }
+    function scan(){ document.querySelectorAll('#pages .card').forEach(apply); }
+    scan();
+    const pagesEl = document.getElementById('pages');
+    if (pagesEl && window.MutationObserver) new MutationObserver(scan).observe(pagesEl, { childList: true, subtree: true });
+  })();
+
+  /* ---------- 初始化：回填本地偏好，再向宿主要主题与字体 ---------- */
+  function boot(){
+    st.font = ls(KEY.font) || '';
+    st.edFont = ls(KEY.edFont) || '';
+    st.size = num(ls(KEY.size), DEF.size);
+    st.scale = num(ls(KEY.scale), DEF.scale);
+    st.edSize = num(ls(KEY.edSize), DEF.edSize);
+
+    const f = el('uiFont'); if (f && st.font) f.value = st.font;
+    const ef = el('edFont'); if (ef && st.edFont) ef.value = st.edFont;
+    const s = el('uiFontSize'); if (s) s.value = st.size;
+    const sc = el('uiScale'); if (sc) sc.value = st.scale;
+    const es = el('edFontSize'); if (es) es.value = st.edSize;
+    const lab = el('uiScaleVal'); if (lab) lab.textContent = st.scale + '%';
+
+    build();
+    setTimeout(function(){
+      try { host('themeFile'); } catch(e){}
+      try { host('fonts'); } catch(e){}
+    }, 500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
 </script>
 </body>
 </html>

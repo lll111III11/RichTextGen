@@ -1,17 +1,17 @@
-{
+﻿{
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.4",
+    "version":  "5.10.0.5",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "bugfix",
+    "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.4/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.4/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.5/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.5/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.4 更新（选中文字真正的实时样式）：\\n· 改为「全量重算」：改动颜色、字号、高亮、透明度、粗斜体、渐变、超链接中的任何一项，都会立刻按当前全部设置重算选中文字\\n· 修复渐变（含「循环」「轴对称」）完全不作用于选中文字的问题，现已与整段生成的算法一致\\n· 修复连续改色（颜色循环）时标签层层嵌套的问题：每次都先剥离受管标签再重新拼装\\n· 渲染模式下改为先算出新内容再改 DOM，出错也不会吞掉选中的文字\\n· 常用色块改用事件委托，色块重新渲染后依然能实时作用于选区\\n· 控件变化以 50ms 合并调度，拖动/连续输入不会卡顿",
+    "notes":  "v5.10.0.5 更新（外观可定制）：\n· 新增「外观 · 字体与缩放」卡片：界面字体 / 字号 / 整体缩放（80%-170%）可调，立即生效并记住\n· 编辑器字体与字号可单独设置，字体下拉自动列出本机所有已安装字体\n· 程序目录新增 theme\\theme.txt 外部主题文件：改里面的颜色、字体、缩放，保存后点「重新加载主题」即可生效，无需重装\n· 支持亮色与深色两套配色（dark. 前缀），键位：accent / bg / panel / input / text / sub / line / hover\n· 卡片右下角可双向拉伸，宽度会被记住\n· 自由摆放模式下拖动区域与右下角小三角调整长宽的交互已复核可用",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

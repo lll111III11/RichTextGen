@@ -1162,6 +1162,123 @@ namespace RichTextGen
         }
         private void CallStr(string fn, string s) { Call(fn, Quote(s)); }
 
+        /* ================= 外部主题文件（程序目录 theme\theme.txt） =================
+           把配色/字体/缩放开放给用户：安装后程序目录下会有 theme\theme.txt，
+           用户改完保存，界面点「重新加载主题」即可生效，不需要重新打包。 */
+
+        /// <summary>主题目录：优先程序目录；不可写时退回 %APPDATA%\RichTextGen\theme</summary>
+        private static string ThemeDir()
+        {
+            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "theme");
+            try
+            {
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                return dir;
+            }
+            catch
+            {
+                dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen", "theme");
+                try { if (!Directory.Exists(dir)) Directory.CreateDirectory(dir); } catch { }
+                return dir;
+            }
+        }
+
+        private static string ThemeFilePath() { return Path.Combine(ThemeDir(), "theme.txt"); }
+
+        /// <summary>默认模板：用户第一次打开就能照着改</summary>
+        private const string ThemeTemplate =
+            "# 彩色文本生成器 · 外观主题\r\n" +
+            "# 用法：只改等号右边；保存后到「设置 → 外观 · 字体与缩放」点「重新加载主题」。\r\n" +
+            "# 以 # 开头的整行是注释；值请写到行尾，不要加行内注释。\r\n" +
+            "\r\n" +
+            "# ---- 亮色配色 ----\r\n" +
+            "accent=#0067C0\r\n" +
+            "bg=#F3F3F3\r\n" +
+            "panel=#FFFFFF\r\n" +
+            "input=#FFFFFF\r\n" +
+            "text=#1B1B1B\r\n" +
+            "sub=#5D5D5D\r\n" +
+            "line=#E5E5E5\r\n" +
+            "hover=#F0F0F0\r\n" +
+            "\r\n" +
+            "# ---- 深色配色（不填则沿用内置深色）----\r\n" +
+            "dark.accent=#4CC2FF\r\n" +
+            "dark.bg=#202020\r\n" +
+            "dark.panel=#2B2B2B\r\n" +
+            "dark.input=#262626\r\n" +
+            "dark.text=#FFFFFF\r\n" +
+            "dark.sub=#C5C5C5\r\n" +
+            "dark.line=#3A3A3A\r\n" +
+            "dark.hover=#333333\r\n" +
+            "\r\n" +
+            "# ---- 字体与缩放 ----\r\n" +
+            "# ui.font 可填任意已安装字体名；ui.scale 取 0.8 ~ 1.6\r\n" +
+            "ui.font=\r\n" +
+            "ui.size=14\r\n" +
+            "ui.scale=1\r\n" +
+            "editor.font=\r\n" +
+            "editor.size=13.5\r\n";
+
+        /// <summary>读主题文件并转成 {path, values:{k:v}} 交给界面</summary>
+        private static string ThemeJson()
+        {
+            string path = ThemeFilePath();
+            string text = "";
+            try
+            {
+                if (!File.Exists(path)) File.WriteAllText(path, ThemeTemplate, new UTF8Encoding(false));
+                text = File.ReadAllText(path, Encoding.UTF8);
+            }
+            catch { }
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"path\":").Append(Quote(path)).Append(",\"values\":{");
+            bool first = true;
+            string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.Length == 0 || line[0] == '#') continue;
+                int eq = line.IndexOf('=');
+                if (eq <= 0) continue;
+                string key = line.Substring(0, eq).Trim();
+                string val = line.Substring(eq + 1).Trim();
+                if (key.Length == 0 || val.Length == 0) continue;
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append(Quote(key)).Append(':').Append(Quote(val));
+            }
+            sb.Append("}}");
+            return sb.ToString();
+        }
+
+        /// <summary>系统已安装字体清单（供下拉框使用）</summary>
+        private static string FontsJson()
+        {
+            List<string> names = new List<string>();
+            try
+            {
+                using (System.Drawing.Text.InstalledFontCollection col = new System.Drawing.Text.InstalledFontCollection())
+                {
+                    foreach (FontFamily ff in col.Families)
+                    {
+                        string n = ff.Name;
+                        if (!string.IsNullOrEmpty(n) && !names.Contains(n)) names.Add(n);
+                    }
+                }
+            }
+            catch { }
+            names.Sort(StringComparer.CurrentCulture);
+            StringBuilder sb = new StringBuilder("[");
+            for (int i = 0; i < names.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(Quote(names[i]));
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
         private static bool _loggedOnce;
         /// <summary>关键异常落盘到 %APPDATA%\RichTextGen\error.log（只记第一次，避免刷屏）</summary>
         internal static void LogOnce(string message)
@@ -1232,6 +1349,7 @@ namespace RichTextGen
                     LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
                     Call("syncState", SyncStateJson());   // 置顶 / 同步输出 / 换行开关的当前状态
                     PushMusicState();                   // 音乐播放列表（不自动播放）
+                    Call("themeFile", ThemeJson());      // 程序目录 theme\theme.txt（没有就写一份模板）
 
                     // 强制刷新后：把刷新前打包的标签页正文回灌（等界面脚本全部就绪）
                     if (!string.IsNullOrEmpty(_pendingRefresh))
@@ -1258,6 +1376,22 @@ namespace RichTextGen
                         _pendingTear = null;
                         Call("fileOpened", j);
                     }
+                    break;
+                case "themeFile":
+                    Call("themeFile", ThemeJson());
+                    break;
+                case "themeReset":
+                    try { File.WriteAllText(ThemeFilePath(), ThemeTemplate, new UTF8Encoding(false)); }
+                    catch (Exception ex) { CallStr("status", "写入默认主题失败：" + ex.Message); }
+                    Call("themeFile", ThemeJson());
+                    CallStr("status", "已写入默认主题模板");
+                    break;
+                case "themeDir":
+                    try { System.Diagnostics.Process.Start("explorer.exe", ThemeDir()); }
+                    catch (Exception ex) { CallStr("status", "打开主题文件夹失败：" + ex.Message); }
+                    break;
+                case "fonts":
+                    Call("fontList", FontsJson());
                     break;
                 case "hotkeys":
                     CallStr("hotkeys", hotkeys != null ? hotkeys.StatusText : "热键未初始化");
