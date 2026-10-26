@@ -377,6 +377,23 @@
   body[data-layout="bt"] #wsInner{min-height:0}
   body[data-layout="solo"] #splitter,
   body[data-layout="solo"] #ws{display:none!important}
+  /* solo：工作台改为菜单栏入口唤出的浮层，不会被彻底拿走 */
+  body[data-layout="solo"].ws-pop #ws{display:flex!important;position:fixed;
+    right:12px;top:46px;bottom:46px;width:470px;max-width:calc(100vw - 24px);z-index:70;
+    border:1px solid var(--line);border-radius:12px;background:var(--card);padding:8px;
+    box-shadow:0 18px 48px rgba(0,0,0,.3)}
+  body[data-layout="solo"].ws-pop #splitter{display:none!important}
+  /* 文案编辑模式 */
+  body.text-edit #menubar .mi,
+  body.text-edit nav button,
+  body.text-edit .card h3,
+  body.text-edit label.f,
+  body.text-edit .chk,
+  body.text-edit button.b,
+  body.text-edit .hint,
+  body.text-edit .badge,
+  body.text-edit #statusbar > span{outline:1px dashed var(--accent);outline-offset:2px;cursor:text}
+  body.text-edit .card h3 button{pointer-events:none}
   /* ---- 动效 ---- */
   @keyframes dropIn{from{opacity:0;transform:translateY(-5px) scale(.985)}to{opacity:1;transform:none}}
   #menuDrop.on,#menuDrop2.on{animation:dropIn .12s ease}
@@ -540,6 +557,7 @@ try{
   <span class="mi" data-m="view">查看</span>
   <span class="mi" data-m="format">格式</span>
   <span class="mi" data-m="help">帮助</span>
+  <span class="mi" id="miWork" title="打开工作台（任何布局下都可用）">工作区</span>
 </div>
 <div id="tabBar">
   <span id="tabs"></span>
@@ -922,6 +940,13 @@ try{
           <button class="b" onclick="host('themeReset')">写入默认模板</button>
         </div>
         <div class="row"><span class="hint">程序目录下有一份 <b>theme\theme.txt</b>，用记事本打开即可改配色、字体和缩放，保存后点「重新加载主题」生效，不用重装。<br>每行写 <code>键=值</code>，<code>#</code> 开头的整行是注释。可改的键：<code>accent / bg / panel / input / text / sub / line / hover</code>，深色用 <code>dark.</code> 前缀；字体与缩放用 <code>ui.font / ui.size / ui.scale / editor.font / editor.size</code>。</span></div>
+        <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+          <label class="f">界面文案</label>
+          <button class="b p" onclick="textEditToggle(true)">开启编辑</button>
+          <button class="b" onclick="textEditToggle(false)">关闭并保存</button>
+          <button class="b" onclick="textReset()">恢复默认文案</button>
+        </div>
+        <div class="row"><span class="hint" id="textEditTip">开启后可以直接点界面上的文字修改，回车或点别处即保存；版本号、状态栏实时数值等系统文字不受影响，下次打开仍然生效。</span></div>
       </div>
       <div class="card"><h3>输出与同步</h3>
         <div class="row">
@@ -1261,7 +1286,7 @@ try{
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.10.0.7";
+const VERSION = "5.10.0.8";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -6861,6 +6886,92 @@ try { LayoutMode.applyAll(); } catch(e){}
     if (typeof status === 'function') status('布局已切换');
   };
 
+  /* ---------- 菜单栏「工作区」：随时唤出工作台（solo 布局下的唯一入口） ---------- */
+  (function(){
+    const mi = el('miWork');
+    if (!mi) return;
+    mi.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      document.body.classList.toggle('ws-pop');
+      const on = document.body.classList.contains('ws-pop');
+      mi.style.background = on ? 'var(--hover)' : '';
+      if (typeof status === 'function') status(on ? '工作台已弹出，再点「工作区」收起' : '工作台已收起');
+    }, true);
+    // 点别处收起浮层
+    document.addEventListener('mousedown', function(ev){
+      if (!document.body.classList.contains('ws-pop')) return;
+      if (ev.target.closest && (ev.target.closest('#ws') || ev.target.closest('#miWork'))) return;
+      document.body.classList.remove('ws-pop');
+      mi.style.background = '';
+    });
+  })();
+
+  /* ---------- 界面文案自定义 ---------- */
+  const TXT_KEY = 'rtg.textOverrides';
+  let txtMap = {};
+  try { txtMap = JSON.parse(ls(TXT_KEY) || '{}') || {}; } catch(e){ txtMap = {}; }
+  let textEditing = false;
+
+  function pathOf(e){
+    const parts = [];
+    let n = e;
+    while (n && n !== document.body && n.nodeType === 1){
+      const p = n.parentElement; if (!p) break;
+      parts.unshift(n.tagName.toLowerCase() + ':' + (Array.prototype.indexOf.call(p.children, n) + 1));
+      n = p;
+    }
+    return parts.join('>');
+  }
+  // 版本号、状态栏实时数值等系统文字保持原样
+  const SKIP_IDS = { ver:1, ver2:1, status:1, upVer:1, upNotes:1, net:1, sbPos:1, sbChars:1,
+                     sbEnc:1, sbEol:1, findInfo:1, len:1, tagc:1, selInfo:1, selTarget:1,
+                     themePath:1, textEditTip:1, layoutTip:1, hotkeyInfo:1, upTitle:1, upNotes2:1 };
+
+  function editableEls(){
+    const sel = '#menubar .mi, nav button, .card h3, label.f, button.b, .hint, .badge, #statusbar > span';
+    const out = [];
+    document.querySelectorAll(sel).forEach(function(e){
+      if (e.closest('#dsk-root')) return;
+      if (e.id && SKIP_IDS[e.id]) return;
+      if (e.querySelector('button,input,select,textarea,a,.g')) return;   // 含交互子元素/图标的不动
+      if (!e.textContent || !e.textContent.trim()) return;
+      out.push(e);
+    });
+    return out;
+  }
+  function applyText(){
+    editableEls().forEach(function(e){
+      const v = txtMap[pathOf(e)];
+      if (typeof v === 'string' && v && v !== e.textContent) e.textContent = v;
+    });
+  }
+
+  window.textEditToggle = function(on){
+    textEditing = !!on;
+    document.body.classList.toggle('text-edit', textEditing);
+    editableEls().forEach(function(e){
+      if (textEditing){
+        e.setAttribute('contenteditable', 'true');
+        e.dataset.tid = pathOf(e);
+      } else {
+        e.removeAttribute('contenteditable');
+      }
+    });
+    if (typeof status === 'function') status(textEditing ? '文案编辑已开启：点文字直接修改' : '文案已保存');
+  };
+  window.textReset = function(){
+    try { localStorage.removeItem(TXT_KEY); } catch(e){}
+    location.reload();
+  };
+  document.addEventListener('blur', function(ev){
+    if (!textEditing) return;
+    const t = ev.target;
+    if (!t || !t.dataset || !t.dataset.tid) return;
+    const k = t.dataset.tid, v = (t.textContent || '').trim();
+    if (v) txtMap[k] = v; else delete txtMap[k];
+    try { localStorage.setItem(TXT_KEY, JSON.stringify(txtMap)); } catch(e){}
+  }, true);
+
   /* ---------- 卡片：允许双向拉伸并记住尺寸 ---------- */
   (function(){
     let saved = {};
@@ -6923,6 +7034,13 @@ try { LayoutMode.applyAll(); } catch(e){}
       : '拖动中间的分隔条可调整编辑区与工作台的比例';
 
     build();
+
+    // 套用用户改过的文案；切页后补一次（新卡片是显示时才渲染）
+    applyText();
+    document.querySelectorAll('nav button').forEach(function(b){
+      b.addEventListener('click', function(){ setTimeout(applyText, 60); });
+    });
+
     setTimeout(function(){
       try { host('themeFile'); } catch(e){}
       try { host('fonts'); } catch(e){}

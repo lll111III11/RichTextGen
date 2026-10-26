@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.10.0.7",
+  "version": "5.10.0.8",
   "updated": "2026-10-26",
-  "notes": "v5.10.0.7：布局改为预设方案——左右对换、上下分隔等五种，不再依赖自由拖拽。",
+  "notes": "v5.10.0.8：solo 布局不再丢工作区（菜单栏「工作区」可弹出）；界面文案支持自行修改。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.10.0.7",
-      "size": 2224640,
-      "sha256": "7865a366cde45fc341a05bc7d4e8798f1c7fd85b02a3fcb3e1373abbaa0ad276",
+      "version": "5.10.0.8",
+      "size": 2230272,
+      "sha256": "3b1e1c79e5b82a6cc45bd5610741212fc371b05c07476c00a70e3bee14336678",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.10.0.7",
-      "size": 447618,
-      "sha256": "eafe5c2850c106ec74bf09928ec0ce8a75b60fad609ac71bc64df8d82446313a",
+      "version": "5.10.0.8",
+      "size": 449166,
+      "sha256": "de45745efbab634519f6cd7b7a5c54af040d1a397953ae7f3d33dfee3daacb30",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"
