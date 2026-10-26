@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.5",
+    "version":  "5.10.0.6",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "feature",
+    "type":  "bugfix",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.5/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.5/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.6/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.6/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.5 更新（外观可定制）：\n· 新增「外观 · 字体与缩放」卡片：界面字体 / 字号 / 整体缩放（80%-170%）可调，立即生效并记住\n· 编辑器字体与字号可单独设置，字体下拉自动列出本机所有已安装字体\n· 程序目录新增 theme\\theme.txt 外部主题文件：改里面的颜色、字体、缩放，保存后点「重新加载主题」即可生效，无需重装\n· 支持亮色与深色两套配色（dark. 前缀），键位：accent / bg / panel / input / text / sub / line / hover\n· 卡片右下角可双向拉伸，宽度会被记住\n· 自由摆放模式下拖动区域与右下角小三角调整长宽的交互已复核可用",
+    "notes":  "v5.10.0.6 更新（布局交互）：\n· 自由摆放新增边缘缩放：区域拖到离窗口边缘 12px 内会自动吸附贴边，之后从贴边方向拖拽就是放大缩小，不再移动\n· 指针移到区域边缘时光标变成双向箭头，提示此处可缩放；中间拖动仍是移动\n· 四边四角均可缩放，缩放时对角保持不动，最小 160x60",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

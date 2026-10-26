@@ -1236,7 +1236,7 @@ try{
 const $ = id => document.getElementById(id);
 const txt = $('txt'), out = $('out');
 // 兜底版本号（界面就绪后由宿主 ui.version 用程序集版本覆盖）
-const VERSION = "5.10.0.5";
+const VERSION = "5.10.0.6";
 $('ver').textContent = "v" + VERSION; $('ver2').textContent = VERSION;
 
 /* ---------- 与 C# 通信 ---------- */
@@ -6467,6 +6467,32 @@ const LayoutMode = (function(){
     const r = el.getBoundingClientRect();
     start = { type: 'grip', el: el, x: e.clientX, y: e.clientY, w: r.width, h: r.height };
   }
+
+  /* ---------- 边缘热区：贴边后拖拽变成缩放 ---------- */
+  const EDGE = 9;                      // 边缘感应宽度（px）
+  /** 判断指针落在元素的哪条边/角，返回 '' / 'l' / 'r' / 't' / 'b' / 'tl' 等 */
+  function edgeOf(el, e){
+    const r = el.getBoundingClientRect();
+    const dl = e.clientX - r.left, dr = r.right - e.clientX;
+    const dt = e.clientY - r.top,  db = r.bottom - e.clientY;
+    let h = '', v = '';
+    if (dl >= -1 && dl <= EDGE) h = 'l';
+    else if (dr >= -1 && dr <= EDGE) h = 'r';
+    if (dt >= -1 && dt <= EDGE) v = 't';
+    else if (db >= -1 && db <= EDGE) v = 'b';
+    return h + v;
+  }
+  function beginEdge(el, e, side){
+    const r = el.getBoundingClientRect();
+    el.style.position = 'absolute';
+    el.style.left = Math.round(r.left) + 'px';
+    el.style.top = Math.round(r.top) + 'px';
+    el.style.width = Math.round(r.width) + 'px';
+    el.style.height = Math.round(r.height) + 'px';
+    el.style.zIndex = '50';
+    start = { type: 'edge', el: el, side: side, x: e.clientX, y: e.clientY,
+              l: r.left, t: r.top, w: r.width, h: r.height };
+  }
   function beginCard(c, e){
     const pg = c.parentElement, pr = pg.getBoundingClientRect(), r = c.getBoundingClientRect();
     start = { type: 'card', el: c, x: e.clientX, y: e.clientY,
@@ -6497,14 +6523,43 @@ const LayoutMode = (function(){
       const el = UNITS.map(unitEl).filter(Boolean).find(function(u){ return u.contains(e.target); });
       if (el){
         e.preventDefault();
-        beginUnit(el, e);
+        // 指针在元素边缘 → 缩放；在中间 → 移动
+        const side = edgeOf(el, e);
+        if (side) beginEdge(el, e, side); else beginUnit(el, e);
         try { el.setPointerCapture(e.pointerId); } catch(err){}
       }
     }
   }, true);
 
   document.addEventListener('pointermove', function(e){
-    if (!start) return;
+    if (!start){
+      // 空闲时按边缘位置换光标：提示「这里是缩放」
+      if (on && free){
+        const hover = UNITS.map(unitEl).filter(Boolean).find(function(u){ return u.contains(e.target); });
+        UNITS.map(unitEl).filter(Boolean).forEach(function(u){ if (u !== hover) u.style.cursor = ''; });
+        if (hover){
+          const s = edgeOf(hover, e);
+          const map = { l:'ew-resize', r:'ew-resize', t:'ns-resize', b:'ns-resize',
+                        tl:'nwse-resize', br:'nwse-resize', tr:'nesw-resize', bl:'nesw-resize' };
+          hover.style.cursor = map[s] || 'move';
+        }
+      }
+      return;
+    }
+    if (start.type === 'edge'){
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      const s = start.side, MINW = 160, MINH = 60;
+      let l = start.l, t = start.t, w = start.w, h = start.h;
+      if (s.indexOf('r') >= 0) w = Math.max(MINW, start.w + dx);
+      if (s.indexOf('l') >= 0){ w = Math.max(MINW, start.w - dx); l = start.l + (start.w - w); }
+      if (s.indexOf('b') >= 0) h = Math.max(MINH, start.h + dy);
+      if (s.indexOf('t') >= 0){ h = Math.max(MINH, start.h - dy); t = start.t + (start.h - h); }
+      start.el.style.left = Math.max(0, snap(l)) + 'px';
+      start.el.style.top = Math.max(0, snap(t)) + 'px';
+      start.el.style.width = snap(w) + 'px';
+      start.el.style.height = snap(h) + 'px';
+      return;
+    }
     if (start.type === 'grip'){
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
       start.el.style.width = Math.max(140, snap(start.w + dx)) + 'px';
@@ -6542,7 +6597,19 @@ const LayoutMode = (function(){
   });
 
   document.addEventListener('pointerup', function(){
-    if (start && start.type === 'unit') start.el.style.zIndex = '';
+    if (start && (start.type === 'unit' || start.type === 'edge')){
+      const el = start.el;
+      el.style.zIndex = '';
+      if (start.type === 'unit'){
+        // 拖到离边缘 12px 内就吸附贴边，之后从这条边拖拽即为缩放
+        const bs = bodySize(), r = el.getBoundingClientRect();
+        if (r.left <= 12) el.style.left = '0px';
+        else if (bs.w - r.right <= 12) el.style.left = Math.max(0, Math.round(bs.w - r.width)) + 'px';
+        if (r.top <= 12) el.style.top = '0px';
+        else if (bs.h - r.bottom <= 12) el.style.top = Math.max(0, Math.round(bs.h - r.height)) + 'px';
+      }
+      el.style.cursor = '';
+    }
     start = null;
   });
   document.addEventListener('pointercancel', function(){ start = null; });
