@@ -6953,7 +6953,8 @@ try { LayoutMode.applyAll(); } catch(e){}
     if (langCode === 'zh' && missing > 0 && !langSeeded){ langSeeded = true; langSync(); }
   }
 
-  function keyOf(e){ return e.id ? '#' + e.id : pathOf(e); }
+  // 用 @ 而不是 # 作为 id 前缀：# 在语言文件里表示注释
+  function keyOf(e){ return e.id ? '@' + e.id : pathOf(e); }
 
   /** 把界面上当前所有文字写入当前语言文件（zh 用于生成基准，其它语言用于导出） */
   window.langSync = function(){

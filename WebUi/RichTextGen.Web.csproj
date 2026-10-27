@@ -20,9 +20,9 @@
     <Prefer32Bit>true</Prefer32Bit>
 
     <!-- exe 属性 -->
-    <Version>5.10.0.9</Version>
-    <AssemblyVersion>5.10.0.9</AssemblyVersion>
-    <FileVersion>5.10.0.9</FileVersion>
+    <Version>5.10.1.0</Version>
+    <AssemblyVersion>5.10.1.0</AssemblyVersion>
+    <FileVersion>5.10.1.0</FileVersion>
     <Product>Rich text &amp; multifunctional tool</Product>
     <AssemblyTitle>多功能性的一种工具</AssemblyTitle>
     <Description>多功能性的一种工具</Description>
@@ -38,6 +38,8 @@
     <!-- 界面资源 -->
     <EmbeddedResource Include="ui\index.html" />
     <EmbeddedResource Include="ui\chat.html" />
+    <!-- 内置语言文件（首次运行时释放到程序目录 lang\；用户改过的不覆盖） -->
+    <EmbeddedResource Include="lang\*.txt" />
   </ItemGroup>
 
   <ItemGroup>

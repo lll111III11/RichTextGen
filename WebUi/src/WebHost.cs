@@ -1312,11 +1312,66 @@ namespace RichTextGen
             return "# 彩色文本生成器 · 语言文件\r\n" +
                    "# name = " + nm + "\r\n" +
                    "# 左侧是界面元素标识，请勿修改；右侧是显示文字，可以随意改。\r\n" +
-                   "# 以 # 开头的是注释；用 \\n 表示换行；留空则回退到简体中文。\r\n" +
+                   "# 以 # 开头的整行是注释；用 \\n 表示换行，\\\\ 表示反斜杠本身；留空则回退到简体中文。\r\n" +
                    "\r\n";
         }
 
-        /// <summary>确保 lang 目录存在并有 5 个初始文件（已存在的绝不覆盖）</summary>
+        /// <summary>把语言文件里的 \\n / \\\\ 还原成真实字符</summary>
+        private static string LangUnescape(string s)
+        {
+            if (s.IndexOf('\\') < 0) return s;
+            StringBuilder b = new StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\\' && i + 1 < s.Length)
+                {
+                    char n = s[i + 1];
+                    if (n == 'n') { b.Append('\n'); i++; continue; }
+                    if (n == 'r') { b.Append('\r'); i++; continue; }
+                    if (n == '\\') { b.Append('\\'); i++; continue; }
+                }
+                b.Append(c);
+            }
+            return b.ToString();
+        }
+
+        /// <summary>写文件前把真实换行 / 反斜杠转义成 \\n / \\\\</summary>
+        private static string LangEscape(string s)
+        {
+            return s.Replace("\\", "\\\\").Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\\n");
+        }
+
+        /// <summary>内置翻译（编译进 exe），没有该语言时返回 null</summary>
+        private static string BuiltinLang(string code)
+        {
+            try
+            {
+                using (Stream s = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("RichTextGen.lang." + code + ".txt"))
+                {
+                    if (s == null) return null;
+                    using (StreamReader r = new StreamReader(s, Encoding.UTF8))
+                        return r.ReadToEnd();
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>统计语言文件里的有效条目数</summary>
+        private static int LangEntryCount(string text)
+        {
+            int n = 0;
+            foreach (string raw in text.Split('\n'))
+            {
+                string t = raw.Trim();
+                if (t.Length == 0 || t[0] == '#') continue;
+                if (t.IndexOf('=') > 0) n++;
+            }
+            return n;
+        }
+
+        /// <summary>确保 lang 目录存在并有 5 个初始文件（用户改过的绝不覆盖）</summary>
         private static void EnsureLangFiles()
         {
             try
@@ -1325,7 +1380,21 @@ namespace RichTextGen
                 foreach (string code in LangSeed)
                 {
                     string f = Path.Combine(dir, code + ".txt");
-                    if (!File.Exists(f)) File.WriteAllText(f, LangHeader(code), new UTF8Encoding(false));
+                    if (!File.Exists(f))
+                    {
+                        string builtin = BuiltinLang(code);
+                        File.WriteAllText(f, builtin ?? LangHeader(code), new UTF8Encoding(false));
+                        continue;
+                    }
+                    // 早期版本生成的空壳（只有注释头）自动补上内置翻译
+                    if (code == "zh") continue;
+                    string cur = null;
+                    try { cur = File.ReadAllText(f, Encoding.UTF8); } catch { }
+                    if (cur != null && LangEntryCount(cur) == 0)
+                    {
+                        string builtin = BuiltinLang(code);
+                        if (!string.IsNullOrEmpty(builtin)) File.WriteAllText(f, builtin, new UTF8Encoding(false));
+                    }
                 }
             }
             catch { }
@@ -1382,7 +1451,7 @@ namespace RichTextGen
                     int eq = t.IndexOf('=');
                     if (eq <= 0) continue;
                     string k = t.Substring(0, eq).Trim();
-                    string v = t.Substring(eq + 1).Trim().Replace("\\n", "\n");
+                    string v = LangUnescape(t.Substring(eq + 1).Trim());
                     if (k.Length == 0 || v.Length == 0) continue;
                     if (!first) sb.Append(',');
                     first = false;
@@ -1411,7 +1480,7 @@ namespace RichTextGen
                 string k = Regex.Unescape(m.Groups[1].Value);
                 string v = Regex.Unescape(m.Groups[2].Value).Replace("\r\n", "\n").Replace("\r", "\n");
                 if (k.Length > 0 && v.Length > 0)
-                    body.Append(k).Append(" = ").Append(v.Replace("\n", "\\n")).Append("\r\n");
+                    body.Append(k).Append(" = ").Append(LangEscape(v)).Append("\r\n");
                 m = m.NextMatch();
             }
             string path = Path.Combine(LangDir(), code + ".txt");

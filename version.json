@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.0.9",
+    "version":  "5.10.1.0",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.9/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.0.9/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.1.0/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.1.0/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.0.9 更新（语言文件）：\n· 程序目录新增 lang 文件夹，首次运行自动生成 zh / en / es / fr / ru 五个语言文件\n· 格式与 SCP:SL 类似：每行 键 = 值，# 开头为注释，\\n 表示换行；左侧键请勿修改，右侧文字可任意改\n· 设置 → 外观新增语言下拉：切换即时生效并记住；「把当前文字写入本语言」可导出当前界面文字用于翻译\n· 想加语言只要在 lang 目录新建 ja.txt 之类，重启后自动出现在列表\n· 留空的条目自动回退简体中文",
+    "notes":  "v5.10.1.0 更新（语言文件补全）：\n· en / es / fr / ru 改为内置完整翻译，各 254 条，首次运行即带内容，切换语言立刻生效\n· 修复以 # 开头的键被当作注释而丢失的问题（改用 @ 前缀）\n· 修复文字里的字面 \\n 被误转成换行的问题\n· 旧版本留下的空语言文件会自动补上内置翻译；你改过的文件绝不覆盖\n· 想加语言只要在 lang 目录新建 ja.txt，重启后自动出现在列表；留空的条目回退简体中文",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
