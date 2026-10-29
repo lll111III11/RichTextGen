@@ -7,6 +7,14 @@ using System.Web.Script.Serialization;
 
 namespace RichTextGen
 {
+    /// <summary>屏幕上的一个触发点：只有点击落在半径内才弹面板（用于缩小触发范围）。</summary>
+    internal class TrigPoint
+    {
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int R { get; set; }             // 命中半径，默认 60
+    }
+
     /// <summary>被记录过的一个应用（按进程名去重）。</summary>
     internal class AppEntry
     {
@@ -16,6 +24,7 @@ namespace RichTextGen
         public int Count { get; set; }         // 命中次数
         public bool On { get; set; }           // 在白名单/黑名单里是否勾选
         public bool Force { get; set; }        // 强制弹出：不做 UIA 检测（Unity 游戏等识别不到输入控件时用）
+        public List<TrigPoint> Points { get; set; }   // 触发点：设了之后只有点在半径内才弹
     }
 
     /// <summary>名单文件（%APPDATA%\RichTextGen\apps.json）的根对象。</summary>
@@ -159,6 +168,64 @@ namespace RichTextGen
             return e != null && e.Force;
         }
 
+        /// <summary>该应用是否设了触发点（设了之后只有点在半径内才弹）。</summary>
+        public static bool HasPoints(string exe)
+        {
+            Ensure();
+            AppEntry e = Find(exe);
+            return e != null && e.Points != null && e.Points.Count > 0;
+        }
+
+        /// <summary>点击位置是否命中该应用的某个触发点。</summary>
+        public static bool HitPoint(string exe, System.Drawing.Point pt)
+        {
+            Ensure();
+            AppEntry e = Find(exe);
+            if (e == null || e.Points == null) return false;
+            foreach (TrigPoint p in e.Points)
+            {
+                if (p == null) continue;
+                int r = p.R > 0 ? p.R : 60;
+                int dx = pt.X - p.X, dy = pt.Y - p.Y;
+                if ((long)dx * dx + (long)dy * dy <= (long)r * r) return true;
+            }
+            return false;
+        }
+
+        /// <summary>给某个应用加一个触发点（同一位置附近去重）。</summary>
+        public static void AddPoint(string exe, int x, int y, int r)
+        {
+            Ensure();
+            AppEntry e = EnsureEntry(exe);
+            if (e == null) return;
+            if (e.Points == null) e.Points = new List<TrigPoint>();
+            if (r <= 0) r = 60;
+            foreach (TrigPoint p in e.Points)
+            {
+                if (p == null) continue;
+                if (Math.Abs(p.X - x) <= 8 && Math.Abs(p.Y - y) <= 8)
+                {
+                    p.X = x; p.Y = y; p.R = r;
+                    ScheduleSave(); Flush();
+                    return;
+                }
+            }
+            e.Points.Add(new TrigPoint { X = x, Y = y, R = r });
+            e.On = true;
+            ScheduleSave();
+            Flush();
+        }
+
+        public static void ClearPoints(string exe)
+        {
+            Ensure();
+            AppEntry e = Find(exe);
+            if (e == null || e.Points == null) return;
+            e.Points.Clear();
+            ScheduleSave();
+            Flush();
+        }
+
         public static void SetMode(string mode)
         {
             Ensure();
@@ -228,7 +295,9 @@ namespace RichTextGen
             int n = 0;
             for (int i = Apps.Count - 1; i >= 0; i--)
             {
-                if (!Apps[i].On && !Apps[i].Force) { Apps.RemoveAt(i); n++; }
+                if (!Apps[i].On && !Apps[i].Force &&
+                    (Apps[i].Points == null || Apps[i].Points.Count == 0))
+                { Apps.RemoveAt(i); n++; }
             }
             if (n > 0) ScheduleSave();
             return n;
@@ -312,7 +381,18 @@ namespace RichTextGen
                       .Append(",\"count\":").Append(e.Count)
                       .Append(",\"on\":").Append(e.On ? "true" : "false")
                       .Append(",\"force\":").Append(e.Force ? "true" : "false")
-                      .Append('}');
+                      .Append(",\"points\":[");
+                    if (e.Points != null)
+                    {
+                        for (int k = 0; k < e.Points.Count; k++)
+                        {
+                            if (k > 0) sb.Append(',');
+                            TrigPoint p = e.Points[k];
+                            sb.Append("{\"x\":").Append(p.X).Append(",\"y\":").Append(p.Y)
+                              .Append(",\"r\":").Append(p.R).Append('}');
+                        }
+                    }
+                    sb.Append(']').Append('}');
                 }
                 sb.Append("]}");
                 return sb.ToString();

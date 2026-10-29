@@ -568,6 +568,7 @@ namespace RichTextGen
                 case "minimize": break;   // 最小化功能已移除（会导致窗口无法正常显示）             // 快捷组件：最小化
                 case "theme": RunJs("toggleTheme()"); break;            // 快捷组件：切换深浅色
                 case "music": MusicNext(); break;                       // 切换下一首音乐
+                case "floatPanel": FloatingInputForm.ShowAtCursor(); break;   // 鼠标处弹出浮动输入面板
             }
         }
 

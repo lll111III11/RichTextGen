@@ -983,7 +983,7 @@ try{
         <div class="row">
           <label class="chk"><input type="checkbox" id="floatingInput" onchange="setFloatingInput(this.checked)"> 浮动输入面板（系统级）</label>
           <button class="b" onclick="host('appRules')" title="选择哪些应用启用浮动输入面板">应用名单…</button>
-          <span class="hint">开启后：在任意软件的输入框里选中文字，面板自动弹出并捕获选区，点任意颜色 / 格式按钮即自动套标签并回填原窗口。支持 cmd / PowerShell / Windows Terminal / Git Bash 等控制台，以及 Trae / VS Code / 浏览器里的网页输入框。Unity 游戏这类识别不到输入框的，可在「应用名单」里对该应用开「⚡ 强制」，点击即弹</span></div>
+          <span class="hint">三种触发方式：① 按 <b>Ctrl+Alt+P</b> 在鼠标处直接弹出；② 在应用名单里点「📍 取点」，之后只有点在那个位置附近才弹（范围最小，适合游戏控制台）；③ 应用名单里开「⚡ 强制」= 点该应用任意位置都弹。回填优先用键盘打字，游戏 / 控制台也能收到</span></div>
         <div class="row"><span class="hint">同步输出分两步：先「复制代码 / 同步到窗口 / 给选区套颜色」把文字准备好，再点一次目标窗口让它聚焦，程序随后自动按 Ctrl+V 粘贴（不会自己抢焦点）。默认关闭。</span></div>
       </div>
       <div class="card"><h3>⚡ 快捷组件与全局热键</h3>

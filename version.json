@@ -1,17 +1,17 @@
 ﻿{
     "name":  "彩色文本生成器",
-    "product":  "Rich text \u0026 multifunctional tool",
+    "product":  "Rich text & multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.2.4",
+    "version":  "5.10.2.5",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.4/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.4/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.5/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.5/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.2.4 更新（应用名单配置 + 防丢失）：\n· 应用名单新增「⚡ 强制」：不做输入框检测，点这个应用就弹面板。给 SCP:SL 这类 Unity 游戏控制台用（它们的输入区 UIA 完全看不到）\n· 应用名单新增「＋ 添加应用」：手动填进程名（如 SCPSL.exe）即可加入，不用等它先被自动记录\n· 名单存储三重加固，不会再莫名消失：先写临时文件再原子替换、每次保存留一份 apps.bak.json、读取失败自动回退备份\n· 退出程序、关闭开关、切换模式、名单窗口关闭时都会立即写盘\n· 「清空未勾选」会保留开了「强制」的条目",
+    "notes":  "v5.10.2.5 更新（触发范围 + 游戏输入）：\n· 回填改用 SendInput 键盘打字（Raw Input 管道），Unity 游戏 / 自绘界面也能收到；普通桌面程序短文本同样直接打字，长文本才退回剪贴板\n· 面板改为紧凑输入条（560×150）：一个输入框 + 一行色块与格式按钮，不再是整张大卡片\n· 新增全局热键 Ctrl+Alt+P：鼠标在哪就在哪弹出，不需要点输入框\n· 新增「触发点」：应用名单里点「📍 取点」，然后在目标输入框上点一下，之后只有点在那个位置附近（60px）才弹，大幅缩小误触范围\n· 应用名单同时给出三种触发粒度：热键 / 触发点 / 整个应用强制",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -72,6 +73,38 @@ namespace RichTextGen
         [DllImport("user32.dll")]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
 
+        // ---- SendInput：走 Raw Input 管道，游戏（Unity / DirectInput）也能收到 ----
+        private const uint INPUT_KEYBOARD = 1;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+        private const uint KEYEVENTF_UNICODE = 0x0004;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KEYBDINPUT
+        {
+            public ushort wVk;
+            public ushort wScan;
+            public uint dwFlags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct INPUT
+        {
+            public uint type;
+            public KEYBDINPUT ki;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+        /// <summary>
+        /// SendInput 要求 cbSize 等于系统 INPUT 结构大小（其中含 MOUSEINPUT 的 union），
+        /// 用 Marshal.SizeOf(我们的精简结构) 会偏小（x86 算出来 20，系统要 28），
+        /// 那样 SendInput 会直接返回 0 什么也不发。这里按平台给正确值。
+        /// </summary>
+        private static int InputSize { get { return IntPtr.Size == 4 ? 28 : 40; } }
+
         // ---------------- 静态状态（全局只挂一个钩子 / 一个面板） ----------------
         private static FloatingInputForm _inst;
         private static bool _enabled;
@@ -82,6 +115,7 @@ namespace RichTextGen
         private static Point _downPt;
         private static bool _wasDrag;
         private static int _clickSeq;
+        private static Action<Point, IntPtr> _pickCallback;   // 非空 = 正在"拾取触发点"
 
         // ---------------- 面板实例状态 ----------------
         private readonly WebView2 _web = new WebView2();
@@ -136,6 +170,72 @@ namespace RichTextGen
             if (_inst != null && !_inst.IsDisposed) _inst.HidePanel();
         }
 
+        /// <summary>进入「拾取触发点」模式：下一次鼠标点击的坐标与窗口会被回调，然后自动退出该模式。</summary>
+        public static void BeginPickPoint(Action<Point, IntPtr> cb)
+        {
+            if (cb == null) return;
+            if (!_enabled) SetEnabled(true);
+            if (_inst == null || _inst.IsDisposed) return;
+            _pickCallback = cb;
+            try { _inst.HidePanel(); } catch { }
+        }
+
+        public static void CancelPickPoint()
+        {
+            _pickCallback = null;
+        }
+
+        /// <summary>
+        /// 全局热键触发：在鼠标位置弹出面板，不做「必须是输入框」的判断。
+        /// 游戏 / 自绘界面里 UIA 看不到输入控件，热键是这类场景最可靠的开面板方式。
+        /// 触发热键时不发复制快捷键（避免误触 Ctrl+C 打断目标程序），只尝试用 UIA 读选区。
+        /// </summary>
+        public static void ShowAtCursor()
+        {
+            if (!_enabled) SetEnabled(true);            // 按了热键就是想用，顺手打开
+            if (_inst == null || _inst.IsDisposed) return;
+            Point pt = Cursor.Position;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                AutomationElement target = null;
+                bool term = false;
+                string sel = "", app = "";
+                IntPtr root = IntPtr.Zero;
+                try
+                {
+                    IntPtr hw = WindowFromPoint(new POINT { X = pt.X, Y = pt.Y });
+                    if (hw != IntPtr.Zero) root = GetAncestor(hw, GA_ROOT);
+                    string exe = ExeOfHwnd(root);
+                    app = TitleOfHwnd(root);
+                    if (!string.IsNullOrEmpty(exe)) AppRules.Touch(exe, app);
+
+                    try { target = FindEditable(pt, out term); } catch { }
+                    if (target != null) { try { sel = ReadSelection(target); } catch { } }
+                    else term = IsTerminalWindow(root);
+                }
+                catch { }
+
+                try
+                {
+                    if (_inst == null || _inst.IsDisposed) return;
+                    AutomationElement t = target;
+                    string s2 = sel, a2 = app;
+                    bool t2 = term;
+                    IntPtr r2 = root;
+                    _inst.BeginInvoke((MethodInvoker)delegate
+                    {
+                        try
+                        {
+                            if (_inst == null || _inst.IsDisposed) return;
+                            _inst.ShowFor(t, pt, s2, a2, t2, r2);
+                        }
+                        catch { }
+                    });
+                }
+                catch { }
+            });
+        }
+
         // ============================================================ 全局鼠标钩子
         private static IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam)
         {
@@ -154,6 +254,25 @@ namespace RichTextGen
                     }
                     else if (msg == WM_LBUTTONUP)
                     {
+                        // 拾取触发点模式：这一次点击只用来记录坐标，不弹面板
+                        Action<Point, IntPtr> pick = _pickCallback;
+                        if (pick != null)
+                        {
+                            _pickCallback = null;
+                            IntPtr ph = WindowFromPoint(new POINT { X = pt.X, Y = pt.Y });
+                            IntPtr pr = ph == IntPtr.Zero ? IntPtr.Zero : GetAncestor(ph, GA_ROOT);
+                            try
+                            {
+                                if (_inst != null && !_inst.IsDisposed)
+                                    _inst.BeginInvoke((MethodInvoker)delegate
+                                    {
+                                        try { pick(pt, pr); } catch { }
+                                    });
+                            }
+                            catch { }
+                            return CallNextHookEx(_hook, nCode, wParam, lParam);
+                        }
+
                         if (!IsOwnWindow(pt))
                         {
                             int dx = pt.X - _downPt.X;
@@ -230,6 +349,19 @@ namespace RichTextGen
                 string sel = "";
                 string app = "";
                 bool forced = false;
+
+                // 触发点：该应用设了触发点后，只有点在这些点附近才响应（把触发范围缩到一个位置）
+                string curExe = ExeOfHwnd(root);
+                if (!string.IsNullOrEmpty(curExe) && AppRules.HasPoints(curExe) && !AppRules.HitPoint(curExe, pt))
+                {
+                    if (_inst != null && !_inst.IsDisposed && _inst.Visible)
+                    {
+                        try { _inst.BeginInvoke((MethodInvoker)delegate { _inst.HidePanel(); }); }
+                        catch { }
+                    }
+                    return;
+                }
+
                 if (target != null)
                 {
                     // 先记录名单（被排除的应用也要记，用户才能回到名单里改回来）
@@ -568,6 +700,71 @@ namespace RichTextGen
             keybd_event(0x11, 0, 2, IntPtr.Zero);   // Ctrl ↑
         }
 
+        // ============================================================ 键盘输入（SendInput）
+        /// <summary>
+        /// 用 SendInput + KEYEVENTF_UNICODE 把文字直接"打"进目标窗口。
+        /// 这条路走 Raw Input 管道，Unity 游戏 / DirectInput 程序也能收到；
+        /// 而 keybd_event 走的是旧的窗口消息队列，游戏根本不读那条队列。
+        /// 换行转成 VK_RETURN，其余字符按 Unicode 逐字发送。
+        /// </summary>
+        private static bool TypeText(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            try
+            {
+                int okCount = 0;
+                for (int i = 0; i < text.Length; i++)
+                {
+                    char ch = text[i];
+                    if (ch == '\r') continue;
+
+                    INPUT[] pair;
+                    if (ch == '\n')
+                        pair = new INPUT[] { VkInput(0x0D, false), VkInput(0x0D, true) };
+                    else
+                        pair = new INPUT[] { UniInput(ch, false), UniInput(ch, true) };
+
+                    // 逐字符发送：一次塞整串时系统/目标程序会丢事件（实测会漏掉前半段）
+                    uint sent = SendInput(2, pair, InputSize);
+                    if (sent == 2) okCount++;
+                    Thread.Sleep(6);
+                }
+                return okCount > 0;
+            }
+            catch { return false; }
+        }
+
+        private static INPUT UniInput(char ch, bool up)
+        {
+            INPUT i = new INPUT();
+            i.type = INPUT_KEYBOARD;
+            i.ki.wVk = 0;
+            i.ki.wScan = ch;
+            i.ki.dwFlags = KEYEVENTF_UNICODE | (up ? KEYEVENTF_KEYUP : 0);
+            return i;
+        }
+
+        private static INPUT VkInput(ushort vk, bool up)
+        {
+            INPUT i = new INPUT();
+            i.type = INPUT_KEYBOARD;
+            i.ki.wVk = vk;
+            i.ki.wScan = 0;
+            i.ki.dwFlags = up ? KEYEVENTF_KEYUP : 0;
+            return i;
+        }
+
+        /// <summary>发送一个功能键（如回车），同样走 SendInput 管道。</summary>
+        private static void SendVkKey(ushort vk)
+        {
+            try
+            {
+                INPUT[] arr = new INPUT[] { VkInput(vk, false), VkInput(vk, true) };
+                SendInput((uint)arr.Length, arr, InputSize);
+            }
+            catch { }
+        }
+
         // ============================================================ 面板本体
         private FloatingInputForm()
         {
@@ -581,7 +778,7 @@ namespace RichTextGen
             TopMost = true;
             AutoScaleMode = AutoScaleMode.None;
             BackColor = Color.FromArgb(243, 243, 243);
-            ClientSize = new Size(S(500), S(360));
+            ClientSize = new Size(S(560), S(150));
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
 
             _web.Dock = DockStyle.Fill;
@@ -767,6 +964,11 @@ namespace RichTextGen
                     PickSelColor();
                     break;
 
+                // 新界面统一入口：选完颜色交给前端，由前端决定是替换选区还是改输入框
+                case "pickColor":
+                    PickSelColor();
+                    break;
+
                 case "pickColorTyp":
                     PickTypColor();
                     break;
@@ -800,15 +1002,18 @@ namespace RichTextGen
         }
 
         /// <summary>
-        /// 把文字贴回原输入框：先还焦点，再走剪贴板 + Ctrl+V。
-        /// replaceSel = true 时先按一次 Delete —— 控制台的选区不会被粘贴自动替换，
-        /// 不先删就会变成「原文本 + 新文本」重复一份。
+        /// 把文字送回原输入框。两条路：
+        ///   1) SendInput + KEYEVENTF_UNICODE 逐字符打字 —— 走 Raw Input 管道，游戏也能收到；
+        ///   2) 剪贴板 + Ctrl+V —— 普通桌面软件更快，但游戏多半收不到。
+        /// 自动模式下：强制模式 / 终端 / 短文本走键盘，其余走剪贴板。
+        /// replaceSel = true 时先按一次 Delete —— 控制台的选区不会被粘贴自动替换。
         /// </summary>
         private void PasteBack(string text, bool replaceSel)
         {
             if (text.Length == 0) return;
             AutomationElement t = _target;
             IntPtr root = _targetRoot;
+            bool forced = (t == null);          // 强制模式下没有 UIA 元素
             HidePanel();
             try
             {
@@ -824,14 +1029,21 @@ namespace RichTextGen
                 if (root != IntPtr.Zero) SetForegroundWindow(root);
                 if (t != null) { try { t.SetFocus(); } catch { } }
                 Thread.Sleep(90);
-                if (!SetClipboard(text, 6)) return;
-                Thread.Sleep(40);
+
                 if (replaceSel)
                 {
-                    keybd_event(0x2E, 0, 0, IntPtr.Zero);   // Delete ↓
-                    keybd_event(0x2E, 0, 2, IntPtr.Zero);   // Delete ↑
-                    Thread.Sleep(40);
+                    SendVkKey(0x2E);                // Delete
+                    Thread.Sleep(50);
                 }
+
+                // 选输入方式：游戏（强制模式）/ 终端 一律走键盘打字（只有这条管道它们收得到）；
+                // 普通桌面程序短文本也直接打字（不污染剪贴板），长文本才用粘贴。
+                bool useKeyboard = forced || _isTerminal || text.Length <= 200;
+
+                if (useKeyboard && TypeText(text)) return;
+
+                if (!SetClipboard(text, 6)) return;
+                Thread.Sleep(40);
                 SendCtrlV();
             }
             catch { }

@@ -169,6 +169,22 @@ namespace RichTextGen
                             if (AppRules.AddManual(exe, title, force)) Push();
                         }
                         break;
+                    case "pick":
+                        // 隐藏名单窗口 → 下一次点击记录为触发点 → 恢复窗口
+                        if (p.Length >= 3)
+                        {
+                            string exe = p[2];
+                            Hide();
+                            FloatingInputForm.BeginPickPoint(delegate (Point pt, IntPtr rt)
+                            {
+                                AppRules.AddPoint(exe, pt.X, pt.Y, 60);
+                                try { Show(); Activate(); Push(); } catch { }
+                            });
+                        }
+                        break;
+                    case "clearPoints":
+                        if (p.Length >= 3) { AppRules.ClearPoints(p[2]); Push(); }
+                        break;
                     case "remove":
                         if (p.Length >= 3) { AppRules.Remove(p[2]); Push(); }
                         break;

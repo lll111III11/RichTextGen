@@ -5,138 +5,86 @@
 <title>浮动输入面板</title>
 <style>
   :root{
-    --bg:#f3f3f3; --card:#ffffff; --text:#1b1b1b; --sub:#5d5d5d; --line:#e5e5e5;
+    --bg:#f7f7f8; --card:#ffffff; --text:#1b1b1b; --sub:#6a6a6a; --line:#e3e3e5;
     --input:#ffffff; --inputLine:#d6d6d6; --accent:#0067c0; --accentText:#ffffff;
-    --hover:#f0f0f0; --shadow:0 2px 10px rgba(0,0,0,.18);
+    --hover:#eeeeef;
   }
   @media (prefers-color-scheme: dark){
     :root{
-      --bg:#202020; --card:#2b2b2b; --text:#ffffff; --sub:#c5c5c5; --line:#3a3a3a;
-      --input:#262626; --inputLine:#454545; --accent:#4cc2ff; --accentText:#10222e;
-      --hover:#333333;
+      --bg:#242424; --card:#2d2d2d; --text:#ffffff; --sub:#b8b8b8; --line:#3b3b3b;
+      --input:#1e1e1e; --inputLine:#4a4a4a; --accent:#4cc2ff; --accentText:#10222e;
+      --hover:#383838;
     }
   }
   html,body{margin:0;height:100%;overflow:hidden}
   body{background:var(--bg);color:var(--text);font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif;
-       font-size:13px;display:flex;flex-direction:column;user-select:none;border:1px solid var(--line);
-       box-sizing:border-box;border-radius:10px}
-  /* ---------- 标题条 ---------- */
-  #hd{display:flex;align-items:center;justify-content:space-between;gap:8px;
-      padding:7px 10px 7px 14px;border-bottom:1px solid var(--line);background:var(--card);
-      border-radius:10px 10px 0 0;cursor:grab;flex-shrink:0}
+       font-size:13px;display:flex;flex-direction:column;border:1px solid var(--line);
+       box-sizing:border-box;border-radius:10px;user-select:none}
+
+  /* ---------- 顶栏（拖动手柄） ---------- */
+  #hd{display:flex;align-items:center;justify-content:space-between;height:22px;padding:0 6px 0 10px;
+      background:var(--card);border-bottom:1px solid var(--line);border-radius:10px 10px 0 0;
+      cursor:grab;flex-shrink:0}
   #hd.grabbing{cursor:grabbing}
-  #hd .tt{display:flex;flex-direction:column;min-width:0}
-  #hd .tt b{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #hd .tt span{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #hd .x{border:0;background:none;color:var(--sub);font-size:15px;cursor:pointer;width:28px;height:28px;
-         border-radius:6px;flex-shrink:0}
-  #hd .x:hover{background:var(--hover);color:var(--text)}
-  /* ---------- 主体 ---------- */
-  #body{flex:1;overflow:auto;padding:10px 12px 12px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:9px}
-  .card h4{margin:0 0 7px;font-size:11.5px;color:var(--sub);font-weight:600;display:flex;justify-content:space-between;align-items:center}
-  .card h4 .tag{font-weight:400}
-  /* 选区预览 */
-  #capText{margin-top:2px;padding:7px 9px;background:var(--input);border:1px solid var(--inputLine);
-           border-radius:6px;font-size:12.5px;word-break:break-all;max-height:76px;overflow:auto;
-           user-select:text;white-space:pre-wrap;line-height:1.5}
-  /* 色板 */
-  .sw{display:grid;grid-template-columns:repeat(12,1fr);gap:5px}
-  .sw button{aspect-ratio:1;width:100%;border-radius:6px;border:1px solid var(--line);cursor:pointer;padding:0}
-  .sw button:hover{outline:2px solid var(--accent);outline-offset:1px}
-  .sw button.cust{background:conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);position:relative}
-  .sw button.cust::after{content:"+";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-      color:#fff;font-size:16px;text-shadow:0 1px 2px rgba(0,0,0,.8)}
-  /* 功能按钮 */
-  .fbtns{display:flex;flex-wrap:wrap;gap:6px}
-  .fbtn{border:1px solid var(--inputLine);background:var(--input);color:var(--text);border-radius:6px;
-        padding:6px 11px;font-size:12.5px;cursor:pointer;min-width:44px}
-  .fbtn:hover{background:var(--hover);border-color:var(--accent)}
-  .fbtn.p{background:var(--accent);color:var(--accentText);border-color:transparent;font-weight:600}
-  .fbtn.p:hover{filter:brightness(1.08)}
-  .fbtn.warn{color:#c44;border-color:#c44}
-  .fbtn:disabled{opacity:.45;cursor:default}
-  /* 手动输入模式 */
-  #typArea{width:100%;box-sizing:border-box;min-height:104px;resize:vertical;background:var(--input);
-           color:var(--text);border:1px solid var(--inputLine);border-radius:8px;padding:8px 10px;
-           font-size:13px;font-family:Consolas,"Courier New",monospace;line-height:1.5;outline:none}
+  #hdSub{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  #hdX{border:0;background:none;color:var(--sub);font-size:13px;cursor:pointer;width:22px;height:20px;
+       border-radius:5px;flex-shrink:0;line-height:1}
+  #hdX:hover{background:var(--hover);color:var(--text)}
+
+  /* ---------- 输入区 ---------- */
+  #body{flex:1;display:flex;flex-direction:column;padding:7px 8px 6px;gap:6px;min-height:0}
+  #typArea{width:100%;box-sizing:border-box;flex:1;min-height:46px;max-height:64px;resize:none;
+      background:var(--input);color:var(--text);border:1px solid var(--inputLine);border-radius:7px;
+      padding:6px 9px;font-size:13px;font-family:"Microsoft YaHei UI",sans-serif;line-height:1.45;outline:none}
   #typArea:focus{border-color:var(--accent)}
-  .row{display:flex;gap:6px;margin-top:7px}
-  .row .fbtn{flex:1}
-  #hint{color:var(--sub);font-size:11.5px;margin-top:6px;line-height:1.5}
-  #hint kbd{border:1px solid var(--inputLine);border-bottom-width:2px;border-radius:4px;padding:0 5px;
-       background:var(--input);font-family:Consolas,monospace;font-size:11px}
-  /* 模式切换 */
-  #modes{display:flex;gap:6px;margin-bottom:9px}
-  #modes button{flex:1;border:1px solid var(--inputLine);background:var(--input);color:var(--sub);
-       border-radius:7px;padding:6px 4px;font-size:12px;cursor:pointer}
-  #modes button.on{background:var(--card);border-color:var(--accent);color:var(--accent);font-weight:600}
-  .hide{display:none !important}
-  #toast{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(0,0,0,.72);color:#fff;
-         padding:5px 14px;border-radius:99px;font-size:12px;opacity:0;transition:opacity .18s;pointer-events:none}
+  #typArea::placeholder{color:var(--sub)}
+
+  /* ---------- 工具行 ---------- */
+  #tools{display:flex;align-items:center;gap:4px;flex-shrink:0}
+  #sws{display:flex;gap:3px;flex-shrink:0}
+  #sws button{width:17px;height:17px;border-radius:4px;border:1px solid var(--line);cursor:pointer;padding:0}
+  #sws button:hover{outline:2px solid var(--accent);outline-offset:1px}
+  #sws button.cust{background:conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+  .sep{width:1px;height:16px;background:var(--line);margin:0 2px;flex-shrink:0}
+  .tb{border:1px solid var(--inputLine);background:var(--input);color:var(--text);border-radius:5px;
+      height:23px;min-width:23px;padding:0 5px;font-size:12px;cursor:pointer;line-height:1;flex-shrink:0}
+  .tb:hover{background:var(--hover);border-color:var(--accent)}
+  .tb.p{background:var(--accent);color:var(--accentText);border-color:transparent;font-weight:600;padding:0 12px}
+  .tb.p:hover{filter:brightness(1.08)}
+  #tip{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+       flex-shrink:0;line-height:1.3;min-height:14px}
+
+  #toast{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;
+         padding:4px 12px;border-radius:99px;font-size:11.5px;opacity:0;transition:opacity .18s;pointer-events:none;
+         white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis}
   #toast.on{opacity:1}
 </style>
 </head>
 <body>
 
 <div id="hd">
-  <div class="tt"><b>浮动输入面板</b><span id="hdSub">…</span></div>
-  <button class="x" id="hdX" title="关闭 (Esc)">✕</button>
+  <span id="hdSub">浮动输入</span>
+  <button id="hdX" title="关闭 (Esc)">✕</button>
 </div>
 
 <div id="body">
+  <textarea id="typArea" placeholder="输入文字…（选中部分后点格式，或直接点颜色）" spellcheck="false"></textarea>
 
-  <div id="modes">
-    <button id="mSel" class="on">选区直填</button>
-    <button id="mTyp">手动输入</button>
+  <div id="tools">
+    <span id="sws"></span>
+    <span class="sep"></span>
+    <button class="tb" data-t="b" title="粗体"><b>B</b></button>
+    <button class="tb" data-t="i" title="斜体"><i>I</i></button>
+    <button class="tb" data-t="u" title="下划线"><u>U</u></button>
+    <button class="tb" data-t="s" title="删除线"><s>S</s></button>
+    <button class="tb" data-t="sup" title="上标">x²</button>
+    <button class="tb" data-t="sub" title="下标">x₂</button>
+    <button class="tb" data-g="3" title="循环渐变">🌈</button>
+    <span class="sep"></span>
+    <button class="tb p" id="go" title="回填到原窗口 (Ctrl+Enter)">回填</button>
   </div>
 
-  <!-- ============ 选区模式：捕获目标窗口的选中文字，点任意功能立刻回填 ============ -->
-  <div id="secSel">
-    <div class="card">
-      <h4 id="capHead">已捕获选区<span class="tag" id="capLen"></span></h4>
-      <div id="capText">…</div>
-    </div>
-    <div class="card">
-      <h4>颜色（点选即回填）</h4>
-      <div class="sw" id="swGrid"></div>
-    </div>
-    <div class="card">
-      <h4>格式（点选即回填）</h4>
-      <div class="fbtns" id="selFmt">
-        <button class="fbtn" data-t="b"><b>B</b> 粗体</button>
-        <button class="fbtn" data-t="i"><i>I</i> 斜体</button>
-        <button class="fbtn" data-t="u"><u>U</u> 下划线</button>
-        <button class="fbtn" data-t="s"><s>S</s> 删除线</button>
-        <button class="fbtn" data-t="sup">上<sup>标</sup></button>
-        <button class="fbtn" data-t="sub">下<sub>标</sub></button>
-        <button class="fbtn" data-g="3">🌈 循环渐变</button>
-      </div>
-    </div>
-    <div id="hint">选中即弹出 → 点任意功能 → 自动套格式并回填原窗口；误操作在原窗口 <kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销。</div>
-  </div>
-
-  <!-- ============ 手动输入模式：像主程序一样选中文字再套格式，最后回填 ============ -->
-  <div id="secTyp" class="hide">
-    <textarea id="typArea" placeholder="在这里输入文字；像主程序一样拖选部分文字后，点下面的格式即可只包住选中部分…"></textarea>
-    <div class="fbtns" style="margin-top:7px" id="typFmt">
-      <button class="fbtn" data-t="b"><b>B</b></button>
-      <button class="fbtn" data-t="i"><i>I</i></button>
-      <button class="fbtn" data-t="u"><u>U</u></button>
-      <button class="fbtn" data-t="s"><s>S</s></button>
-      <button class="fbtn" data-t="sup">上标</button>
-      <button class="fbtn" data-t="sub">下标</button>
-      <button class="fbtn" data-g="3">🌈 循环渐变</button>
-      <button class="fbtn" data-g="4">🎨 颜色</button>
-    </div>
-    <div class="row">
-      <button class="fbtn p" id="btnCommit">回填 ⏎</button>
-      <button class="fbtn" id="btnCopy">复制</button>
-      <button class="fbtn warn" id="btnClear">清空</button>
-    </div>
-    <div id="hint">选中文字后点格式只包住选中部分；不选则作用于全部。回填 = 粘贴回刚才点过的输入框。<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 回填，<kbd>Esc</kbd> 关闭。</div>
-  </div>
-
+  <div id="tip">选定文字 → 点任意格式 → 自动回填</div>
 </div>
 
 <div id="toast"></div>
@@ -144,39 +92,23 @@
 <script>
 (function(){
   'use strict';
-  var SWATCHES = [
-    "#FF0000","#FF8000","#FFFF00","#80FF00","#00C000","#00FFFF",
-    "#00A0FF","#0000FF","#8000FF","#FF00FF","#FF80C0","#8B4513",
-    "#FFD700","#008080","#000080","#800000","#808000","#006400",
-    "#8B0000","#708090","#FFFFFF","#000000","#808080","#C0C0C0"
-  ];
-  var selMode = true;          // true=选区直填 false=手动输入
+  var QUICK = ['#FF0000','#FF8000','#FFFF00','#00C000','#00A0FF','#8000FF','#FFFFFF','#000000'];
+  var mode = 'typ';        // 'sel' = 已捕获选区（点格式直接替换原选区）；'typ' = 手动输入
   var sel = { text:'', app:'' };
   var ta = document.getElementById('typArea');
 
-  function host(m){ try { window.chrome.webview.postMessage(m); } catch(e){} }
   function $(id){ return document.getElementById(id); }
+  function host(m){ try { window.chrome.webview.postMessage(m); } catch(e){} }
   function toast(s){
     var t = $('toast'); t.textContent = s; t.classList.add('on');
-    clearTimeout(toast._t); toast._t = setTimeout(function(){ t.classList.remove('on'); }, 1600);
+    clearTimeout(toast._t); toast._t = setTimeout(function(){ t.classList.remove('on'); }, 1500);
   }
   function b64(s){ return btoa(unescape(encodeURIComponent(s))); }
 
-  /* ---------- 模式切换 ---------- */
-  $('mSel').onclick = function(){ selMode = true; applyMode(); };
-  $('mTyp').onclick = function(){ selMode = false; applyMode(); ta.focus(); };
-  function applyMode(){
-    $('mSel').classList.toggle('on', selMode);
-    $('mTyp').classList.toggle('on', !selMode);
-    $('secSel').classList.toggle('hide', !selMode);
-    $('secTyp').classList.toggle('hide', selMode);
-  }
-
   /* ============================================================
      标签嵌套引擎（与主程序 TagRegistry 的 Order 一致）
-     · 同一标签点第二次 = 取消（toggle）
-     · 已有同标签时替换而不是层层嵌套（颜色换色不叠 <color><color>）
-     · 多层标签按 Order 排序：数字小的在外层，b/i/u 在 color 外面
+     · 同一标签点第二次 = 取消；已有同标签只替换值，不层层嵌套
+     · 多层按 Order 排序，b/i/u 在 color 外层
      ============================================================ */
   var ORDER = {
     align:1, pos:3, space:4, width:5, margin:6, indent:7, 'line-indent':8, 'line-height':9, br:10,
@@ -187,7 +119,6 @@
     cspace:60, mspace:61, voffset:62, rotate:63, link:70
   };
 
-  /* 内层的同名标签是否严格配对（用栈式扫描，只数个数会把 <b>a</b><b>b</b> 误判成整体包裹） */
   function tagBalanced(inner, tag){
     var re = new RegExp('<' + tag + '(?=[\\s=>])|</' + tag + '\\s*>', 'gi'), depth = 0, m;
     while ((m = re.exec(inner)) !== null){
@@ -197,16 +128,15 @@
     return depth === 0;
   }
 
-  /* 从外往里剥出"完整包裹当前文本"的标签链 */
   function parseChain(text){
     var wrappers = [], cur = String(text == null ? '' : text), guard = 0;
     while (guard++ < 16){
       var m = cur.match(/^<([a-zA-Z][\w-]*)(?:\s*=\s*("[^"]*"|[^>]*))?>/);
       if (!m) break;
-      var tag = m[1], closeStr = '</' + tag + '>';
+      var tag = m[1], closeStr = '</' + m[1] + '>';
       if (cur.slice(-closeStr.length).toLowerCase() !== closeStr.toLowerCase()) break;
       var inner = cur.slice(m[0].length, cur.length - closeStr.length);
-      if (!tagBalanced(inner, tag)) break;      // 不是整体包裹 → 不剥壳
+      if (!tagBalanced(inner, m[1])) break;
       wrappers.push({ tag: tag.toLowerCase(), open: m[0] });
       cur = inner;
     }
@@ -222,16 +152,14 @@
     return out;
   }
 
-  /* 加/去某个格式标签 */
   function toggleWrap(text, tag, openTag){
     var c = parseChain(text), idx = -1;
     for (var i = 0; i < c.wrappers.length; i++) if (c.wrappers[i].tag === tag){ idx = i; break; }
-    if (idx >= 0) c.wrappers.splice(idx, 1);            // 已有 → 去掉（toggle off）
-    else c.wrappers.push({ tag: tag, open: openTag });  // 没有 → 加上
+    if (idx >= 0) c.wrappers.splice(idx, 1);
+    else c.wrappers.push({ tag: tag, open: openTag });
     return buildChain(c.wrappers, c.inner);
   }
 
-  /* 设颜色：已有 <color> 就换值，不叠加 */
   function setColorTag(text, hex){
     var c = parseChain(text), found = false;
     for (var i = 0; i < c.wrappers.length; i++){
@@ -241,7 +169,8 @@
     return buildChain(c.wrappers, c.inner);
   }
 
-  /* 逐字符渐变（红→蓝，5 字符一周期；换行后重新计数，与主界面每行各自起算一致） */
+  function pad(n){ n = Math.max(0, Math.min(255, n)); return (n < 16 ? '0' : '') + n.toString(16).toUpperCase(); }
+
   function gradientText(text){
     var seg = String(text == null ? '' : text), out = '', k = 0;
     for (var i = 0; i < seg.length; i++){
@@ -256,97 +185,81 @@
     }
     return out;
   }
-  function pad(n){ n = Math.max(0, Math.min(255, n)); return (n < 16 ? '0' : '') + n.toString(16).toUpperCase(); }
 
-  /* ---------- 色板 ---------- */
+  function compute(text, kind, arg){
+    if (kind === 'color') return setColorTag(text, arg);
+    if (kind === 'tag')   return toggleWrap(text, arg.tag, arg.open);
+    if (kind === 'grad')  return gradientText(text);
+    return text;
+  }
+
+  /* ---------- 色板（一行 8 个 + 自定义） ---------- */
   (function(){
-    var grid = $('swGrid');
-    SWATCHES.forEach(function(c){
+    var box = $('sws');
+    QUICK.forEach(function(c){
       var b = document.createElement('button');
       b.style.background = c;
       b.title = c;
-      b.onclick = function(){ pickColor(c); };
-      grid.appendChild(b);
+      b.onclick = function(){ doFormat('color', c); };
+      box.appendChild(b);
     });
     var cust = document.createElement('button');
     cust.className = 'cust';
     cust.title = '自定义颜色…';
-    cust.onclick = function(){ host('f|pickSelColor'); };
-    grid.appendChild(cust);
+    cust.onclick = function(){ host('f|pickColor'); };
+    box.appendChild(cust);
   })();
 
-  function pickColor(hex){
-    if (selMode) applyToSelection('color', hex);
-    else applyToEditor('color', hex);
-  }
-
-  /* ---------- 选区模式：算出结果直接粘贴回原窗口 ---------- */
-  function applyToSelection(kind, arg){
-    var base = sel.text || '';
-    if (!base.length){ toast('没有捕获到选区'); return; }
-    var next;
-    if (kind === 'color')      next = setColorTag(base, arg);
-    else if (kind === 'tag')   next = toggleWrap(base, arg.tag, arg.open);
-    else if (kind === 'grad')  next = gradientText(base);
-    else return;
-    host('f|paste|' + b64(next));
-  }
-
-  /* C# 选完自定义色回调 */
-  window.fpSelColor = function(hex){ applyToSelection('color', hex); };
-
-  /* ---------- 手动模式：只对 textarea 里选中的部分套格式 ---------- */
-  function applyToEditor(kind, arg){
+  /* ---------- 统一入口：有选区就直接替换原窗口，没有就改输入框 ---------- */
+  function doFormat(kind, arg){
+    if (mode === 'sel' && sel.text.length){
+      var next = compute(sel.text, kind, arg);
+      host('f|paste|' + b64(next));
+      return;
+    }
+    // 手动模式：只作用于 textarea 里选中的部分，没选就作用于全部
     var s = ta.selectionStart, e = ta.selectionEnd, all = ta.value;
     if (s === e){ s = 0; e = all.length; }
     if (e - s <= 0){ toast('先输入文字再套格式'); return; }
-    var target = all.slice(s, e), next;
-    if (kind === 'color')     next = setColorTag(target, arg);
-    else if (kind === 'tag')  next = toggleWrap(target, arg.tag, arg.open);
-    else if (kind === 'grad') next = gradientText(target);
-    else return;
-    ta.value = all.slice(0, s) + next + all.slice(e);
-    ta.setSelectionRange(s, s + next.length);
+    var target = all.slice(s, e);
+    var out = compute(target, kind, arg);
+    ta.value = all.slice(0, s) + out + all.slice(e);
+    ta.setSelectionRange(s, s + out.length);
     ta.focus();
   }
 
-  /* C# 选完颜色回调（手动模式） */
-  window.fpColorTyp = function(hex){ applyToEditor('color', hex); };
-
-  /* ---------- 手动模式按钮 ---------- */
-  $('typFmt').addEventListener('click', function(ev){
+  $('tools').addEventListener('click', function(ev){
     var b = ev.target.closest('button'); if (!b) return;
-    if (b.dataset.t){ applyToEditor('tag', { tag: b.dataset.t, open: '<' + b.dataset.t + '>' }); }
-    else if (b.dataset.g === '3'){ applyToEditor('grad'); }
-    else if (b.dataset.g === '4'){
-      if (ta.value.length === 0){ toast('先输入文字'); return; }
-      host('f|pickColorTyp');
+    if (b.dataset.t) doFormat('tag', { tag: b.dataset.t, open: '<' + b.dataset.t + '>' });
+    else if (b.dataset.g === '3') doFormat('grad');
+  });
+
+  /* ---------- 回填 ---------- */
+  $('go').onclick = function(){
+    if (mode === 'sel' && sel.text.length){
+      // 选区模式：原样送回
+      host('f|paste|' + b64(sel.text));
+      return;
+    }
+    if (!ta.value.length){ toast('还没有内容'); return; }
+    host('f|type|' + b64(ta.value));
+  };
+
+  $('typArea').addEventListener('input', function(){
+    if (mode === 'sel' && ta.value !== sel.text){
+      mode = 'typ';                 // 用户改了内容 → 转为手动模式
+      $('hdSub').textContent = '手动输入';
+      $('tip').textContent = '选中部分后点格式，只套住选中部分';
     }
   });
 
-  $('btnCommit').onclick = function(){
-    if (!ta.value.length){ toast('还没有可回填的内容'); return; }
-    host('f|type|' + b64(ta.value));
-  };
-  $('btnCopy').onclick = function(){
-    if (!ta.value.length){ toast('还没有可复制的内容'); return; }
-    host('f|copy|' + b64(ta.value));
-    toast('已复制');
-  };
-  $('btnClear').onclick = function(){ ta.value = ''; ta.focus(); };
-
-  /* ---------- 选区模式按钮 ---------- */
-  $('selFmt').addEventListener('click', function(ev){
-    var b = ev.target.closest('button'); if (!b) return;
-    if (b.dataset.t){ applyToSelection('tag', { tag: b.dataset.t, open: '<' + b.dataset.t + '>' }); }
-    else if (b.dataset.g === '3'){ applyToSelection('grad'); }
+  $('typArea').addEventListener('keydown', function(ev){
+    if (ev.ctrlKey && ev.key === 'Enter'){ ev.preventDefault(); $('go').click(); }
   });
 
-  /* ---------- 标题条：关闭 / 拖动 ---------- */
+  /* ---------- 顶栏拖动 / 关闭 ---------- */
   $('hdX').onclick = function(){ host('f|close'); };
-
-  var dragging = false, lastX = 0, lastY = 0;
-  var hd = $('hd');
+  var dragging = false, lastX = 0, lastY = 0, hd = $('hd');
   hd.addEventListener('pointerdown', function(ev){
     if (ev.target === $('hdX')) return;
     dragging = true; lastX = ev.screenX; lastY = ev.screenY;
@@ -363,40 +276,39 @@
   hd.addEventListener('pointerup', function(){ dragging = false; hd.classList.remove('grabbing'); });
   hd.addEventListener('pointercancel', function(){ dragging = false; hd.classList.remove('grabbing'); });
 
-  /* ---------- 键盘 ---------- */
   document.addEventListener('keydown', function(ev){
-    if (ev.key === 'Escape'){ host('f|close'); return; }
-    if (ev.ctrlKey && ev.key === 'Enter'){
-      if (!selMode && ta.value.length){ host('f|type|' + b64(ta.value)); }
-    }
+    if (ev.key === 'Escape'){ host('f|close'); }
   });
 
   /* ---------- C# 推下来的状态 ---------- */
   window.fpState = function(o){
     try { o = (typeof o === 'string') ? JSON.parse(o) : o; } catch(e){ return; }
     if (!o) return;
+
     var hasSel = (o.mode === 'sel' && (o.len || 0) > 0);
     sel = { text: o.text || '', app: o.app || '' };
-    selMode = hasSel;
-    applyMode();
-    var head = $('capHead'), len = $('capLen'), txt = $('capText');
+    mode = hasSel ? 'sel' : 'typ';
+
     if (hasSel){
-      head.textContent = '已捕获选区';
-      len.textContent = '「' + (o.app || '目标窗口') + '」· ' + o.len + ' 字';
-      txt.textContent = o.text || '';
-      $('hdSub').textContent = '目标：' + (o.app || '目标窗口');
+      ta.value = sel.text;
+      ta.setSelectionRange(sel.text.length, sel.text.length);
+      $('hdSub').textContent = (o.app || '目标窗口') + ' · 已选 ' + o.len + ' 字';
+      $('tip').textContent = '点颜色 / 格式 → 直接替换原选区';
       toast('已捕获选区 ' + o.len + ' 字');
     } else {
-      head.textContent = '未检测到选区';
-      len.textContent = '（已切换为手动输入）';
-      txt.textContent = '';
-      $('hdSub').textContent = '点输入框后自动弹出';
-      toast('未检测到选区 · 已切换手动输入');
-      setTimeout(function(){ try { ta.focus(); } catch(e){} }, 80);
+      ta.value = '';
+      $('hdSub').textContent = (o.app || '浮动输入');
+      $('tip').textContent = '输入文字 → 回填；选中部分可只套选中';
+      setTimeout(function(){ try { ta.focus(); } catch(e){} }, 60);
     }
   };
 
-  /* 主窗口主题变更时刷新深浅色（跟随系统已有 @media；这里向 C# 请求初始主题名只用做徽标） */
+  window.fpSelColor = function(hex){
+    if (mode === 'sel' && sel.text.length){ host('f|paste|' + b64(setColorTag(sel.text, hex))); }
+    else doFormat('color', hex);
+  };
+  window.fpColorTyp = window.fpSelColor;
+
   window.ui = window.ui || {};
 })();
 </script>

@@ -48,7 +48,9 @@ namespace RichTextGen
             new HotkeyDef { Action = "music",    Keys = Keys.Control | Keys.Alt | Keys.N,
                             Desc = "切换下一首音乐 / 背景视频声音" },
             new HotkeyDef { Action = "theme",    Keys = Keys.Control | Keys.Alt | Keys.T,
-                            Desc = "切换深色 / 浅色" }
+                            Desc = "切换深色 / 浅色" },
+            new HotkeyDef { Action = "floatPanel", Keys = Keys.Control | Keys.Alt | Keys.P,
+                            Desc = "鼠标处弹出浮动输入面板" }
         };
 
         private readonly Form owner;

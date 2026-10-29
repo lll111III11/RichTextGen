@@ -50,10 +50,11 @@
       background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .sw.on{background:var(--accent)}
   .sw.on::after{left:21px}
-  .fw{border:1px solid var(--inputLine);background:var(--input);color:var(--sub);border-radius:6px;
+  .fw, .pt{border:1px solid var(--inputLine);background:var(--input);color:var(--sub);border-radius:6px;
       font-size:12px;cursor:pointer;height:23px;padding:0 8px;flex-shrink:0}
-  .fw:hover{border-color:var(--accent);color:var(--text)}
+  .fw:hover, .pt:hover{border-color:var(--accent);color:var(--text)}
   .fw.on{background:#8a5a00;border-color:#8a5a00;color:#ffe9b8;font-weight:600}
+  .pt.on{background:var(--accent);border-color:var(--accent);color:var(--accentText);font-weight:600}
   .del{border:0;background:none;color:var(--sub);font-size:15px;cursor:pointer;width:26px;height:26px;
        border-radius:5px;flex-shrink:0}
   .del:hover{background:var(--hover);color:#d33}
@@ -156,12 +157,17 @@
     var html = '';
     apps.forEach(function(a){
       var name = a.title && a.title.length > 0 ? a.title : pretty(a.exe);
+      var pn = a.points ? a.points.length : 0;
       html += '<div class="row" data-exe="' + esc(a.exe) + '">'
            +    '<div class="ico">' + esc(pretty(a.exe).charAt(0)) + '</div>'
            +    '<div class="info">'
            +      '<div class="n">' + esc(name) + '</div>'
-           +      '<div class="m">' + esc(a.exe) + ' · 用过 ' + (a.count || 0) + ' 次 · ' + ago(a.last) + '</div>'
+           +      '<div class="m">' + esc(a.exe) + ' · 用过 ' + (a.count || 0) + ' 次 · ' + ago(a.last)
+           +        (pn > 0 ? ' · <b style="color:var(--accent)">已设 ' + pn + ' 个触发点</b>' : '') + '</div>'
            +    '</div>'
+           +    '<button class="pt' + (pn > 0 ? ' on' : '') + '" title="' +
+                  (pn > 0 ? '已有 ' + pn + ' 个触发点，点此再加一个' : '点此，然后在目标输入框上点一下') + '">📍 ' +
+                  (pn > 0 ? pn : '取点') + '</button>'
            +    '<button class="fw' + (a.force ? ' on' : '') + '" title="' +
                   (a.force ? '强制弹出：已开启' : '强制弹出：不做输入框检测，点击就弹') + '">⚡ 强制</button>'
            +    '<button class="sw' + (a.on ? ' on' : '') + '" title="' + (a.on ? '已勾选' : '未勾选') + '"></button>'
@@ -171,11 +177,14 @@
     list.innerHTML = html;
   }
 
-  /* 事件委托：强制 / 开关 / 删除 */
+  /* 事件委托：触发点 / 强制 / 开关 / 删除 */
   $('list').addEventListener('click', function(ev){
     var row = ev.target.closest('.row'); if (!row) return;
     var exe = row.dataset.exe;
-    if (ev.target.classList.contains('sw')){
+    if (ev.target.classList.contains('pt')){
+      host('a|pick|' + exe);
+      toast('请点击目标输入框的位置…');
+    } else if (ev.target.classList.contains('sw')){
       host('a|toggle|' + exe);
     } else if (ev.target.classList.contains('fw')){
       host('a|force|' + exe);
