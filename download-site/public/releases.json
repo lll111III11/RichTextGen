@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.10.2.0",
+  "version": "5.10.2.1",
   "updated": "2026-10-29",
-  "notes": "v5.10.2.0：新增「其他」页（AI 对话 / 图片色块图 / 在线翻译）；设置可调顶栏更新按钮长度与公告精简/展开；新增系统级浮动输入面板，点任意软件输入框即可输入并一键回填；Live2D 入口从界面移除。",
+  "notes": "v5.10.2.1：浮动输入面板重做——HTML 大界面，选中即弹、点功能自动回填；修复首次点击不弹的问题。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.10.2.0",
-      "size": 2358272,
-      "sha256": "D4DA099FB6A95AF9471B69E75DB3AB68BA48098F40FB75AAA7BBCC9AF50A8A1B",
+      "version": "5.10.2.1",
+      "size": 2372608,
+      "sha256": "0174D1AD7BDD2CAA543B76D85429E90D85A0707F621994438383589DB5118C95",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.10.2.0",
-      "size": 480806,
-      "sha256": "D4AECEBD5662AE7BAAB2EC7E5B052FE6B76E111D22832546755321F29D1866B1",
+      "version": "5.10.2.1",
+      "size": 485282,
+      "sha256": "46151DBFC80BCAC37E094DF01AA7698C5E2CFA77FEE6E1F4472D1A21E6B5083F",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

@@ -1,25 +1,37 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Automation;
+using System.Windows.Automation.Text;
 using System.Windows.Forms;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
 
 namespace RichTextGen
 {
     /// <summary>
-    /// 系统级浮动输入面板：全局鼠标钩子看点击位置，UI Automation 判断是不是输入框，
-    /// 是的话就在光标旁弹出一个极简小面板：输入文字、选中后套颜色 / 上下标 / 循环渐变，
-    /// 点「回填」把带标签的文字直接粘贴回原来的输入框。
+    /// 系统级浮动输入面板（HTML 界面版）。
+    ///
+    /// 交互流程（跟主程序一致的「选中 → 套格式」逻辑，但目标是任意软件的输入框）：
+    ///   1. 在任何软件的输入框里点击 / 拖选文字（全局鼠标钩子检测）；
+    ///   2. 光标旁弹出面板，并用 UI Automation 捕获目标窗口里的选中文字；
+    ///   3. 点任意颜色 / 格式按钮 → 自动把标签套到那段选区上 → 粘贴回原窗口（自动回填）；
+    ///      没有选区时自动进入「手动输入」模式：在面板里输入、像主程序一样选中后套格式，再点回填。
+    ///
+    /// 窗口用 ShowWithoutActivation 显示，弹出时绝不抢焦点；
+    /// 回填时先把焦点交还目标窗口，再走剪贴板 + Ctrl+V，粘贴会自然覆盖原选区。
     /// </summary>
     public sealed class FloatingInputForm : Form
     {
         // ---------------- Win32 ----------------
         private const int WH_MOUSE_LL = 14;
+        private const int WM_LBUTTONDOWN = 0x0201;
         private const int WM_LBUTTONUP = 0x0202;
-        private const int WM_NCLBUTTONDOWN = 0xA1;
-        private const int HTCAPTION = 2;
         private const uint GA_ROOT = 2;
 
         private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -54,10 +66,6 @@ namespace RichTextGen
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")]
-        private static extern bool ReleaseCapture();
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
-        [DllImport("user32.dll")]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
 
         // ---------------- 静态状态（全局只挂一个钩子 / 一个面板） ----------------
@@ -67,13 +75,17 @@ namespace RichTextGen
         private static LowLevelMouseProc _proc;          // 必须保活，否则回调被回收
         private static System.Windows.Forms.Timer _clickTimer;
         private static Point _clickPt;
+        private static Point _downPt;
+        private static bool _wasDrag;
         private static int _clickSeq;
 
+        // ---------------- 面板实例状态 ----------------
+        private readonly WebView2 _web = new WebView2();
         private AutomationElement _target;
-        private TextBox _txt;
-        private Label _hint;
-        private Button _colorBtn;
-        private PaletteForm _palette;
+        private string _selText;
+        private string _selApp;
+        private bool _webReady;
+        private string _pendingJson;
         private readonly float _s;
 
         // ============================================================ 开关
@@ -86,6 +98,7 @@ namespace RichTextGen
             {
                 if (_inst == null || _inst.IsDisposed) _inst = new FloatingInputForm();
                 IntPtr unused = _inst.Handle;            // 提前建句柄，后台线程才能 BeginInvoke
+                _inst.InitWeb();                         // 预热 WebView2，第一次弹出更快
                 _proc = HookProc;
                 _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
                 _enabled = _hook != IntPtr.Zero;
@@ -118,17 +131,30 @@ namespace RichTextGen
         {
             try
             {
-                if (nCode >= 0 && (int)wParam == WM_LBUTTONUP)
+                if (nCode >= 0)
                 {
+                    int msg = (int)wParam;
                     MSLLHOOKSTRUCT info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
                     Point pt = new Point(info.pt.X, info.pt.Y);
-                    if (!IsOwnWindow(pt))
+
+                    if (msg == WM_LBUTTONDOWN)
                     {
-                        _clickPt = pt;
-                        _clickSeq++;
-                        EnsureTimer();
-                        _clickTimer.Stop();
-                        _clickTimer.Start();             // 90ms 后再判断，等目标窗口完成聚焦
+                        _downPt = pt;                    // 记下按下位置，松开时判断是不是拖选
+                        _wasDrag = false;
+                    }
+                    else if (msg == WM_LBUTTONUP)
+                    {
+                        if (!IsOwnWindow(pt))
+                        {
+                            int dx = pt.X - _downPt.X;
+                            int dy = pt.Y - _downPt.Y;
+                            _wasDrag = dx * dx + dy * dy > 16;   // 拖动超过 4px 视为拖选文字
+                            _clickPt = pt;
+                            _clickSeq++;
+                            EnsureTimer();
+                            _clickTimer.Stop();
+                            _clickTimer.Start();         // 90ms 后再判断，等目标窗口完成聚焦
+                        }
                     }
                 }
             }
@@ -148,7 +174,7 @@ namespace RichTextGen
             };
         }
 
-        /// <summary>点在自己窗口上（面板 / 调色盘 / 主程序）不处理，避免自己弹自己。</summary>
+        /// <summary>点在自己窗口上（面板 / 主程序 / 弹窗）不处理，避免自己弹自己。</summary>
         private static bool IsOwnWindow(Point pt)
         {
             try
@@ -158,34 +184,57 @@ namespace RichTextGen
                 IntPtr root = GetAncestor(h, GA_ROOT);
                 uint pid;
                 GetWindowThreadProcessId(root, out pid);
-                return pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                return pid == (uint)Process.GetCurrentProcess().Id;
             }
             catch { return false; }
         }
 
+        // ============================================================ 点击判定 + 选区捕获
         private static void OnClickSettled(Point pt, int seq)
         {
             if (!_enabled || _inst == null || _inst.IsDisposed) return;
+            int drag = _wasDrag ? 1 : 0;
             ThreadPool.QueueUserWorkItem(delegate
             {
+                // 第一次点击进入未聚焦的窗口时，窗口激活/焦点可能还没就位，
+                // 检测失败就隔 220ms 再试两次 —— 修复「要点两下才弹」的问题。
                 AutomationElement target = null;
-                try { target = FindEditable(pt); } catch { }
+                for (int i = 0; i < 3; i++)
+                {
+                    if (!_enabled || _clickSeq != seq) return;
+                    if (i > 0) Thread.Sleep(220);
+                    if (!_enabled || _clickSeq != seq) return;
+                    try { target = FindEditable(pt); } catch { }
+                    if (target != null) break;
+                }
+
+                string sel = "";
+                string app = "";
+                if (target != null)
+                {
+                    sel = ReadSelection(target);             // 优先用 UIA 读选区
+                    if (sel.Length == 0 && drag == 1) sel = ReadSelectionByCopy();   // 拖选了但 UIA 读不到 → Ctrl+C 兜底
+                    app = AppNameOf(target);
+                }
+
+                AutomationElement t = target;
+                string s2 = sel, a2 = app;
                 try
                 {
                     if (!_enabled || _inst == null || _inst.IsDisposed) return;
-                    if (_clickSeq != seq) return;        // 又点了别处，这次作废
+                    if (_clickSeq != seq) return;            // 又点了别处，这次作废
                     _inst.BeginInvoke((MethodInvoker)delegate
                     {
                         try
                         {
                             if (!_enabled || _inst == null || _inst.IsDisposed) return;
                             if (_clickSeq != seq) return;
-                            if (target == null)
+                            if (t == null)
                             {
                                 if (_inst.Visible) _inst.HidePanel();
                                 return;
                             }
-                            _inst.ShowFor(target, pt);
+                            _inst.ShowFor(t, pt, s2, a2);
                         }
                         catch { }
                     });
@@ -194,13 +243,13 @@ namespace RichTextGen
             });
         }
 
-        /// <summary>从点击点向上找 4 层，命中 Edit / Document / ComboBox 即认为点了可输入区域。</summary>
+        /// <summary>从点击点向上找 6 层，命中 Edit / Document / ComboBox 即认为点了可输入区域。</summary>
         private static AutomationElement FindEditable(Point pt)
         {
             try
             {
                 AutomationElement e = AutomationElement.FromPoint(new System.Windows.Point(pt.X, pt.Y));
-                for (int i = 0; e != null && i < 4; i++)
+                for (int i = 0; e != null && i < 6; i++)
                 {
                     ControlType t = null;
                     try { t = e.GetCurrentPropertyValue(AutomationElement.ControlTypeProperty) as ControlType; } catch { }
@@ -208,7 +257,7 @@ namespace RichTextGen
                     {
                         try
                         {
-                            if (e.Current.IsEnabled && e.Current.IsKeyboardFocusable) return e;
+                            if (e.Current.IsEnabled) return e;   // 不再要求 IsKeyboardFocusable（首次点击时焦点未就位）
                         }
                         catch { }
                     }
@@ -220,194 +269,253 @@ namespace RichTextGen
             return null;
         }
 
+        /// <summary>用 TextPattern 读目标窗口当前选中的文字（不碰剪贴板、不抢焦点）。</summary>
+        private static string ReadSelection(AutomationElement target)
+        {
+            try
+            {
+                TextPattern tp = target.GetCurrentPattern(TextPattern.Pattern) as TextPattern;
+                if (tp == null) return "";
+                TextPatternRange[] ranges = tp.GetSelection();
+                if (ranges == null || ranges.Length == 0) return "";
+                StringBuilder sb = new StringBuilder();
+                foreach (TextPatternRange r in ranges)
+                {
+                    string t = r.GetText(-1);
+                    if (t != null) sb.Append(t);
+                }
+                return sb.ToString();
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>兜底：向当前焦点窗口发 Ctrl+C 复制选区。拷贝会保护原剪贴板内容。</summary>
+        private static string ReadSelectionByCopy()
+        {
+            string old = "";
+            try { old = Clipboard.GetText(); } catch { }
+            try
+            {
+                SendCtrlC();
+                Thread.Sleep(110);
+                string cur = Clipboard.GetText();
+                // 恢复用户原来的剪贴板
+                try { Clipboard.SetText(old); } catch { }
+                if (cur != null && cur.Length > 0 && cur != old) return cur;
+            }
+            catch { }
+            return "";
+        }
+
+        /// <summary>取目标窗口的顶层窗口标题，作为面板里显示的来源名。</summary>
+        private static string AppNameOf(AutomationElement target)
+        {
+            try
+            {
+                int h = target.Current.NativeWindowHandle;
+                if (h != 0)
+                {
+                    IntPtr root = GetAncestor((IntPtr)h, GA_ROOT);
+                    if (root != IntPtr.Zero)
+                    {
+                        AutomationElement top = AutomationElement.FromHandle(root);
+                        if (top != null)
+                        {
+                            string n = top.Current.Name;
+                            if (!string.IsNullOrEmpty(n)) return n;
+                        }
+                    }
+                }
+            }
+            catch { }
+            try
+            {
+                string pn = target.Current.ProcessId.ToString();
+                foreach (Process p in Process.GetProcesses())
+                {
+                    if (p.Id.ToString() == pn)
+                    {
+                        string name = SafeProcessName(p.ProcessName);
+                        if (name.Length > 0) return name;
+                    }
+                }
+            }
+            catch { }
+            return "目标窗口";
+        }
+
+        private static string SafeProcessName(string n)
+        {
+            if (string.IsNullOrEmpty(n)) return "";
+            if (n.Equals("notepad", StringComparison.OrdinalIgnoreCase)) return "记事本";
+            if (n.Equals("msedge", StringComparison.OrdinalIgnoreCase) ||
+                n.Equals("chrome", StringComparison.OrdinalIgnoreCase)) return "浏览器";
+            if (n.Equals("explorer", StringComparison.OrdinalIgnoreCase)) return "资源管理器";
+            return n;
+        }
+
+        private static void SendCtrlC()
+        {
+            keybd_event(0x11, 0, 0, IntPtr.Zero);
+            keybd_event(0x43, 0, 0, IntPtr.Zero);
+            keybd_event(0x43, 0, 2, IntPtr.Zero);
+            keybd_event(0x11, 0, 2, IntPtr.Zero);
+        }
+
+        private static void SendCtrlV()
+        {
+            keybd_event(0x11, 0, 0, IntPtr.Zero);   // Ctrl ↓
+            keybd_event(0x56, 0, 0, IntPtr.Zero);   // V ↓
+            keybd_event(0x56, 0, 2, IntPtr.Zero);   // V ↑
+            keybd_event(0x11, 0, 2, IntPtr.Zero);   // Ctrl ↑
+        }
+
         // ============================================================ 面板本体
         private FloatingInputForm()
         {
             int dpi = 96;
             try { dpi = DeviceDpi; } catch { }
-            _s = Math.Max(0.75f, Math.Min(2.5f, dpi / 96f));
+            _s = Math.Max(0.8f, Math.Min(2.5f, dpi / 96f));
 
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
             TopMost = true;
             AutoScaleMode = AutoScaleMode.None;
-            BackColor = Color.FromArgb(250, 250, 250);
-            Font = new Font("Microsoft YaHei UI", 9f);
-            ClientSize = new Size(S(420), S(152));
+            BackColor = Color.FromArgb(243, 243, 243);
+            ClientSize = new Size(S(500), S(360));
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
-            Paint += delegate (object s, PaintEventArgs e)
-            {
-                using (Pen p = new Pen(Color.FromArgb(196, 200, 206)))
-                    e.Graphics.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
-            };
-            BuildUi();
+
+            _web.Dock = DockStyle.Fill;
+            _web.DefaultBackgroundColor = Color.FromArgb(243, 243, 243);
+            Controls.Add(_web);
         }
 
-        protected override bool ShowWithoutActivation { get { return true; } }
+        protected override bool ShowWithoutActivation { get { return true; } }   // 弹出绝不抢焦点
 
         private int S(int v) { return (int)Math.Round(v * _s); }
 
-        private void BuildUi()
+        private async void InitWeb()
         {
-            int W = ClientSize.Width;
-
-            // ---- 标题条（可拖） ----
-            Panel bar = new Panel();
-            bar.Bounds = new Rectangle(0, 0, W, S(22));
-            bar.BackColor = Color.FromArgb(240, 241, 243);
-            bar.Cursor = Cursors.SizeAll;
-            bar.MouseDown += DragPanel;
-            Controls.Add(bar);
-
-            Label title = new Label();
-            title.Text = "浮动输入 · 选中文字可套颜色 / 格式";
-            title.AutoSize = false;
-            title.Bounds = new Rectangle(S(8), 0, W - S(36), S(22));
-            title.TextAlign = ContentAlignment.MiddleLeft;
-            title.ForeColor = Color.FromArgb(90, 96, 104);
-            title.Font = new Font("Microsoft YaHei UI", 8f);
-            title.Cursor = Cursors.SizeAll;
-            title.MouseDown += DragPanel;
-            bar.Controls.Add(title);
-
-            Label close = new Label();
-            close.Text = "✕";
-            close.AutoSize = false;
-            close.Bounds = new Rectangle(W - S(26), 0, S(24), S(22));
-            close.TextAlign = ContentAlignment.MiddleCenter;
-            close.ForeColor = Color.FromArgb(110, 116, 124);
-            close.Cursor = Cursors.Hand;
-            close.Click += delegate { HidePanel(); };
-            bar.Controls.Add(close);
-
-            // ---- 输入区 ----
-            _txt = new TextBox();
-            _txt.Multiline = true;
-            _txt.AcceptsReturn = true;
-            _txt.BorderStyle = BorderStyle.FixedSingle;
-            _txt.ScrollBars = ScrollBars.Vertical;
-            _txt.Bounds = new Rectangle(S(8), S(26), W - S(16), S(72));
-            _txt.BackColor = Color.White;
-            _txt.Font = new Font("Microsoft YaHei UI", 9.5f);
-            _txt.KeyDown += delegate (object s, KeyEventArgs e)
+            try
             {
-                if (e.Control && e.KeyCode == Keys.Enter) { CommitToTarget(); e.SuppressKeyPress = true; }
-                else if (e.KeyCode == Keys.Escape) { HidePanel(); e.SuppressKeyPress = true; }
-            };
-            Controls.Add(_txt);
+                if (MainForm.WebEnv != null) await _web.EnsureCoreWebView2Async(MainForm.WebEnv);
+                else await _web.EnsureCoreWebView2Async();
 
-            // ---- 工具条 ----
-            int y = S(102);
-            int h = S(24);
+                _web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                _web.CoreWebView2.Settings.IsStatusBarEnabled = false;
 
-            _colorBtn = new Button();
-            _colorBtn.Text = "颜色";
-            _colorBtn.Font = new Font("Microsoft YaHei UI", 8f);
-            _colorBtn.FlatStyle = FlatStyle.Flat;
-            _colorBtn.FlatAppearance.BorderColor = Color.FromArgb(200, 204, 210);
-            _colorBtn.BackColor = Color.White;
-            _colorBtn.Bounds = new Rectangle(S(8), y, S(48), h);
-            _colorBtn.Click += delegate { OpenPalette(); };
-            Controls.Add(_colorBtn);
-
-            string[][] wraps = new string[][]
-            {
-                new string[] { "B", "<b>", "</b>", "粗体 <b>" },
-                new string[] { "I", "<i>", "</i>", "斜体 <i>" },
-                new string[] { "U", "<u>", "</u>", "下划线 <u>" },
-                new string[] { "S", "<s>", "</s>", "删除线 <s>" },
-                new string[] { "上", "<sup>", "</sup>", "上标 <sup>" },
-                new string[] { "下", "<sub>", "</sub>", "下标 <sub>" },
-            };
-            int x = S(62);
-            foreach (string[] w in wraps)
-            {
-                Button b = new Button();
-                b.Text = w[0];
-                b.Font = new Font("Microsoft YaHei UI", 8f);
-                b.FlatStyle = FlatStyle.Flat;
-                b.FlatAppearance.BorderColor = Color.FromArgb(200, 204, 210);
-                b.BackColor = Color.White;
-                b.Bounds = new Rectangle(x, y, S(26), h);
-                b.Tag = new string[] { w[1], w[2] };
-                b.Click += delegate (object s, EventArgs e)
+                const string origin = MainForm.WebOrigin;
+                string html = LoadFloatHtml();
+                _web.CoreWebView2.AddWebResourceRequestedFilter(origin + "*", CoreWebView2WebResourceContext.All);
+                _web.CoreWebView2.WebResourceRequested += delegate (object s2, CoreWebView2WebResourceRequestedEventArgs e2)
                 {
-                    string[] tag = (string[])((Button)s).Tag;
-                    ApplyWrap(tag[0], tag[1]);
+                    try
+                    {
+                        if (!e2.Request.Uri.StartsWith(origin, StringComparison.OrdinalIgnoreCase)) return;
+                        string abs = new Uri(e2.Request.Uri).AbsolutePath;
+                        byte[] body = abs.StartsWith("/__float", StringComparison.OrdinalIgnoreCase)
+                            ? Encoding.UTF8.GetBytes(html)
+                            : new byte[0];
+                        bool ok = body.Length > 0;
+                        e2.Response = _web.CoreWebView2.Environment.CreateWebResourceResponse(
+                            new MemoryStream(body), ok ? 200 : 404, ok ? "OK" : "Not Found",
+                            ok ? "Content-Type: text/html; charset=utf-8" : "Content-Type: text/plain");
+                    }
+                    catch { }
                 };
-                Controls.Add(b);
-                x += S(28);
+
+                _web.CoreWebView2.NavigationCompleted += delegate { _webReady = true; PushPending(); };
+                _web.CoreWebView2.WebMessageReceived += OnFMessage;
+                _web.CoreWebView2.Navigate(origin + "__float.html");
             }
-
-            Button loop = new Button();
-            loop.Text = "循环";
-            loop.Font = new Font("Microsoft YaHei UI", 8f);
-            loop.FlatStyle = FlatStyle.Flat;
-            loop.FlatAppearance.BorderColor = Color.FromArgb(200, 204, 210);
-            loop.BackColor = Color.White;
-            loop.Bounds = new Rectangle(x, y, S(44), h);
-            loop.Click += delegate { ApplyLoopGradient(); };
-            Controls.Add(loop);
-
-            Button commit = new Button();
-            commit.Text = "回填";
-            commit.Font = new Font("Microsoft YaHei UI", 8f);
-            commit.FlatStyle = FlatStyle.Flat;
-            commit.FlatAppearance.BorderColor = Color.FromArgb(200, 204, 210);
-            commit.BackColor = Color.FromArgb(232, 242, 255);
-            commit.Bounds = new Rectangle(W - S(112), y, S(58), h);
-            commit.Click += delegate { CommitToTarget(); };
-            Controls.Add(commit);
-
-            Button copy = new Button();
-            copy.Text = "复制";
-            copy.Font = new Font("Microsoft YaHei UI", 8f);
-            copy.FlatStyle = FlatStyle.Flat;
-            copy.FlatAppearance.BorderColor = Color.FromArgb(200, 204, 210);
-            copy.BackColor = Color.White;
-            copy.Bounds = new Rectangle(W - S(50), y, S(44), h);
-            copy.Click += delegate
-            {
-                if (_txt.TextLength > 0 && SetClipboard(_txt.Text, 4)) _hint.Text = "已复制到剪贴板";
-                _txt.Focus();
-            };
-            Controls.Add(copy);
-
-            // ---- 提示行 ----
-            _hint = new Label();
-            _hint.Text = "Ctrl+Enter 回填 · Esc 关闭 · 不选文字时颜色作用于整段";
-            _hint.AutoSize = false;
-            _hint.Bounds = new Rectangle(S(8), S(130), W - S(16), S(16));
-            _hint.TextAlign = ContentAlignment.MiddleLeft;
-            _hint.ForeColor = Color.FromArgb(130, 136, 144);
-            _hint.Font = new Font("Microsoft YaHei UI", 7.5f);
-            Controls.Add(_hint);
+            catch { }
         }
 
-        private void DragPanel(object sender, MouseEventArgs e)
+        private static string LoadFloatHtml()
         {
-            if (e.Button != MouseButtons.Left) return;
-            ReleaseCapture();
-            SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+            try
+            {
+                Assembly asm = Assembly.GetExecutingAssembly();
+                foreach (string n in asm.GetManifestResourceNames())
+                {
+                    if (n.EndsWith("floating.html", StringComparison.OrdinalIgnoreCase))
+                        using (Stream s = asm.GetManifestResourceStream(n))
+                        using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
+                            return sr.ReadToEnd();
+                }
+            }
+            catch { }
+            return "<html><body>floating.html 资源缺失</body></html>";
         }
 
         // ============================================================ 显示 / 隐藏
-        internal void ShowFor(AutomationElement target, Point pt)
+        internal void ShowFor(AutomationElement target, Point pt, string selText, string app)
         {
             _target = target;
-            if (_palette != null && _palette.Visible) _palette.Hide();
+            _selText = selText ?? "";
+            _selApp = app ?? "";
             if (!Visible) Show();
             PlaceAt(pt);
-            if (_hint.Text.Length == 0) _hint.Text = "Ctrl+Enter 回填 · Esc 关闭";
+            PushState();
+        }
+
+        private void PushState()
+        {
+            string json = StateJson();
+            if (_webReady && _web.CoreWebView2 != null)
+            {
+                try { _web.CoreWebView2.ExecuteScriptAsync("window.fpState && window.fpState(" + JsString(json) + ")"); return; }
+                catch { }
+            }
+            // 失败（WebView 未就绪 / 正忙）→ 记下来，稍后重试
+            _pendingJson = json;
+            System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+            t.Interval = 500;
+            t.Tick += delegate
+            {
+                try
+                {
+                    t.Stop(); t.Dispose();
+                    if (_webReady && _web.CoreWebView2 != null && _pendingJson == json)
+                    {
+                        try
+                        {
+                            _web.CoreWebView2.ExecuteScriptAsync("window.fpState && window.fpState(" + JsString(json) + ")");
+                            _pendingJson = null;
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            };
+            t.Start();
+        }
+
+        private void PushPending()
+        {
+            if (_pendingJson == null || _web.CoreWebView2 == null) return;
+            string j = _pendingJson;
+            _pendingJson = null;
+            try { _web.CoreWebView2.ExecuteScriptAsync("window.fpState && window.fpState(" + JsString(j) + ")"); }
+            catch { }
+        }
+
+        private string StateJson()
+        {
+            int len = _selText.Length;
+            return "{\"mode\":\"" + (len > 0 ? "sel" : "type") + "\"" +
+                   ",\"len\":" + len +
+                   ",\"text\":" + Quote(_selText) +
+                   ",\"app\":" + Quote(_selApp) + "}";
         }
 
         private void PlaceAt(Point pt)
         {
             Rectangle wa = Screen.FromPoint(pt).WorkingArea;
-            int x = pt.X + S(14);
-            int y = pt.Y + S(20);
-            if (x + Width > wa.Right) x = pt.X - Width - S(14);
+            int x = pt.X + S(16);
+            int y = pt.Y + S(24);
+            if (x + Width > wa.Right) x = pt.X - Width - S(16);
             if (y + Height > wa.Bottom) y = pt.Y - Height - S(12);
             x = Math.Max(wa.Left + S(4), Math.Min(x, wa.Right - Width - S(4)));
             y = Math.Max(wa.Top + S(4), Math.Min(y, wa.Bottom - Height - S(4)));
@@ -416,135 +524,186 @@ namespace RichTextGen
 
         internal void HidePanel()
         {
-            if (_palette != null) { try { _palette.Hide(); } catch { } }
             if (Visible) Hide();
         }
 
-        // ============================================================ 编辑操作
-        private void ApplyWrap(string open, string close)
+        // ============================================================ 面板 → 宿主 消息
+        private void OnFMessage(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            int s = _txt.SelectionStart;
-            int n = _txt.SelectionLength;
-            string all = _txt.Text;
-            string sel = all.Substring(s, n);
-            string rep = open + sel + close;
-            _txt.Text = all.Substring(0, s) + rep + all.Substring(s + n);
-            _txt.SelectionStart = s + open.Length;
-            _txt.SelectionLength = n;
-            _txt.Focus();
-        }
-
-        private void ApplyColor(Color c)
-        {
-            int s = _txt.SelectionStart;
-            int n = _txt.SelectionLength;
-            if (n == 0) { s = 0; n = _txt.TextLength; }
-            if (n == 0) { _hint.Text = "先输入文字，再选颜色"; return; }
-            string all = _txt.Text;
-            string sel = all.Substring(s, n);
-            string hex = "#" + c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2");
-            string rep = "<color=" + hex + ">" + sel + "</color>";
-            _txt.Text = all.Substring(0, s) + rep + all.Substring(s + n);
-            _txt.SelectionStart = s + rep.Length;
-            _txt.SelectionLength = 0;
-            _hint.Text = "已套用 " + hex;
-            _txt.Focus();
-        }
-
-        /// <summary>逐字符上色，5 个字符一个周期往复（与主界面的「循环渐变」一致）。</summary>
-        private void ApplyLoopGradient()
-        {
-            string all = _txt.Text;
-            int s = _txt.SelectionStart;
-            int n = _txt.SelectionLength;
-            if (n == 0) { s = 0; n = all.Length; }
-            if (n == 0) { _hint.Text = "先输入文字，再点循环"; return; }
-
-            string sel = all.Substring(s, n);
-            StringBuilder sb = new StringBuilder();
-            int k = 0;
-            for (int i = 0; i < sel.Length; i++)
+            string raw = "";
+            try { raw = e.TryGetWebMessageAsString(); } catch { }
+            if (string.IsNullOrEmpty(raw)) return;
+            string[] parts = raw.Split('|');
+            string cmd = parts[0];
+            try
             {
-                char ch = sel[i];
-                if (ch == '\n' || ch == '\r') { sb.Append(ch); continue; }
-                int step = i;
-                string piece = ch.ToString();
-                if (char.IsHighSurrogate(ch) && i + 1 < sel.Length && char.IsLowSurrogate(sel[i + 1]))
+                switch (cmd)
                 {
-                    piece = sel.Substring(i, 2);
+                    case "f":
+                        DispatchF(parts);
+                        break;
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>parts[1]=子命令，后面是参数（base64 编码，避免 | 转义问题）。</summary>
+        private void DispatchF(string[] parts)
+        {
+            string sub = parts.Length > 1 ? parts[1] : "";
+            switch (sub)
+            {
+                case "close":
+                    HidePanel();
+                    break;
+
+                case "wrap":
+                    if (parts.Length >= 4)
+                    {
+                        string open = B64(parts[2]);
+                        string close = B64(parts[3]);
+                        ApplyToSelection(open + _selText + close);
+                    }
+                    break;
+
+                case "color":
+                    if (parts.Length >= 3)
+                    {
+                        string hex = parts[2].Trim();
+                        if (hex.Length == 0) hex = "#FFFFFF";
+                        if (!hex.StartsWith("#")) hex = "#" + hex;
+                        ApplyToSelection("<color=" + hex + ">" + _selText + "</color>");
+                    }
+                    break;
+
+                case "grad":
+                    ApplyToSelection(Gradient(_selText));
+                    break;
+
+                case "custom":
+                    PickCustomColor();
+                    break;
+
+                case "pickColorTyp":
+                    PickTypColor();
+                    break;
+
+                case "type":
+                    if (parts.Length >= 3) PasteBack(B64(parts[2]));
+                    break;
+
+                case "copy":
+                    if (parts.Length >= 3) SetClipboard(B64(parts[2]), 4);
+                    break;
+
+                case "move":
+                    if (parts.Length >= 4)
+                    {
+                        int dx, dy;
+                        if (int.TryParse(parts[2], out dx) && int.TryParse(parts[3], out dy))
+                        {
+                            if (Math.Abs(dx) <= 400 && Math.Abs(dy) <= 400)
+                                Location = new Point(Left + dx, Top + dy);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        private static string B64(string s)
+        {
+            try { return Encoding.UTF8.GetString(Convert.FromBase64String(s ?? "")); }
+            catch { return ""; }
+        }
+
+        /// <summary>把包装好的文字贴回原输入框：先还焦点，再剪贴板 + Ctrl+V（覆盖原选区）。</summary>
+        private void ApplyToSelection(string text)
+        {
+            if (_selText.Length == 0 || text.Length == 0) return;
+            PasteBack(text);
+        }
+
+        private void PasteBack(string text)
+        {
+            if (text.Length == 0) return;
+            AutomationElement t = _target;
+            HidePanel();
+            try
+            {
+                if (t != null)
+                {
+                    IntPtr root = IntPtr.Zero;
+                    try
+                    {
+                        int h = t.Current.NativeWindowHandle;
+                        if (h != 0) root = GetAncestor((IntPtr)h, GA_ROOT);
+                    }
+                    catch { }
+                    if (root != IntPtr.Zero) SetForegroundWindow(root);
+                    try { t.SetFocus(); } catch { }
+                }
+                Thread.Sleep(90);
+                if (!SetClipboard(text, 6)) return;
+                Thread.Sleep(40);
+                SendCtrlV();
+            }
+            catch { }
+        }
+
+        private void PickCustomColor()
+        {
+            using (ColorDialog d = new ColorDialog())
+            {
+                d.FullOpen = true;
+                if (d.ShowDialog(this) == DialogResult.OK && _selText.Length > 0)
+                {
+                    string hex = "#" + d.Color.R.ToString("X2") + d.Color.G.ToString("X2") + d.Color.B.ToString("X2");
+                    ApplyToSelection("<color=" + hex + ">" + _selText + "</color>");
+                }
+                else if (Visible) Activate();   // 取消：把面板带回最前（不抢其他程序的焦点）
+            }
+        }
+
+        private void PickTypColor()
+        {
+            using (ColorDialog d = new ColorDialog())
+            {
+                d.FullOpen = true;
+                if (d.ShowDialog(this) == DialogResult.OK)
+                {
+                    string hex = "#" + d.Color.R.ToString("X2") + d.Color.G.ToString("X2") + d.Color.B.ToString("X2");
+                    if (_webReady && _web.CoreWebView2 != null)
+                        try { _web.CoreWebView2.ExecuteScriptAsync("window.fpColorTyp && window.fpColorTyp(" + JsString(hex) + ")"); }
+                        catch { }
+                }
+                if (Visible) Activate();
+            }
+        }
+
+        /// <summary>逐字符上色，5 个字符一个周期往复（与主界面「循环渐变」一致）。</summary>
+        private static string Gradient(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < text.Length; i++)
+            {
+                char ch = text[i];
+                if (ch == '\n' || ch == '\r') { sb.Append(ch); continue; }
+                string piece = ch.ToString();
+                if (char.IsHighSurrogate(ch) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+                {
+                    piece = text.Substring(i, 2);
                     i++;
                 }
-                double t = (step % 5) / 4.0;
+                double t = (i % 5) / 4.0;
                 int r = (int)Math.Round(255 + (0 - 255) * t);
                 int g = 0;
                 int b = (int)Math.Round(0 + (255 - 0) * t);
                 sb.Append("<color=#")
                   .Append(r.ToString("X2")).Append(g.ToString("X2")).Append(b.ToString("X2"))
                   .Append('>').Append(piece).Append("</color>");
-                k++;
             }
-            string rep = sb.ToString();
-            _txt.Text = all.Substring(0, s) + rep + all.Substring(s + n);
-            _txt.SelectionStart = s + rep.Length;
-            _txt.SelectionLength = 0;
-            _hint.Text = "已套用循环渐变（红→蓝，5 字符一周期）";
-            _txt.Focus();
-        }
-
-        private void OpenPalette()
-        {
-            if (_palette == null || _palette.IsDisposed)
-            {
-                _palette = new PaletteForm(_s);
-                _palette.Picked += delegate (Color c)
-                {
-                    ApplyColor(c);
-                    _palette.Hide();
-                    _txt.Focus();
-                };
-            }
-            Point p = PointToScreen(new Point(_colorBtn.Left, _colorBtn.Bottom + S(4)));
-            _palette.ShowAt(p);
-        }
-
-        // ============================================================ 回填
-        private void CommitToTarget()
-        {
-            string text = _txt.Text;
-            if (text.Length == 0) { HidePanel(); return; }
-
-            AutomationElement target = _target;
-            HidePanel();
-            try
-            {
-                if (target != null)
-                {
-                    IntPtr root = IntPtr.Zero;
-                    try
-                    {
-                        int h = target.Current.NativeWindowHandle;
-                        if (h != 0) root = GetAncestor((IntPtr)h, GA_ROOT);
-                    }
-                    catch { }
-                    if (root != IntPtr.Zero) SetForegroundWindow(root);
-                    try { target.SetFocus(); } catch { }
-                }
-                Thread.Sleep(90);
-                if (!SetClipboard(text, 6))
-                {
-                    Show();
-                    _hint.Text = "剪贴板被占用，请稍后重试（文字已保留）";
-                    return;
-                }
-                Thread.Sleep(40);
-                SendCtrlV();
-                _txt.Clear();
-                _hint.Text = "已回填到原输入框";
-            }
-            catch
-            {
-                Show();
-            }
+            return sb.ToString();
         }
 
         private static bool SetClipboard(string s, int tries)
@@ -557,110 +716,47 @@ namespace RichTextGen
             return false;
         }
 
-        private static void SendCtrlV()
+        // ---------------- 小工具 ----------------
+        private static string Quote(string s)
         {
-            keybd_event(0x11, 0, 0, IntPtr.Zero);   // Ctrl ↓
-            keybd_event(0x56, 0, 0, IntPtr.Zero);   // V ↓
-            keybd_event(0x56, 0, 2, IntPtr.Zero);   // V ↑
-            keybd_event(0x11, 0, 2, IntPtr.Zero);   // Ctrl ↑
+            if (s == null) return "\"\"";
+            StringBuilder sb = new StringBuilder("\"");
+            foreach (char ch in s)
+            {
+                switch (ch)
+                {
+                    case '\\': sb.Append("\\\\"); break;
+                    case '"': sb.Append("\\\""); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': break;
+                    case '\t': sb.Append("\\t"); break;
+                    default:
+                        if (ch < ' ') sb.Append("\\u").Append(((int)ch).ToString("x4"));
+                        else sb.Append(ch);
+                        break;
+                }
+            }
+            sb.Append('"');
+            return sb.ToString();
         }
 
-        // ============================================================ 小调色盘
-        private sealed class PaletteForm : Form
+        /// <summary>把 JSON 字符串包成 JS 字符串字面量（用于 ExecuteScriptAsync）。</summary>
+        private static string JsString(string json)
         {
-            public event Action<Color> Picked;
-            private readonly float _s;
-
-            private static readonly string[] Hex =
+            StringBuilder sb = new StringBuilder("\"");
+            foreach (char ch in json)
             {
-                "#FFFFFF", "#000000", "#808080", "#C0C0C0", "#FF0000", "#FF8000",
-                "#FFFF00", "#80FF00", "#00C000", "#00FFFF", "#00A0FF", "#0000FF",
-                "#8000FF", "#FF00FF", "#FF80C0", "#8B4513", "#FFD700", "#008080",
-                "#000080", "#800000", "#808000", "#006400", "#8B0000", "#708090"
-            };
-
-            public PaletteForm(float s)
-            {
-                _s = s;
-                FormBorderStyle = FormBorderStyle.None;
-                ShowInTaskbar = false;
-                StartPosition = FormStartPosition.Manual;
-                TopMost = true;
-                AutoScaleMode = AutoScaleMode.None;
-                BackColor = Color.FromArgb(250, 250, 250);
-                ClientSize = new Size(Px(156), Px(140));
-                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
-                Paint += delegate (object o, PaintEventArgs e)
+                switch (ch)
                 {
-                    using (Pen p = new Pen(Color.FromArgb(196, 200, 206)))
-                        e.Graphics.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
-                };
-                BuildSwatches();
-            }
-
-            protected override bool ShowWithoutActivation { get { return true; } }
-
-            private int Px(int v) { return (int)Math.Round(v * _s); }
-
-            private void BuildSwatches()
-            {
-                int size = Px(20);
-                int gap = Px(4);
-                int left = Px(8);
-                int top = Px(8);
-                for (int i = 0; i < Hex.Length; i++)
-                {
-                    int cx = i % 6;
-                    int cy = i / 6;
-                    Button b = new Button();
-                    b.Bounds = new Rectangle(left + cx * (size + gap), top + cy * (size + gap), size, size);
-                    b.FlatStyle = FlatStyle.Flat;
-                    b.FlatAppearance.BorderColor = Color.FromArgb(180, 184, 190);
-                    b.BackColor = ColorTranslator.FromHtml(Hex[i]);
-                    b.Tag = Hex[i];
-                    b.Click += delegate (object s, EventArgs e)
-                    {
-                        Color c = ColorTranslator.FromHtml((string)((Button)s).Tag);
-                        Action<Color> h = Picked;
-                        if (h != null) h(c);
-                    };
-                    Controls.Add(b);
+                    case '\\': sb.Append("\\\\"); break;
+                    case '"': sb.Append("\\\""); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': break;
+                    default: sb.Append(ch); break;
                 }
-
-                Button custom = new Button();
-                custom.Text = "自定义颜色…";
-                custom.Font = new Font("Microsoft YaHei UI", 8f);
-                custom.FlatStyle = FlatStyle.Flat;
-                custom.FlatAppearance.BorderColor = Color.FromArgb(200, 204, 210);
-                custom.BackColor = Color.White;
-                custom.Bounds = new Rectangle(left, Px(108), Px(140), Px(24));
-                custom.Click += delegate
-                {
-                    using (ColorDialog d = new ColorDialog())
-                    {
-                        d.FullOpen = true;
-                        if (d.ShowDialog(this) == DialogResult.OK)
-                        {
-                            Action<Color> h = Picked;
-                            if (h != null) h(d.Color);
-                        }
-                    }
-                };
-                Controls.Add(custom);
             }
-
-            public void ShowAt(Point screen)
-            {
-                Rectangle wa = Screen.FromPoint(screen).WorkingArea;
-                int x = screen.X;
-                int y = screen.Y;
-                if (x + Width > wa.Right) x = wa.Right - Width - Px(4);
-                if (y + Height > wa.Bottom) y = screen.Y - Height - Px(48);
-                x = Math.Max(wa.Left + Px(4), x);
-                y = Math.Max(wa.Top + Px(4), y);
-                Location = new Point(x, y);
-                if (!Visible) Show();
-            }
+            sb.Append('"');
+            return sb.ToString();
         }
     }
 }

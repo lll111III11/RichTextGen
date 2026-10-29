@@ -159,7 +159,7 @@ namespace RichTextGen
 
         // ============================================================ 强制应用刷新
         /// <summary>界面所用的虚拟 https 源（重载时带时间戳重新请求内嵌 HTML）。</summary>
-        private const string WebOrigin = "https://richtextgen.local/";
+        internal const string WebOrigin = "https://richtextgen.local/";
         /// <summary>刷新前由界面打包的标签页正文；页面重载完成后回灌。</summary>
         private string _pendingRefresh;
         private bool _refreshFallback;

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>浮动输入面板</title>
+<style>
+  :root{
+    --bg:#f3f3f3; --card:#ffffff; --text:#1b1b1b; --sub:#5d5d5d; --line:#e5e5e5;
+    --input:#ffffff; --inputLine:#d6d6d6; --accent:#0067c0; --accentText:#ffffff;
+    --hover:#f0f0f0; --shadow:0 2px 10px rgba(0,0,0,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#202020; --card:#2b2b2b; --text:#ffffff; --sub:#c5c5c5; --line:#3a3a3a;
+      --input:#262626; --inputLine:#454545; --accent:#4cc2ff; --accentText:#10222e;
+      --hover:#333333;
+    }
+  }
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--text);font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+       font-size:13px;display:flex;flex-direction:column;user-select:none;border:1px solid var(--line);
+       box-sizing:border-box;border-radius:10px}
+  /* ---------- 标题条 ---------- */
+  #hd{display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:7px 10px 7px 14px;border-bottom:1px solid var(--line);background:var(--card);
+      border-radius:10px 10px 0 0;cursor:grab;flex-shrink:0}
+  #hd.grabbing{cursor:grabbing}
+  #hd .tt{display:flex;flex-direction:column;min-width:0}
+  #hd .tt b{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #hd .tt span{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #hd .x{border:0;background:none;color:var(--sub);font-size:15px;cursor:pointer;width:28px;height:28px;
+         border-radius:6px;flex-shrink:0}
+  #hd .x:hover{background:var(--hover);color:var(--text)}
+  /* ---------- 主体 ---------- */
+  #body{flex:1;overflow:auto;padding:10px 12px 12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:9px}
+  .card h4{margin:0 0 7px;font-size:11.5px;color:var(--sub);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  .card h4 .tag{font-weight:400}
+  /* 选区预览 */
+  #capText{margin-top:2px;padding:7px 9px;background:var(--input);border:1px solid var(--inputLine);
+           border-radius:6px;font-size:12.5px;word-break:break-all;max-height:76px;overflow:auto;
+           user-select:text;white-space:pre-wrap;line-height:1.5}
+  /* 色板 */
+  .sw{display:grid;grid-template-columns:repeat(12,1fr);gap:5px}
+  .sw button{aspect-ratio:1;width:100%;border-radius:6px;border:1px solid var(--line);cursor:pointer;padding:0}
+  .sw button:hover{outline:2px solid var(--accent);outline-offset:1px}
+  .sw button.cust{background:conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);position:relative}
+  .sw button.cust::after{content:"+";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+      color:#fff;font-size:16px;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+  /* 功能按钮 */
+  .fbtns{display:flex;flex-wrap:wrap;gap:6px}
+  .fbtn{border:1px solid var(--inputLine);background:var(--input);color:var(--text);border-radius:6px;
+        padding:6px 11px;font-size:12.5px;cursor:pointer;min-width:44px}
+  .fbtn:hover{background:var(--hover);border-color:var(--accent)}
+  .fbtn.p{background:var(--accent);color:var(--accentText);border-color:transparent;font-weight:600}
+  .fbtn.p:hover{filter:brightness(1.08)}
+  .fbtn.warn{color:#c44;border-color:#c44}
+  .fbtn:disabled{opacity:.45;cursor:default}
+  /* 手动输入模式 */
+  #typArea{width:100%;box-sizing:border-box;min-height:104px;resize:vertical;background:var(--input);
+           color:var(--text);border:1px solid var(--inputLine);border-radius:8px;padding:8px 10px;
+           font-size:13px;font-family:Consolas,"Courier New",monospace;line-height:1.5;outline:none}
+  #typArea:focus{border-color:var(--accent)}
+  .row{display:flex;gap:6px;margin-top:7px}
+  .row .fbtn{flex:1}
+  #hint{color:var(--sub);font-size:11.5px;margin-top:6px;line-height:1.5}
+  #hint kbd{border:1px solid var(--inputLine);border-bottom-width:2px;border-radius:4px;padding:0 5px;
+       background:var(--input);font-family:Consolas,monospace;font-size:11px}
+  /* 模式切换 */
+  #modes{display:flex;gap:6px;margin-bottom:9px}
+  #modes button{flex:1;border:1px solid var(--inputLine);background:var(--input);color:var(--sub);
+       border-radius:7px;padding:6px 4px;font-size:12px;cursor:pointer}
+  #modes button.on{background:var(--card);border-color:var(--accent);color:var(--accent);font-weight:600}
+  .hide{display:none !important}
+  #toast{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(0,0,0,.72);color:#fff;
+         padding:5px 14px;border-radius:99px;font-size:12px;opacity:0;transition:opacity .18s;pointer-events:none}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="hd">
+  <div class="tt"><b>浮动输入面板</b><span id="hdSub">…</span></div>
+  <button class="x" id="hdX" title="关闭 (Esc)">✕</button>
+</div>
+
+<div id="body">
+
+  <div id="modes">
+    <button id="mSel" class="on">选区直填</button>
+    <button id="mTyp">手动输入</button>
+  </div>
+
+  <!-- ============ 选区模式：捕获目标窗口的选中文字，点任意功能立刻回填 ============ -->
+  <div id="secSel">
+    <div class="card">
+      <h4 id="capHead">已捕获选区<span class="tag" id="capLen"></span></h4>
+      <div id="capText">…</div>
+    </div>
+    <div class="card">
+      <h4>颜色（点选即回填）</h4>
+      <div class="sw" id="swGrid"></div>
+    </div>
+    <div class="card">
+      <h4>格式（点选即回填）</h4>
+      <div class="fbtns" id="selFmt">
+        <button class="fbtn" data-w="&lt;b&gt;|&lt;/b&gt;"><b>B</b> 粗体</button>
+        <button class="fbtn" data-w="&lt;i&gt;|&lt;/i&gt;"><i>I</i> 斜体</button>
+        <button class="fbtn" data-w="&lt;u&gt;|&lt;/u&gt;"><u>U</u> 下划线</button>
+        <button class="fbtn" data-w="&lt;s&gt;|&lt;/s&gt;"><s>S</s> 删除线</button>
+        <button class="fbtn" data-g="1">上<sup>标</sup></button>
+        <button class="fbtn" data-g="2">下<sub>标</sub></button>
+        <button class="fbtn" data-g="3">🌈 循环渐变</button>
+      </div>
+    </div>
+    <div id="hint">选中即弹出 → 点任意功能 → 自动套格式并回填原窗口；误操作在原窗口 <kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销。</div>
+  </div>
+
+  <!-- ============ 手动输入模式：像主程序一样选中文字再套格式，最后回填 ============ -->
+  <div id="secTyp" class="hide">
+    <textarea id="typArea" placeholder="在这里输入文字；像主程序一样拖选部分文字后，点下面的格式即可只包住选中部分…"></textarea>
+    <div class="fbtns" style="margin-top:7px" id="typFmt">
+      <button class="fbtn" data-w="&lt;b&gt;|&lt;/b&gt;"><b>B</b></button>
+      <button class="fbtn" data-w="&lt;i&gt;|&lt;/i&gt;"><i>I</i></button>
+      <button class="fbtn" data-w="&lt;u&gt;|&lt;/u&gt;"><u>U</u></button>
+      <button class="fbtn" data-w="&lt;s&gt;|&lt;/s&gt;"><s>S</s></button>
+      <button class="fbtn" data-w="&lt;sup&gt;|&lt;/sup&gt;">上标</button>
+      <button class="fbtn" data-w="&lt;sub&gt;|&lt;/sub&gt;">下标</button>
+      <button class="fbtn" data-g="3">🌈 循环渐变</button>
+      <button class="fbtn" data-g="4">🎨 颜色</button>
+    </div>
+    <div class="row">
+      <button class="fbtn p" id="btnCommit">回填 ⏎</button>
+      <button class="fbtn" id="btnCopy">复制</button>
+      <button class="fbtn warn" id="btnClear">清空</button>
+    </div>
+    <div id="hint">选中文字后点格式只包住选中部分；不选则作用于全部。回填 = 粘贴回刚才点过的输入框。<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 回填，<kbd>Esc</kbd> 关闭。</div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+  var SWATCHES = [
+    "#FF0000","#FF8000","#FFFF00","#80FF00","#00C000","#00FFFF",
+    "#00A0FF","#0000FF","#8000FF","#FF00FF","#FF80C0","#8B4513",
+    "#FFD700","#008080","#000080","#800000","#808000","#006400",
+    "#8B0000","#708090","#FFFFFF","#000000","#808080","#C0C0C0"
+  ];
+  var selMode = true;          // true=选区直填 false=手动输入
+  var sel = { text:'', app:'' };
+  var ta = document.getElementById('typArea');
+
+  function host(m){ try { window.chrome.webview.postMessage(m); } catch(e){} }
+  function $(id){ return document.getElementById(id); }
+  function toast(s){
+    var t = $('toast'); t.textContent = s; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(function(){ t.classList.remove('on'); }, 1600);
+  }
+  function b64(s){ return btoa(unescape(encodeURIComponent(s))); }
+
+  /* ---------- 模式切换 ---------- */
+  $('mSel').onclick = function(){ selMode = true; applyMode(); };
+  $('mTyp').onclick = function(){ selMode = false; applyMode(); ta.focus(); };
+  function applyMode(){
+    $('mSel').classList.toggle('on', selMode);
+    $('mTyp').classList.toggle('on', !selMode);
+    $('secSel').classList.toggle('hide', !selMode);
+    $('secTyp').classList.toggle('hide', selMode);
+  }
+
+  /* ---------- 色板 ---------- */
+  (function(){
+    var grid = $('swGrid');
+    SWATCHES.forEach(function(c){
+      var b = document.createElement('button');
+      b.style.background = c;
+      b.title = c;
+      b.onclick = function(){ pickColor(c); };
+      grid.appendChild(b);
+    });
+    var cust = document.createElement('button');
+    cust.className = 'cust';
+    cust.title = '自定义颜色…';
+    cust.onclick = function(){
+      if (selMode) { host('f|custom'); } else { toast('手动模式在下面点「颜色」'); }
+    };
+    grid.appendChild(cust);
+  })();
+
+  function pickColor(hex){
+    if (selMode) { host('f|color|' + hex); }
+    else { insertWrap('<color=' + hex + '>', '</color>'); }
+  }
+
+  /* ---------- 手动模式的编辑区格式（参考主程序：只包住选中部分） ---------- */
+  function insertWrap(open, close){
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    var all = ta.value;
+    if (s === e){ s = 0; e = all.length; }
+    if (e - s <= 0){ toast('先输入文字再套格式'); return; }
+    var selText = all.slice(s, e);
+    ta.value = all.slice(0, s) + open + selText + close + all.slice(e);
+    ta.setSelectionRange(s + open.length, s + open.length + selText.length);
+    ta.focus();
+  }
+  function insertGradient(){
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    var all = ta.value;
+    if (s === e){ s = 0; e = all.length; }
+    if (e - s <= 0){ toast('先输入文字再套渐变'); return; }
+    var seg = all.slice(s, e), out = '';
+    for (var i = 0; i < seg.length; i++){
+      var ch = seg[i];
+      if (ch === '\n' || ch === '\r'){ out += ch; continue; }
+      var piece = ch;
+      if (/[\uD800-\uDBFF]/.test(ch) && i + 1 < seg.length){ piece = seg[i] + seg[i+1]; i++; }
+      var t = (i % 5) / 4;
+      var r = Math.round(255 + (0 - 255) * t);
+      var g = 0;
+      var b = Math.round(0 + (255 - 0) * t);
+      var hex = '#' + pad(r) + pad(g) + pad(b);
+      out += '<color=' + hex + '>' + piece + '</color>';
+    }
+    ta.value = all.slice(0, s) + out + all.slice(e);
+    ta.setSelectionRange(s, ta.value.length);
+    ta.focus();
+  }
+  function pad(n){ n = Math.max(0, Math.min(255, n)); return (n < 16 ? '0' : '') + n.toString(16).toUpperCase(); }
+
+  /* ---------- 手动模式按钮 ---------- */
+  $('typFmt').addEventListener('click', function(ev){
+    var b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.w){
+      var kv = decode(b.dataset.w).split('|');
+      insertWrap(kv[0], kv[1]);
+    } else if (b.dataset.g === '3'){ insertGradient(); }
+    else if (b.dataset.g === '4'){
+      if (ta.value.length === 0){ toast('先输入文字'); return; }
+      host('f|pickColorTyp');       // C# 弹 ColorDialog，选完把带色文本回传
+    }
+  });
+  function decode(s){
+    var d = document.createElement('div'); d.innerHTML = s; return d.textContent;
+  }
+
+  var lastTypColor = null;
+  /* C# 选完颜色把 hex 回调过来，套到手动输入区 */
+  window.fpColorTyp = function(hex){
+    insertWrap('<color=' + hex + '>', '</color>');
+  };
+
+  $('btnCommit').onclick = function(){
+    if (!ta.value.length){ toast('还没有可回填的内容'); return; }
+    host('f|type|' + b64(ta.value));
+  };
+  $('btnCopy').onclick = function(){
+    if (!ta.value.length){ toast('还没有可复制的内容'); return; }
+    host('f|copy|' + b64(ta.value));
+    toast('已复制');
+  };
+  $('btnClear').onclick = function(){ ta.value = ''; ta.focus(); };
+
+  /* ---------- 选区模式按钮 ---------- */
+  $('selFmt').addEventListener('click', function(ev){
+    var b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.w){
+      var kv = decode(b.dataset.w).split('|');
+      host('f|wrap|' + b64(kv[0]) + '|' + b64(kv[1]));
+    } else if (b.dataset.g === '1'){ host('f|wrap|' + b64('<sup>') + '|' + b64('</sup>')); }
+    else if (b.dataset.g === '2'){ host('f|wrap|' + b64('<sub>') + '|' + b64('</sub>')); }
+    else if (b.dataset.g === '3'){ host('f|grad'); }
+  });
+
+  /* ---------- 标题条：关闭 / 拖动 ---------- */
+  $('hdX').onclick = function(){ host('f|close'); };
+
+  var dragging = false, lastX = 0, lastY = 0;
+  var hd = $('hd');
+  hd.addEventListener('pointerdown', function(ev){
+    if (ev.target === $('hdX')) return;
+    dragging = true; lastX = ev.screenX; lastY = ev.screenY;
+    hd.classList.add('grabbing');
+    try { hd.setPointerCapture(ev.pointerId); } catch(e){}
+  });
+  hd.addEventListener('pointermove', function(ev){
+    if (!dragging) return;
+    var dx = ev.screenX - lastX, dy = ev.screenY - lastY;
+    if (dx === 0 && dy === 0) return;
+    lastX = ev.screenX; lastY = ev.screenY;
+    host('f|move|' + dx + '|' + dy);
+  });
+  hd.addEventListener('pointerup', function(){ dragging = false; hd.classList.remove('grabbing'); });
+  hd.addEventListener('pointercancel', function(){ dragging = false; hd.classList.remove('grabbing'); });
+
+  /* ---------- 键盘 ---------- */
+  document.addEventListener('keydown', function(ev){
+    if (ev.key === 'Escape'){ host('f|close'); return; }
+    if (ev.ctrlKey && ev.key === 'Enter'){
+      if (!selMode && ta.value.length){ host('f|type|' + b64(ta.value)); }
+    }
+  });
+
+  /* ---------- C# 推下来的状态 ---------- */
+  window.fpState = function(o){
+    try { o = (typeof o === 'string') ? JSON.parse(o) : o; } catch(e){ return; }
+    if (!o) return;
+    var hasSel = (o.mode === 'sel' && (o.len || 0) > 0);
+    sel = { text: o.text || '', app: o.app || '' };
+    selMode = hasSel;
+    applyMode();
+    var head = $('capHead'), len = $('capLen'), txt = $('capText');
+    if (hasSel){
+      head.textContent = '已捕获选区';
+      len.textContent = '「' + (o.app || '目标窗口') + '」· ' + o.len + ' 字';
+      txt.textContent = o.text || '';
+      $('hdSub').textContent = '目标：' + (o.app || '目标窗口');
+      toast('已捕获选区 ' + o.len + ' 字');
+    } else {
+      head.textContent = '未检测到选区';
+      len.textContent = '（已切换为手动输入）';
+      txt.textContent = '';
+      $('hdSub').textContent = '点输入框后自动弹出';
+      toast('未检测到选区 · 已切换手动输入');
+      setTimeout(function(){ try { ta.focus(); } catch(e){} }, 80);
+    }
+  };
+
+  /* 主窗口主题变更时刷新深浅色（跟随系统已有 @media；这里向 C# 请求初始主题名只用做徽标） */
+  window.ui = window.ui || {};
+})();
+</script>
+</body>
+</html>

@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.2.0",
+    "version":  "5.10.2.1",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.0/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.0/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.1/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.1/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.2.0 更新（其他页 · 显示调节 · 浮动输入）：\n· 新增「其他」页：AI 对话、图片色块图、在线翻译集中到一处\n· 设置新增「更新显示」：顶栏更新按钮长度可调，工作区更新公告可选精简 / 全部展开\n· 新增系统级「浮动输入面板」：开启后点任意软件的输入框，光标旁弹出极简小面板，输入文字、选中后套颜色 / 粗斜体 / 上下标 / 循环渐变，一键回填到原输入框\n· Live2D 入口从界面移除（相关代码与资源保留，方便以后恢复）",
+    "notes":  "v5.10.2.1 更新（浮动输入面板重做）：\n· 面板换用 HTML 界面，更大更好看（500×360），深浅色跟随系统\n· 新交互：在任意软件输入框里选中文字 → 面板自动弹出并捕获选区 → 点颜色 / 粗体 / 斜体 / 下划线 / 删除线 / 上标 / 下标 / 循环渐变 → 自动套标签并回填原窗口，一步到位\n· 没选文字就弹出时自动切到手动输入：像主程序一样选中文字套格式，点回填粘贴回去\n· 修复首次点击窗口不弹面板（要点两下）的问题；弹出时不抢焦点，回填时自动把焦点还给原窗口",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
