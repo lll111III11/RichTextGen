@@ -1,8 +1,8 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.10.2.1",
+  "version": "5.10.2.2",
   "updated": "2026-10-29",
-  "notes": "v5.10.2.1：浮动输入面板重做——HTML 大界面，选中即弹、点功能自动回填；修复首次点击不弹的问题。",
+  "notes": "v5.10.2.2：新增应用名单（全部 / 仅白名单 / 黑名单），自动记录点过输入框的应用；修复加粗、上标、下标等格式的嵌套与取消逻辑。",
   "type": "feature",
   "mandatory": false,
   "files": [
@@ -10,9 +10,9 @@
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.10.2.1",
-      "size": 2372608,
-      "sha256": "0174D1AD7BDD2CAA543B76D85429E90D85A0707F621994438383589DB5118C95",
+      "version": "5.10.2.2",
+      "size": 2391552,
+      "sha256": "1249921B62D4DE823C2135D4CA41415BA46BDE6F199FA4B6AA781DBE369E1307",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.10.2.1",
-      "size": 485282,
-      "sha256": "46151DBFC80BCAC37E094DF01AA7698C5E2CFA77FEE6E1F4472D1A21E6B5083F",
+      "version": "5.10.2.2",
+      "size": 491617,
+      "sha256": "9B2BCC702B9A1ECB3C29306B490D10FC0DABF971A407BA2463F9611A216059B3",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

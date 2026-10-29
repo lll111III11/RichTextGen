@@ -104,12 +104,12 @@
     <div class="card">
       <h4>格式（点选即回填）</h4>
       <div class="fbtns" id="selFmt">
-        <button class="fbtn" data-w="&lt;b&gt;|&lt;/b&gt;"><b>B</b> 粗体</button>
-        <button class="fbtn" data-w="&lt;i&gt;|&lt;/i&gt;"><i>I</i> 斜体</button>
-        <button class="fbtn" data-w="&lt;u&gt;|&lt;/u&gt;"><u>U</u> 下划线</button>
-        <button class="fbtn" data-w="&lt;s&gt;|&lt;/s&gt;"><s>S</s> 删除线</button>
-        <button class="fbtn" data-g="1">上<sup>标</sup></button>
-        <button class="fbtn" data-g="2">下<sub>标</sub></button>
+        <button class="fbtn" data-t="b"><b>B</b> 粗体</button>
+        <button class="fbtn" data-t="i"><i>I</i> 斜体</button>
+        <button class="fbtn" data-t="u"><u>U</u> 下划线</button>
+        <button class="fbtn" data-t="s"><s>S</s> 删除线</button>
+        <button class="fbtn" data-t="sup">上<sup>标</sup></button>
+        <button class="fbtn" data-t="sub">下<sub>标</sub></button>
         <button class="fbtn" data-g="3">🌈 循环渐变</button>
       </div>
     </div>
@@ -120,12 +120,12 @@
   <div id="secTyp" class="hide">
     <textarea id="typArea" placeholder="在这里输入文字；像主程序一样拖选部分文字后，点下面的格式即可只包住选中部分…"></textarea>
     <div class="fbtns" style="margin-top:7px" id="typFmt">
-      <button class="fbtn" data-w="&lt;b&gt;|&lt;/b&gt;"><b>B</b></button>
-      <button class="fbtn" data-w="&lt;i&gt;|&lt;/i&gt;"><i>I</i></button>
-      <button class="fbtn" data-w="&lt;u&gt;|&lt;/u&gt;"><u>U</u></button>
-      <button class="fbtn" data-w="&lt;s&gt;|&lt;/s&gt;"><s>S</s></button>
-      <button class="fbtn" data-w="&lt;sup&gt;|&lt;/sup&gt;">上标</button>
-      <button class="fbtn" data-w="&lt;sub&gt;|&lt;/sub&gt;">下标</button>
+      <button class="fbtn" data-t="b"><b>B</b></button>
+      <button class="fbtn" data-t="i"><i>I</i></button>
+      <button class="fbtn" data-t="u"><u>U</u></button>
+      <button class="fbtn" data-t="s"><s>S</s></button>
+      <button class="fbtn" data-t="sup">上标</button>
+      <button class="fbtn" data-t="sub">下标</button>
       <button class="fbtn" data-g="3">🌈 循环渐变</button>
       <button class="fbtn" data-g="4">🎨 颜色</button>
     </div>
@@ -172,6 +172,92 @@
     $('secTyp').classList.toggle('hide', selMode);
   }
 
+  /* ============================================================
+     标签嵌套引擎（与主程序 TagRegistry 的 Order 一致）
+     · 同一标签点第二次 = 取消（toggle）
+     · 已有同标签时替换而不是层层嵌套（颜色换色不叠 <color><color>）
+     · 多层标签按 Order 排序：数字小的在外层，b/i/u 在 color 外面
+     ============================================================ */
+  var ORDER = {
+    align:1, pos:3, space:4, width:5, margin:6, indent:7, 'line-indent':8, 'line-height':9, br:10,
+    b:20, i:21, u:22, s:23, sub:24, sup:25, nobr:26, noparse:27,
+    uppercase:30, lowercase:31, smallcaps:32, allcaps:33,
+    color:40, alpha:41, mark:42,
+    size:50, font:51, 'font-weight':52,
+    cspace:60, mspace:61, voffset:62, rotate:63, link:70
+  };
+
+  /* 内层的同名标签是否严格配对（用栈式扫描，只数个数会把 <b>a</b><b>b</b> 误判成整体包裹） */
+  function tagBalanced(inner, tag){
+    var re = new RegExp('<' + tag + '(?=[\\s=>])|</' + tag + '\\s*>', 'gi'), depth = 0, m;
+    while ((m = re.exec(inner)) !== null){
+      if (m[0].charAt(1) === '/'){ depth--; if (depth < 0) return false; }
+      else depth++;
+    }
+    return depth === 0;
+  }
+
+  /* 从外往里剥出"完整包裹当前文本"的标签链 */
+  function parseChain(text){
+    var wrappers = [], cur = String(text == null ? '' : text), guard = 0;
+    while (guard++ < 16){
+      var m = cur.match(/^<([a-zA-Z][\w-]*)(?:\s*=\s*("[^"]*"|[^>]*))?>/);
+      if (!m) break;
+      var tag = m[1], closeStr = '</' + tag + '>';
+      if (cur.slice(-closeStr.length).toLowerCase() !== closeStr.toLowerCase()) break;
+      var inner = cur.slice(m[0].length, cur.length - closeStr.length);
+      if (!tagBalanced(inner, tag)) break;      // 不是整体包裹 → 不剥壳
+      wrappers.push({ tag: tag.toLowerCase(), open: m[0] });
+      cur = inner;
+    }
+    return { wrappers: wrappers, inner: cur };
+  }
+
+  function buildChain(wrappers, inner){
+    wrappers.sort(function(a, b){ return (ORDER[a.tag] || 99) - (ORDER[b.tag] || 99); });
+    var out = inner;
+    for (var i = wrappers.length - 1; i >= 0; i--){
+      out = wrappers[i].open + out + '</' + wrappers[i].tag + '>';
+    }
+    return out;
+  }
+
+  /* 加/去某个格式标签 */
+  function toggleWrap(text, tag, openTag){
+    var c = parseChain(text), idx = -1;
+    for (var i = 0; i < c.wrappers.length; i++) if (c.wrappers[i].tag === tag){ idx = i; break; }
+    if (idx >= 0) c.wrappers.splice(idx, 1);            // 已有 → 去掉（toggle off）
+    else c.wrappers.push({ tag: tag, open: openTag });  // 没有 → 加上
+    return buildChain(c.wrappers, c.inner);
+  }
+
+  /* 设颜色：已有 <color> 就换值，不叠加 */
+  function setColorTag(text, hex){
+    var c = parseChain(text), found = false;
+    for (var i = 0; i < c.wrappers.length; i++){
+      if (c.wrappers[i].tag === 'color'){ c.wrappers[i].open = '<color=' + hex + '>'; found = true; break; }
+    }
+    if (!found) c.wrappers.push({ tag: 'color', open: '<color=' + hex + '>' });
+    return buildChain(c.wrappers, c.inner);
+  }
+
+  /* 逐字符渐变（红→蓝，5 字符一周期；换行后重新计数，与主界面每行各自起算一致） */
+  function gradientText(text){
+    var seg = String(text == null ? '' : text), out = '', k = 0;
+    for (var i = 0; i < seg.length; i++){
+      var ch = seg[i];
+      if (ch === '\n' || ch === '\r'){ out += ch; if (ch === '\n') k = 0; continue; }
+      var piece = ch;
+      if (/[\uD800-\uDBFF]/.test(ch) && i + 1 < seg.length){ piece = seg[i] + seg[i + 1]; i++; }
+      var t = (k % 5) / 4;
+      var hex = '#' + pad(Math.round(255 + (0 - 255) * t)) + pad(0) + pad(Math.round(255 * t));
+      out += '<color=' + hex + '>' + piece + '</color>';
+      k++;
+    }
+    return out;
+  }
+  function pad(n){ n = Math.max(0, Math.min(255, n)); return (n < 16 ? '0' : '') + n.toString(16).toUpperCase(); }
+
   /* ---------- 色板 ---------- */
   (function(){
     var grid = $('swGrid');
@@ -185,73 +271,58 @@
     var cust = document.createElement('button');
     cust.className = 'cust';
     cust.title = '自定义颜色…';
-    cust.onclick = function(){
-      if (selMode) { host('f|custom'); } else { toast('手动模式在下面点「颜色」'); }
-    };
+    cust.onclick = function(){ host('f|pickSelColor'); };
     grid.appendChild(cust);
   })();
 
   function pickColor(hex){
-    if (selMode) { host('f|color|' + hex); }
-    else { insertWrap('<color=' + hex + '>', '</color>'); }
+    if (selMode) applyToSelection('color', hex);
+    else applyToEditor('color', hex);
   }
 
-  /* ---------- 手动模式的编辑区格式（参考主程序：只包住选中部分） ---------- */
-  function insertWrap(open, close){
-    var s = ta.selectionStart, e = ta.selectionEnd;
-    var all = ta.value;
+  /* ---------- 选区模式：算出结果直接粘贴回原窗口 ---------- */
+  function applyToSelection(kind, arg){
+    var base = sel.text || '';
+    if (!base.length){ toast('没有捕获到选区'); return; }
+    var next;
+    if (kind === 'color')      next = setColorTag(base, arg);
+    else if (kind === 'tag')   next = toggleWrap(base, arg.tag, arg.open);
+    else if (kind === 'grad')  next = gradientText(base);
+    else return;
+    host('f|paste|' + b64(next));
+  }
+
+  /* C# 选完自定义色回调 */
+  window.fpSelColor = function(hex){ applyToSelection('color', hex); };
+
+  /* ---------- 手动模式：只对 textarea 里选中的部分套格式 ---------- */
+  function applyToEditor(kind, arg){
+    var s = ta.selectionStart, e = ta.selectionEnd, all = ta.value;
     if (s === e){ s = 0; e = all.length; }
     if (e - s <= 0){ toast('先输入文字再套格式'); return; }
-    var selText = all.slice(s, e);
-    ta.value = all.slice(0, s) + open + selText + close + all.slice(e);
-    ta.setSelectionRange(s + open.length, s + open.length + selText.length);
+    var target = all.slice(s, e), next;
+    if (kind === 'color')     next = setColorTag(target, arg);
+    else if (kind === 'tag')  next = toggleWrap(target, arg.tag, arg.open);
+    else if (kind === 'grad') next = gradientText(target);
+    else return;
+    ta.value = all.slice(0, s) + next + all.slice(e);
+    ta.setSelectionRange(s, s + next.length);
     ta.focus();
   }
-  function insertGradient(){
-    var s = ta.selectionStart, e = ta.selectionEnd;
-    var all = ta.value;
-    if (s === e){ s = 0; e = all.length; }
-    if (e - s <= 0){ toast('先输入文字再套渐变'); return; }
-    var seg = all.slice(s, e), out = '';
-    for (var i = 0; i < seg.length; i++){
-      var ch = seg[i];
-      if (ch === '\n' || ch === '\r'){ out += ch; continue; }
-      var piece = ch;
-      if (/[\uD800-\uDBFF]/.test(ch) && i + 1 < seg.length){ piece = seg[i] + seg[i+1]; i++; }
-      var t = (i % 5) / 4;
-      var r = Math.round(255 + (0 - 255) * t);
-      var g = 0;
-      var b = Math.round(0 + (255 - 0) * t);
-      var hex = '#' + pad(r) + pad(g) + pad(b);
-      out += '<color=' + hex + '>' + piece + '</color>';
-    }
-    ta.value = all.slice(0, s) + out + all.slice(e);
-    ta.setSelectionRange(s, ta.value.length);
-    ta.focus();
-  }
-  function pad(n){ n = Math.max(0, Math.min(255, n)); return (n < 16 ? '0' : '') + n.toString(16).toUpperCase(); }
+
+  /* C# 选完颜色回调（手动模式） */
+  window.fpColorTyp = function(hex){ applyToEditor('color', hex); };
 
   /* ---------- 手动模式按钮 ---------- */
   $('typFmt').addEventListener('click', function(ev){
     var b = ev.target.closest('button'); if (!b) return;
-    if (b.dataset.w){
-      var kv = decode(b.dataset.w).split('|');
-      insertWrap(kv[0], kv[1]);
-    } else if (b.dataset.g === '3'){ insertGradient(); }
+    if (b.dataset.t){ applyToEditor('tag', { tag: b.dataset.t, open: '<' + b.dataset.t + '>' }); }
+    else if (b.dataset.g === '3'){ applyToEditor('grad'); }
     else if (b.dataset.g === '4'){
       if (ta.value.length === 0){ toast('先输入文字'); return; }
-      host('f|pickColorTyp');       // C# 弹 ColorDialog，选完把带色文本回传
+      host('f|pickColorTyp');
     }
   });
-  function decode(s){
-    var d = document.createElement('div'); d.innerHTML = s; return d.textContent;
-  }
-
-  var lastTypColor = null;
-  /* C# 选完颜色把 hex 回调过来，套到手动输入区 */
-  window.fpColorTyp = function(hex){
-    insertWrap('<color=' + hex + '>', '</color>');
-  };
 
   $('btnCommit').onclick = function(){
     if (!ta.value.length){ toast('还没有可回填的内容'); return; }
@@ -267,12 +338,8 @@
   /* ---------- 选区模式按钮 ---------- */
   $('selFmt').addEventListener('click', function(ev){
     var b = ev.target.closest('button'); if (!b) return;
-    if (b.dataset.w){
-      var kv = decode(b.dataset.w).split('|');
-      host('f|wrap|' + b64(kv[0]) + '|' + b64(kv[1]));
-    } else if (b.dataset.g === '1'){ host('f|wrap|' + b64('<sup>') + '|' + b64('</sup>')); }
-    else if (b.dataset.g === '2'){ host('f|wrap|' + b64('<sub>') + '|' + b64('</sub>')); }
-    else if (b.dataset.g === '3'){ host('f|grad'); }
+    if (b.dataset.t){ applyToSelection('tag', { tag: b.dataset.t, open: '<' + b.dataset.t + '>' }); }
+    else if (b.dataset.g === '3'){ applyToSelection('grad'); }
   });
 
   /* ---------- 标题条：关闭 / 拖动 ---------- */

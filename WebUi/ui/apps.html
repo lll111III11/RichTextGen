@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>应用名单 · 浮动输入面板</title>
+<style>
+  :root{
+    --bg:#f3f3f3; --card:#ffffff; --text:#1b1b1b; --sub:#5d5d5d; --line:#e5e5e5;
+    --input:#ffffff; --inputLine:#d6d6d6; --accent:#0067c0; --accentText:#ffffff;
+    --hover:#f0f0f0;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#202020; --card:#2b2b2b; --text:#ffffff; --sub:#c5c5c5; --line:#3a3a3a;
+      --input:#262626; --inputLine:#454545; --accent:#4cc2ff; --accentText:#10222e;
+      --hover:#333333;
+    }
+  }
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--text);font-family:"Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+       font-size:13px;display:flex;flex-direction:column;height:100vh}
+  #hd{padding:14px 20px 12px;border-bottom:1px solid var(--line);background:var(--card);flex-shrink:0}
+  #hd h1{margin:0 0 4px;font-size:15.5px;font-weight:600}
+  #hd p{margin:0;font-size:12px;color:var(--sub);line-height:1.55}
+  #modes{display:flex;gap:8px;padding:12px 20px 0;flex-shrink:0}
+  #modes button{flex:1;border:1px solid var(--inputLine);background:var(--input);color:var(--sub);
+       border-radius:8px;padding:9px 6px;font-size:12.5px;cursor:pointer;line-height:1.35;text-align:center}
+  #modes button b{display:block;font-size:13px;font-weight:600;margin-bottom:2px;color:var(--text)}
+  #modes button.on{background:var(--card);border-color:var(--accent)}
+  #modes button.on b{color:var(--accent)}
+  #bar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 8px;flex-shrink:0}
+  #bar .cnt{font-size:12px;color:var(--sub)}
+  #bar .acts{display:flex;gap:6px}
+  button.b{border:1px solid var(--inputLine);background:var(--input);color:var(--text);border-radius:6px;
+           padding:5px 12px;font-size:12px;cursor:pointer}
+  button.b:hover{background:var(--hover);border-color:var(--accent)}
+  #list{flex:1;overflow:auto;padding:0 20px 16px}
+  .row{display:flex;align-items:center;gap:11px;padding:9px 12px;border:1px solid var(--line);
+       border-radius:8px;background:var(--card);margin-bottom:7px}
+  .row:hover{border-color:var(--accent)}
+  .ico{width:30px;height:30px;border-radius:7px;background:var(--hover);color:var(--accent);
+       display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;
+       text-transform:uppercase}
+  .info{flex:1;min-width:0}
+  .info .n{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .info .m{font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .sw{width:42px;height:23px;border-radius:99px;background:var(--inputLine);position:relative;cursor:pointer;
+      flex-shrink:0;transition:background .15s;border:0;padding:0}
+  .sw::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;
+      background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+  .sw.on{background:var(--accent)}
+  .sw.on::after{left:21px}
+  .del{border:0;background:none;color:var(--sub);font-size:15px;cursor:pointer;width:26px;height:26px;
+       border-radius:5px;flex-shrink:0}
+  .del:hover{background:var(--hover);color:#d33}
+  .empty{text-align:center;color:var(--sub);padding:48px 16px;line-height:1.8;font-size:12.5px}
+  #ft{padding:10px 20px;border-top:1px solid var(--line);background:var(--card);font-size:11.5px;
+      color:var(--sub);line-height:1.6;flex-shrink:0}
+  #toast{position:fixed;left:50%;bottom:56px;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;
+         padding:6px 16px;border-radius:99px;font-size:12px;opacity:0;transition:opacity .18s;pointer-events:none}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="hd">
+  <h1>应用名单</h1>
+  <p>控制浮动输入面板在哪些应用里生效。名单会自动记录你点过输入框的应用，这里勾选即可。</p>
+</div>
+
+<div id="modes">
+  <button data-m="all" class="on"><b>全部应用</b>任何程序都弹出</button>
+  <button data-m="white"><b>仅白名单</b>只对打开的生效</button>
+  <button data-m="black"><b>黑名单</b>对打开的隐藏</button>
+</div>
+
+<div id="bar">
+  <span class="cnt" id="cnt">读取中…</span>
+  <span class="acts">
+    <button class="b" id="btnReload">刷新</button>
+    <button class="b" id="btnPurge">清空未勾选</button>
+  </span>
+</div>
+
+<div id="list"></div>
+
+<div id="ft">提示：勾选状态只在「仅白名单 / 黑名单」模式下起作用；「全部应用」模式下一切照常。</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+  var mode = 'all';
+  var apps = [];
+
+  function $(id){ return document.getElementById(id); }
+  function host(m){ try { window.chrome.webview.postMessage(m); } catch(e){} }
+  function toast(s){
+    var t = $('toast'); t.textContent = s; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(function(){ t.classList.remove('on'); }, 1500);
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+           .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function ago(ts){
+    if (!ts) return '从未';
+    var d = Math.floor(Date.now()/1000 - ts);
+    if (d < 60) return '刚刚';
+    if (d < 3600) return Math.floor(d/60) + ' 分钟前';
+    if (d < 86400) return Math.floor(d/3600) + ' 小时前';
+    if (d < 86400*30) return Math.floor(d/86400) + ' 天前';
+    return Math.floor(d/86400/30) + ' 个月前';
+  }
+  /* exe → 友好显示名：SCPSL.exe → SCPSL；彩色文本生成器.exe 保持 */
+  function pretty(exe){
+    var s = String(exe || '').replace(/\.exe$/i, '');
+    return s || '(未知)';
+  }
+
+  function render(){
+    document.querySelectorAll('#modes button').forEach(function(b){
+      b.classList.toggle('on', b.dataset.m === mode);
+    });
+    var list = $('list');
+    if (!apps.length){
+      list.innerHTML = '<div class="empty">还没有记录。<br>打开别的软件，点一下它的输入框，<br>这里就会出现那个应用。</div>';
+      $('cnt').textContent = '共 0 个应用';
+      return;
+    }
+    var on = apps.filter(function(a){ return a.on; }).length;
+    $('cnt').textContent = '共 ' + apps.length + ' 个应用 · 已勾选 ' + on + ' 个';
+    var html = '';
+    apps.forEach(function(a){
+      var name = a.title && a.title.length > 0 ? a.title : pretty(a.exe);
+      html += '<div class="row" data-exe="' + esc(a.exe) + '">'
+           +    '<div class="ico">' + esc(pretty(a.exe).charAt(0)) + '</div>'
+           +    '<div class="info">'
+           +      '<div class="n">' + esc(name) + '</div>'
+           +      '<div class="m">' + esc(a.exe) + ' · 用过 ' + (a.count || 0) + ' 次 · ' + ago(a.last) + '</div>'
+           +    '</div>'
+           +    '<button class="sw' + (a.on ? ' on' : '') + '" title="' + (a.on ? '已勾选' : '未勾选') + '"></button>'
+           +    '<button class="del" title="从名单移除">✕</button>'
+           +  '</div>';
+    });
+    list.innerHTML = html;
+  }
+
+  /* 事件委托：开关 / 删除 */
+  $('list').addEventListener('click', function(ev){
+    var row = ev.target.closest('.row'); if (!row) return;
+    var exe = row.dataset.exe;
+    if (ev.target.classList.contains('sw')){
+      host('a|toggle|' + exe);
+    } else if (ev.target.classList.contains('del')){
+      host('a|remove|' + exe);
+    }
+  });
+
+  document.querySelectorAll('#modes button').forEach(function(b){
+    b.onclick = function(){ host('a|mode|' + b.dataset.m); };
+  });
+  $('btnReload').onclick = function(){ host('a|list'); };
+  $('btnPurge').onclick = function(){ host('a|purge'); };
+
+  /* ---------- C# 推下来的状态 ---------- */
+  window.apState = function(o){
+    try { o = (typeof o === 'string') ? JSON.parse(o) : o; } catch(e){ return; }
+    if (!o) return;
+    mode = o.mode || 'all';
+    apps = o.apps || [];
+    render();
+  };
+
+  host('a|list');
+})();
+</script>
+</body>
+</html>

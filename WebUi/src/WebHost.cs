@@ -1685,6 +1685,7 @@ namespace RichTextGen
                 case "setTopmost": SetTopmost(arg == "1"); break;
                 case "setSyncOut": SetSyncOut(arg == "1"); break;
                 case "floatingInput": SetFloatingInput(arg == "1"); break;   // 系统级浮动输入面板
+                case "appRules": AppRulesForm.ShowOrActivate(); break;        // 应用名单（白/黑名单）
                 case "syncTarget": RecordForeground(); Call("syncState", SyncStateJson()); break;
                 case "syncSend": SyncOutput(Un(arg)); break;
                 case "forceRefresh": DoReload(Un(arg)); break;   // 界面已把全部正文打包好

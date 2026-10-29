@@ -54,7 +54,7 @@ namespace
     const wchar_t* const kProduct   = L"Rich text & multifunctional tool";
     const wchar_t* const kPublisher = L"3576220975@qq.com";
     const wchar_t* const kRegKey    = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\RichTextGen";
-    const wchar_t* const kVersion   = L"5.10.2.1";
+    const wchar_t* const kVersion   = L"5.10.2.2";
     const wchar_t* const kAppExe    = L"彩色文本生成器.exe";   // 卸载前需要结束的主程序进程名
 
     // ---- 控件 ID ----
@@ -1094,5 +1094,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdline, int)
     CoUninitialize();
     return code;
 }
+
 
 

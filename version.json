@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.2.1",
+    "version":  "5.10.2.2",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.1/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.1/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.2/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.2/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.2.1 更新（浮动输入面板重做）：\n· 面板换用 HTML 界面，更大更好看（500×360），深浅色跟随系统\n· 新交互：在任意软件输入框里选中文字 → 面板自动弹出并捕获选区 → 点颜色 / 粗体 / 斜体 / 下划线 / 删除线 / 上标 / 下标 / 循环渐变 → 自动套标签并回填原窗口，一步到位\n· 没选文字就弹出时自动切到手动输入：像主程序一样选中文字套格式，点回填粘贴回去\n· 修复首次点击窗口不弹面板（要点两下）的问题；弹出时不抢焦点，回填时自动把焦点还给原窗口",
+    "notes":  "v5.10.2.2 更新（应用名单 + 样式修正）：\n· 新增应用名单：设置 →「应用名单…」打开独立窗口，自动记录点过输入框的应用，支持「全部应用 / 仅白名单 / 黑名单」三种模式，可逐个勾选\n· 白名单模式下只对勾选的应用弹面板，其余应用静默；被排除的应用仍会保留在名单里，随时可改回来\n· 修复加粗 / 上标 / 下标等格式处理：同一格式点第二次即取消，重复点不会层层嵌套\n· 标签按主程序规范嵌套（<b><i><u><color>…</color></u></i></b>），改色只替换不叠加\n· 修复格式按钮写出残缺标签（如只剩 </b>）的问题",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

@@ -96,6 +96,7 @@ namespace RichTextGen
             if (on == _enabled) return;
             if (on)
             {
+                AppRules.Load();                         // 先读名单，第一次点击就要判断
                 if (_inst == null || _inst.IsDisposed) _inst = new FloatingInputForm();
                 IntPtr unused = _inst.Handle;            // 提前建句柄，后台线程才能 BeginInvoke
                 _inst.InitWeb();                         // 预热 WebView2，第一次弹出更快
@@ -119,6 +120,7 @@ namespace RichTextGen
             SetEnabled(false);
             if (_clickTimer != null) { try { _clickTimer.Dispose(); } catch { } _clickTimer = null; }
             if (_inst != null) { try { _inst.Dispose(); } catch { } _inst = null; }
+            AppRules.Flush();                            // 退出前把名单写盘
         }
 
         public static void HidePanelStatic()
@@ -212,9 +214,22 @@ namespace RichTextGen
                 string app = "";
                 if (target != null)
                 {
+                    // 先记录名单（被排除的应用也要记，用户才能回到名单里改回来）
+                    string exe = ProcessExeOf(target);
+                    app = AppNameOf(target);
+                    AppRules.Touch(exe, app);
+                    if (!AppRules.IsAllowed(exe))
+                    {
+                        if (_inst != null && !_inst.IsDisposed && _inst.Visible)
+                        {
+                            try { _inst.BeginInvoke((MethodInvoker)delegate { _inst.HidePanel(); }); }
+                            catch { }
+                        }
+                        return;                       // 名单不让弹 → 直接静默
+                    }
+
                     sel = ReadSelection(target);             // 优先用 UIA 读选区
                     if (sel.Length == 0 && drag == 1) sel = ReadSelectionByCopy();   // 拖选了但 UIA 读不到 → Ctrl+C 兜底
-                    app = AppNameOf(target);
                 }
 
                 AutomationElement t = target;
@@ -305,6 +320,18 @@ namespace RichTextGen
             }
             catch { }
             return "";
+        }
+
+        /// <summary>目标元素所属进程的可执行文件名（如 SCPSL.exe），名单以此为准。</summary>
+        private static string ProcessExeOf(AutomationElement target)
+        {
+            try
+            {
+                int pid = target.Current.ProcessId;
+                using (Process p = Process.GetProcessById(pid))
+                    return (p.ProcessName ?? "").ToLowerInvariant() + ".exe";
+            }
+            catch { return ""; }
         }
 
         /// <summary>取目标窗口的顶层窗口标题，作为面板里显示的来源名。</summary>
@@ -557,31 +584,13 @@ namespace RichTextGen
                     HidePanel();
                     break;
 
-                case "wrap":
-                    if (parts.Length >= 4)
-                    {
-                        string open = B64(parts[2]);
-                        string close = B64(parts[3]);
-                        ApplyToSelection(open + _selText + close);
-                    }
+                // 前端已经算好最终文本（含正确的标签嵌套），这里只负责粘回原窗口
+                case "paste":
+                    if (parts.Length >= 3) PasteBack(B64(parts[2]));
                     break;
 
-                case "color":
-                    if (parts.Length >= 3)
-                    {
-                        string hex = parts[2].Trim();
-                        if (hex.Length == 0) hex = "#FFFFFF";
-                        if (!hex.StartsWith("#")) hex = "#" + hex;
-                        ApplyToSelection("<color=" + hex + ">" + _selText + "</color>");
-                    }
-                    break;
-
-                case "grad":
-                    ApplyToSelection(Gradient(_selText));
-                    break;
-
-                case "custom":
-                    PickCustomColor();
+                case "pickSelColor":
+                    PickSelColor();
                     break;
 
                 case "pickColorTyp":
@@ -616,13 +625,6 @@ namespace RichTextGen
             catch { return ""; }
         }
 
-        /// <summary>把包装好的文字贴回原输入框：先还焦点，再剪贴板 + Ctrl+V（覆盖原选区）。</summary>
-        private void ApplyToSelection(string text)
-        {
-            if (_selText.Length == 0 || text.Length == 0) return;
-            PasteBack(text);
-        }
-
         private void PasteBack(string text)
         {
             if (text.Length == 0) return;
@@ -650,17 +652,20 @@ namespace RichTextGen
             catch { }
         }
 
-        private void PickCustomColor()
+        /// <summary>选区模式的自定义颜色：色板选完把 hex 交给前端套色（前端统一算嵌套）。</summary>
+        private void PickSelColor()
         {
             using (ColorDialog d = new ColorDialog())
             {
                 d.FullOpen = true;
-                if (d.ShowDialog(this) == DialogResult.OK && _selText.Length > 0)
+                if (d.ShowDialog(this) == DialogResult.OK)
                 {
                     string hex = "#" + d.Color.R.ToString("X2") + d.Color.G.ToString("X2") + d.Color.B.ToString("X2");
-                    ApplyToSelection("<color=" + hex + ">" + _selText + "</color>");
+                    if (_webReady && _web.CoreWebView2 != null)
+                        try { _web.CoreWebView2.ExecuteScriptAsync("window.fpSelColor && window.fpSelColor(" + JsString(hex) + ")"); }
+                        catch { }
                 }
-                else if (Visible) Activate();   // 取消：把面板带回最前（不抢其他程序的焦点）
+                if (Visible) Activate();
             }
         }
 
@@ -678,32 +683,6 @@ namespace RichTextGen
                 }
                 if (Visible) Activate();
             }
-        }
-
-        /// <summary>逐字符上色，5 个字符一个周期往复（与主界面「循环渐变」一致）。</summary>
-        private static string Gradient(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return text;
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < text.Length; i++)
-            {
-                char ch = text[i];
-                if (ch == '\n' || ch == '\r') { sb.Append(ch); continue; }
-                string piece = ch.ToString();
-                if (char.IsHighSurrogate(ch) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
-                {
-                    piece = text.Substring(i, 2);
-                    i++;
-                }
-                double t = (i % 5) / 4.0;
-                int r = (int)Math.Round(255 + (0 - 255) * t);
-                int g = 0;
-                int b = (int)Math.Round(0 + (255 - 0) * t);
-                sb.Append("<color=#")
-                  .Append(r.ToString("X2")).Append(g.ToString("X2")).Append(b.ToString("X2"))
-                  .Append('>').Append(piece).Append("</color>");
-            }
-            return sb.ToString();
         }
 
         private static bool SetClipboard(string s, int tries)
