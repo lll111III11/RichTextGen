@@ -59,6 +59,8 @@ namespace RichTextGen
         private static extern IntPtr GetModuleHandle(string lpModuleName);
         [DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(POINT p);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
         [DllImport("user32.dll")]
         private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
         [DllImport("user32.dll")]
@@ -84,6 +86,9 @@ namespace RichTextGen
         private AutomationElement _target;
         private string _selText;
         private string _selApp;
+        private bool _isTerminal;            // 目标是不是控制台 / 终端类窗口
+        private bool _hasRealSelection;      // 是否真的读到了选区（决定回填时要不要先删掉原选区）
+        private IntPtr _targetRoot;          // 目标顶层窗口句柄（回填时用来把焦点还回去）
         private bool _webReady;
         private string _pendingJson;
         private readonly float _s;
@@ -196,17 +201,26 @@ namespace RichTextGen
         {
             if (!_enabled || _inst == null || _inst.IsDisposed) return;
             int drag = _wasDrag ? 1 : 0;
+            // 趁面板还没弹，先记住点击处的顶层窗口（回填时用它把焦点还回去）
+            IntPtr root = IntPtr.Zero;
+            try
+            {
+                IntPtr hw = WindowFromPoint(new POINT { X = pt.X, Y = pt.Y });
+                if (hw != IntPtr.Zero) root = GetAncestor(hw, GA_ROOT);
+            }
+            catch { }
             ThreadPool.QueueUserWorkItem(delegate
             {
                 // 第一次点击进入未聚焦的窗口时，窗口激活/焦点可能还没就位，
                 // 检测失败就隔 220ms 再试两次 —— 修复「要点两下才弹」的问题。
                 AutomationElement target = null;
+                bool term = false;
                 for (int i = 0; i < 3; i++)
                 {
                     if (!_enabled || _clickSeq != seq) return;
                     if (i > 0) Thread.Sleep(220);
                     if (!_enabled || _clickSeq != seq) return;
-                    try { target = FindEditable(pt); } catch { }
+                    try { target = FindEditable(pt, out term); } catch { }
                     if (target != null) break;
                 }
 
@@ -229,11 +243,13 @@ namespace RichTextGen
                     }
 
                     sel = ReadSelection(target);             // 优先用 UIA 读选区
-                    if (sel.Length == 0 && drag == 1) sel = ReadSelectionByCopy();   // 拖选了但 UIA 读不到 → Ctrl+C 兜底
+                    // 拖选了但 UIA 读不到 → 发复制快捷键兜底（终端用 Ctrl+Shift+C / Ctrl+Insert，避免 Ctrl+C 中断命令）
+                    if (sel.Length == 0 && drag == 1) sel = ReadSelectionByCopy(term);
                 }
 
                 AutomationElement t = target;
                 string s2 = sel, a2 = app;
+                IntPtr r2 = root;
                 try
                 {
                     if (!_enabled || _inst == null || _inst.IsDisposed) return;
@@ -249,7 +265,7 @@ namespace RichTextGen
                                 if (_inst.Visible) _inst.HidePanel();
                                 return;
                             }
-                            _inst.ShowFor(t, pt, s2, a2);
+                            _inst.ShowFor(t, pt, s2, a2, term, r2);
                         }
                         catch { }
                     });
@@ -258,26 +274,108 @@ namespace RichTextGen
             });
         }
 
-        /// <summary>从点击点向上找 6 层，命中 Edit / Document / ComboBox 即认为点了可输入区域。</summary>
-        private static AutomationElement FindEditable(Point pt)
+        /// <summary>
+        /// 控制台 / 终端类窗口：UIA 树里没有 Edit / Document 控件，
+        /// 但整块客户区都是输入区，需要按窗口类名特殊识别。
+        /// </summary>
+        private static readonly string[] TerminalClasses =
+        {
+            "consolewindowclass",              // cmd / PowerShell / conhost
+            "cascadia_hosting_window_class",   // Windows Terminal（Win11 默认终端）
+            "mintty",                          // Git Bash / MSYS2
+            "putty",
+            "tmobaxterm",
+            "virtualconsoleclass",             // ConEmu
+            "terminterface",                   // 部分第三方终端
+        };
+
+        private static bool IsTerminalWindow(IntPtr root)
+        {
+            if (root == IntPtr.Zero) return false;
+            try
+            {
+                StringBuilder sb = new StringBuilder(256);
+                if (GetClassName(root, sb, sb.Capacity) <= 0) return false;
+                string cls = sb.ToString().Trim().ToLowerInvariant();
+                foreach (string t in TerminalClasses)
+                    if (cls == t) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>文字控件判定：Edit / Document / ComboBox 直接认；其余靠 TextPattern 兜底。</summary>
+        private static bool IsTextControl(AutomationElement e)
         {
             try
             {
-                AutomationElement e = AutomationElement.FromPoint(new System.Windows.Point(pt.X, pt.Y));
+                ControlType t = e.GetCurrentPropertyValue(AutomationElement.ControlTypeProperty) as ControlType;
+                if (t == ControlType.Edit || t == ControlType.Document || t == ControlType.ComboBox) return true;
+                // 按钮 / 菜单 / 列表这类即使有 TextPattern 也不是输入区，排除
+                if (t == ControlType.Button || t == ControlType.MenuItem || t == ControlType.ListItem ||
+                    t == ControlType.Hyperlink || t == ControlType.TabItem) return false;
+                // Chromium 的 contenteditable（Trae / VS Code / 网页编辑器）常被暴露成普通 Pane，
+                // 但支持 TextPattern；这类也要认，否则点了没反应。
+                object tp = e.GetCurrentPropertyValue(AutomationElement.IsTextPatternAvailableProperty);
+                if (tp is bool && (bool)tp) return true;
+                object vp = e.GetCurrentPropertyValue(AutomationElement.IsValuePatternAvailableProperty);
+                if (vp is bool && (bool)vp)
+                {
+                    // 有值但只读的不算（如只读输入框、进度文本）
+                    try
+                    {
+                        ValuePattern p = e.GetCurrentPattern(ValuePattern.Pattern) as ValuePattern;
+                        if (p != null && !p.Current.IsReadOnly) return true;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// 从点击点向上找 6 层，命中可输入控件即返回。
+        /// 终端窗口没有 Edit/Document，按类名兜底返回点击处的元素。
+        /// </summary>
+        private static AutomationElement FindEditable(Point pt, out bool isTerminal)
+        {
+            isTerminal = false;
+            try
+            {
+                IntPtr hwnd = WindowFromPoint(new POINT { X = pt.X, Y = pt.Y });
+                IntPtr root = hwnd == IntPtr.Zero ? IntPtr.Zero : GetAncestor(hwnd, GA_ROOT);
+                bool term = IsTerminalWindow(root);
+
+                AutomationElement hit = AutomationElement.FromPoint(new System.Windows.Point(pt.X, pt.Y));
+                AutomationElement e = hit;
                 for (int i = 0; e != null && i < 6; i++)
                 {
-                    ControlType t = null;
-                    try { t = e.GetCurrentPropertyValue(AutomationElement.ControlTypeProperty) as ControlType; } catch { }
-                    if (t == ControlType.Edit || t == ControlType.Document || t == ControlType.ComboBox)
+                    if (IsTextControl(e))
                     {
                         try
                         {
-                            if (e.Current.IsEnabled) return e;   // 不再要求 IsKeyboardFocusable（首次点击时焦点未就位）
+                            if (e.Current.IsEnabled)
+                            {
+                                isTerminal = term;      // 终端窗口即使命中了文字控件，也按终端方式复制 / 粘贴
+                                return e;
+                            }
                         }
                         catch { }
                     }
                     try { e = TreeWalker.ControlViewWalker.GetParent(e); }
                     catch { e = null; }
+                }
+
+                // 控制台 / 终端：整窗可输入
+                if (term)
+                {
+                    isTerminal = true;
+                    if (hit != null) return hit;
+                    if (root != IntPtr.Zero)
+                    {
+                        try { return AutomationElement.FromHandle(root); } catch { }
+                    }
                 }
             }
             catch { }
@@ -304,22 +402,55 @@ namespace RichTextGen
             catch { return ""; }
         }
 
-        /// <summary>兜底：向当前焦点窗口发 Ctrl+C 复制选区。拷贝会保护原剪贴板内容。</summary>
-        private static string ReadSelectionByCopy()
+        /// <summary>
+        /// 兜底：向当前焦点窗口发复制快捷键读取选区（会保护并恢复原剪贴板）。
+        /// 普通应用用 Ctrl+C；Windows Terminal 用 Ctrl+Shift+C；传统控制台用 Ctrl+Insert 更安全
+        /// （控制台在无选区时按 Ctrl+C 会发送中断符，所以终端类把 Ctrl+C 放到最后）。
+        /// </summary>
+        private static string ReadSelectionByCopy(bool isTerminal)
         {
             string old = "";
             try { old = Clipboard.GetText(); } catch { }
+
+            byte[][] normal =
+            {
+                new byte[] { 0x11, 0x43 },          // Ctrl+C
+                new byte[] { 0x11, 0x10, 0x43 },    // Ctrl+Shift+C
+                new byte[] { 0x11, 0x2D },          // Ctrl+Insert
+            };
+            byte[][] terminal =
+            {
+                new byte[] { 0x11, 0x10, 0x43 },    // Ctrl+Shift+C（Windows Terminal 的复制）
+                new byte[] { 0x11, 0x2D },          // Ctrl+Insert（传统控制台）
+                new byte[] { 0x11, 0x43 },          // Ctrl+C（有选区时也是复制）
+            };
+            byte[][] combos = isTerminal ? terminal : normal;
+
             try
             {
-                SendCtrlC();
-                Thread.Sleep(110);
-                string cur = Clipboard.GetText();
-                // 恢复用户原来的剪贴板
-                try { Clipboard.SetText(old); } catch { }
-                if (cur != null && cur.Length > 0 && cur != old) return cur;
+                foreach (byte[] c in combos)
+                {
+                    SendKeys(c);
+                    Thread.Sleep(120);
+                    string cur = "";
+                    try { cur = Clipboard.GetText(); } catch { }
+                    if (!string.IsNullOrEmpty(cur) && cur != old)
+                    {
+                        try { Clipboard.SetText(old); } catch { }
+                        return cur;
+                    }
+                }
             }
             catch { }
+            try { Clipboard.SetText(old); } catch { }
             return "";
+        }
+
+        /// <summary>按顺序按下并逆序抬起一组虚拟键（修饰键在前）。</summary>
+        private static void SendKeys(byte[] vks)
+        {
+            for (int i = 0; i < vks.Length; i++) keybd_event(vks[i], 0, 0, IntPtr.Zero);
+            for (int i = vks.Length - 1; i >= 0; i--) keybd_event(vks[i], 0, 2, IntPtr.Zero);
         }
 
         /// <summary>目标元素所属进程的可执行文件名（如 SCPSL.exe），名单以此为准。</summary>
@@ -379,14 +510,6 @@ namespace RichTextGen
                 n.Equals("chrome", StringComparison.OrdinalIgnoreCase)) return "浏览器";
             if (n.Equals("explorer", StringComparison.OrdinalIgnoreCase)) return "资源管理器";
             return n;
-        }
-
-        private static void SendCtrlC()
-        {
-            keybd_event(0x11, 0, 0, IntPtr.Zero);
-            keybd_event(0x43, 0, 0, IntPtr.Zero);
-            keybd_event(0x43, 0, 2, IntPtr.Zero);
-            keybd_event(0x11, 0, 2, IntPtr.Zero);
         }
 
         private static void SendCtrlV()
@@ -477,11 +600,14 @@ namespace RichTextGen
         }
 
         // ============================================================ 显示 / 隐藏
-        internal void ShowFor(AutomationElement target, Point pt, string selText, string app)
+        internal void ShowFor(AutomationElement target, Point pt, string selText, string app, bool isTerminal, IntPtr root)
         {
             _target = target;
             _selText = selText ?? "";
             _selApp = app ?? "";
+            _isTerminal = isTerminal;
+            _hasRealSelection = _selText.Length > 0;
+            _targetRoot = root;
             if (!Visible) Show();
             PlaceAt(pt);
             PushState();
@@ -586,7 +712,7 @@ namespace RichTextGen
 
                 // 前端已经算好最终文本（含正确的标签嵌套），这里只负责粘回原窗口
                 case "paste":
-                    if (parts.Length >= 3) PasteBack(B64(parts[2]));
+                    if (parts.Length >= 3) PasteBack(B64(parts[2]), _hasRealSelection);
                     break;
 
                 case "pickSelColor":
@@ -598,7 +724,7 @@ namespace RichTextGen
                     break;
 
                 case "type":
-                    if (parts.Length >= 3) PasteBack(B64(parts[2]));
+                    if (parts.Length >= 3) PasteBack(B64(parts[2]), false);
                     break;
 
                 case "copy":
@@ -625,28 +751,39 @@ namespace RichTextGen
             catch { return ""; }
         }
 
-        private void PasteBack(string text)
+        /// <summary>
+        /// 把文字贴回原输入框：先还焦点，再走剪贴板 + Ctrl+V。
+        /// replaceSel = true 时先按一次 Delete —— 控制台的选区不会被粘贴自动替换，
+        /// 不先删就会变成「原文本 + 新文本」重复一份。
+        /// </summary>
+        private void PasteBack(string text, bool replaceSel)
         {
             if (text.Length == 0) return;
             AutomationElement t = _target;
+            IntPtr root = _targetRoot;
             HidePanel();
             try
             {
-                if (t != null)
+                if (root == IntPtr.Zero && t != null)
                 {
-                    IntPtr root = IntPtr.Zero;
                     try
                     {
                         int h = t.Current.NativeWindowHandle;
                         if (h != 0) root = GetAncestor((IntPtr)h, GA_ROOT);
                     }
                     catch { }
-                    if (root != IntPtr.Zero) SetForegroundWindow(root);
-                    try { t.SetFocus(); } catch { }
                 }
+                if (root != IntPtr.Zero) SetForegroundWindow(root);
+                if (t != null) { try { t.SetFocus(); } catch { } }
                 Thread.Sleep(90);
                 if (!SetClipboard(text, 6)) return;
                 Thread.Sleep(40);
+                if (replaceSel)
+                {
+                    keybd_event(0x2E, 0, 0, IntPtr.Zero);   // Delete ↓
+                    keybd_event(0x2E, 0, 2, IntPtr.Zero);   // Delete ↑
+                    Thread.Sleep(40);
+                }
                 SendCtrlV();
             }
             catch { }

@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.2.2",
+    "version":  "5.10.2.3",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "feature",
+    "type":  "bugfix",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.2/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.2/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.3/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.3/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.2.2 更新（应用名单 + 样式修正）：\n· 新增应用名单：设置 →「应用名单…」打开独立窗口，自动记录点过输入框的应用，支持「全部应用 / 仅白名单 / 黑名单」三种模式，可逐个勾选\n· 白名单模式下只对勾选的应用弹面板，其余应用静默；被排除的应用仍会保留在名单里，随时可改回来\n· 修复加粗 / 上标 / 下标等格式处理：同一格式点第二次即取消，重复点不会层层嵌套\n· 标签按主程序规范嵌套（<b><i><u><color>…</color></u></i></b>），改色只替换不叠加\n· 修复格式按钮写出残缺标签（如只剩 </b>）的问题",
+    "notes":  "v5.10.2.3 更新（控制台 / 终端支持）：\n· 修复在 cmd / PowerShell / Windows Terminal / Git Bash / PuTTY 等控制台里点输入区不弹面板的问题\n· 控制台整窗按输入区处理（这类窗口的 UIA 树里没有 Edit / Document 控件）\n· 控制台选区读取改用 Ctrl+Shift+C / Ctrl+Insert，避免 Ctrl+C 误触发送中断符打断正在运行的命令\n· 回填控制台时先删掉原选区再粘贴，不会出现「原文 + 新文」重复一份\n· 网页输入框（Trae / VS Code / 浏览器 contenteditable）改用 TextPattern 兜底识别，之前点了无反应\n· 修复部分程序里焦点切走后面板粘贴到错误窗口的问题（回填时精确还原目标窗口句柄）",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
