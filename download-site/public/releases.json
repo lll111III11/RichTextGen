@@ -1,18 +1,18 @@
 {
   "product": "彩色文本生成器",
-  "version": "5.10.2.3",
+  "version": "5.10.2.4",
   "updated": "2026-10-29",
-  "notes": "v5.10.2.3：支持 cmd / PowerShell / Windows Terminal / Git Bash 等控制台，以及 Trae / VS Code / 浏览器的网页输入框；修复控制台选区读取与回填重复问题。",
-  "type": "bugfix",
+  "notes": "v5.10.2.4：应用名单新增「⚡ 强制」（Unity 游戏控制台这类识别不到输入框的应用）与「＋ 添加应用」；名单存储改为原子写 + 备份，不会再丢失。",
+  "type": "feature",
   "mandatory": false,
   "files": [
     {
       "id": "setup",
       "label": "Windows 安装版",
       "file": "RichTextGen-Setup.exe",
-      "version": "5.10.2.3",
-      "size": 2394112,
-      "sha256": "6CD62EEA07195C20306726D9F728FCA89251BFD60B0E75F0FD801EBB4046AFCB",
+      "version": "5.10.2.4",
+      "size": 2398720,
+      "sha256": "95A9057549570EF9A17F78C3909AE3BA91655ADF57DDDD9E8271D35404594D8A",
       "icon": "win",
       "platform": "Windows 7 / 10 / 11",
       "desc": "标准安装向导，装到当前用户目录，不需要管理员权限。"
@@ -21,9 +21,9 @@
       "id": "portable",
       "label": "Windows 免安装版",
       "file": "RichTextGen-Portable.zip",
-      "version": "5.10.2.3",
-      "size": 492559,
-      "sha256": "FE43CD124FDB478A14D50CCD37B9EC9B87A06D461B1432E34724B52061C5C14D",
+      "version": "5.10.2.4",
+      "size": 493871,
+      "sha256": "6BB11DCD40C95F0F18445E90A0E76DF524C003CB82CC229BA274597B844A35E9",
       "icon": "zip",
       "platform": "Windows 7 / 10 / 11",
       "desc": "解压即用，不写注册表，适合放 U 盘或临时使用。"

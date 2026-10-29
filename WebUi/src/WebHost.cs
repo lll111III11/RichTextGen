@@ -66,6 +66,10 @@ namespace RichTextGen
             {
                 MessageBox.Show(ex.ToString(), "运行错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            finally
+            {
+                AppRules.Flush();        // 退出前把应用名单落盘，避免下次启动时丢失
+            }
         }
 
         /// <summary>把启动参数交给已在运行的实例（同名管道，仅当前用户可连）。</summary>

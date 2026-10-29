@@ -50,10 +50,23 @@
       background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .sw.on{background:var(--accent)}
   .sw.on::after{left:21px}
+  .fw{border:1px solid var(--inputLine);background:var(--input);color:var(--sub);border-radius:6px;
+      font-size:12px;cursor:pointer;height:23px;padding:0 8px;flex-shrink:0}
+  .fw:hover{border-color:var(--accent);color:var(--text)}
+  .fw.on{background:#8a5a00;border-color:#8a5a00;color:#ffe9b8;font-weight:600}
   .del{border:0;background:none;color:var(--sub);font-size:15px;cursor:pointer;width:26px;height:26px;
        border-radius:5px;flex-shrink:0}
   .del:hover{background:var(--hover);color:#d33}
   .empty{text-align:center;color:var(--sub);padding:48px 16px;line-height:1.8;font-size:12.5px}
+  /* 手动添加区 */
+  #addRow{display:none;gap:8px;align-items:center;padding:0 20px 10px;flex-wrap:wrap}
+  #addRow.on{display:flex}
+  #addRow input[type=text]{background:var(--input);color:var(--text);border:1px solid var(--inputLine);
+      border-radius:6px;padding:6px 10px;font-size:12.5px;outline:none}
+  #addRow input[type=text]:focus{border-color:var(--accent)}
+  #addExe{width:190px}
+  #addTitle{width:190px}
+  #addRow label{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:4px;cursor:pointer}
   #ft{padding:10px 20px;border-top:1px solid var(--line);background:var(--card);font-size:11.5px;
       color:var(--sub);line-height:1.6;flex-shrink:0}
   #toast{position:fixed;left:50%;bottom:56px;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;
@@ -77,14 +90,23 @@
 <div id="bar">
   <span class="cnt" id="cnt">读取中…</span>
   <span class="acts">
+    <button class="b" id="btnAdd">＋ 添加应用</button>
     <button class="b" id="btnReload">刷新</button>
     <button class="b" id="btnPurge">清空未勾选</button>
   </span>
 </div>
 
+<div id="addRow">
+  <input type="text" id="addExe" placeholder="进程名，如 SCPSL.exe" autocomplete="off">
+  <input type="text" id="addTitle" placeholder="显示名（可留空）" autocomplete="off">
+  <label><input type="checkbox" id="addForce" checked> 强制弹出</label>
+  <button class="b" id="btnAddOk">确定添加</button>
+  <button class="b" id="btnAddCancel">取消</button>
+</div>
+
 <div id="list"></div>
 
-<div id="ft">提示：勾选状态只在「仅白名单 / 黑名单」模式下起作用；「全部应用」模式下一切照常。</div>
+<div id="ft">「强制」= 不做输入框检测，点这个应用就弹面板（给 Unity 游戏的控制台这类识别不到输入区的地方用）。<br>勾选状态只在「仅白名单 / 黑名单」模式下生效；「全部应用」模式下一切照常。</div>
 
 <div id="toast"></div>
 
@@ -140,6 +162,8 @@
            +      '<div class="n">' + esc(name) + '</div>'
            +      '<div class="m">' + esc(a.exe) + ' · 用过 ' + (a.count || 0) + ' 次 · ' + ago(a.last) + '</div>'
            +    '</div>'
+           +    '<button class="fw' + (a.force ? ' on' : '') + '" title="' +
+                  (a.force ? '强制弹出：已开启' : '强制弹出：不做输入框检测，点击就弹') + '">⚡ 强制</button>'
            +    '<button class="sw' + (a.on ? ' on' : '') + '" title="' + (a.on ? '已勾选' : '未勾选') + '"></button>'
            +    '<button class="del" title="从名单移除">✕</button>'
            +  '</div>';
@@ -147,16 +171,41 @@
     list.innerHTML = html;
   }
 
-  /* 事件委托：开关 / 删除 */
+  /* 事件委托：强制 / 开关 / 删除 */
   $('list').addEventListener('click', function(ev){
     var row = ev.target.closest('.row'); if (!row) return;
     var exe = row.dataset.exe;
     if (ev.target.classList.contains('sw')){
       host('a|toggle|' + exe);
+    } else if (ev.target.classList.contains('fw')){
+      host('a|force|' + exe);
     } else if (ev.target.classList.contains('del')){
       host('a|remove|' + exe);
     }
   });
+
+  /* 手动添加 */
+  $('btnAdd').onclick = function(){
+    var r = $('addRow');
+    r.classList.toggle('on');
+    if (r.classList.contains('on')) $('addExe').focus();
+  };
+  $('btnAddCancel').onclick = function(){
+    $('addRow').classList.remove('on');
+    $('addExe').value = ''; $('addTitle').value = '';
+  };
+  $('btnAddOk').onclick = function(){
+    var exe = $('addExe').value.trim();
+    if (!exe){ toast('请填写进程名'); return; }
+    if (!/\.exe$/i.test(exe)) exe += '.exe';
+    var title = $('addTitle').value.trim();
+    var force = $('addForce').checked ? '1' : '0';
+    host('a|add|' + exe + '|' + encodeURIComponent(title) + '|' + force);
+    $('addExe').value = ''; $('addTitle').value = '';
+    $('addRow').classList.remove('on');
+  };
+  $('addExe').addEventListener('keydown', function(ev){ if (ev.key === 'Enter') $('btnAddOk').click(); });
+  $('addTitle').addEventListener('keydown', function(ev){ if (ev.key === 'Enter') $('btnAddOk').click(); });
 
   document.querySelectorAll('#modes button').forEach(function(b){
     b.onclick = function(){ host('a|mode|' + b.dataset.m); };

@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.2.3",
+    "version":  "5.10.2.4",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
-    "type":  "bugfix",
+    "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.3/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.3/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.4/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.4/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.2.3 更新（控制台 / 终端支持）：\n· 修复在 cmd / PowerShell / Windows Terminal / Git Bash / PuTTY 等控制台里点输入区不弹面板的问题\n· 控制台整窗按输入区处理（这类窗口的 UIA 树里没有 Edit / Document 控件）\n· 控制台选区读取改用 Ctrl+Shift+C / Ctrl+Insert，避免 Ctrl+C 误触发送中断符打断正在运行的命令\n· 回填控制台时先删掉原选区再粘贴，不会出现「原文 + 新文」重复一份\n· 网页输入框（Trae / VS Code / 浏览器 contenteditable）改用 TextPattern 兜底识别，之前点了无反应\n· 修复部分程序里焦点切走后面板粘贴到错误窗口的问题（回填时精确还原目标窗口句柄）",
+    "notes":  "v5.10.2.4 更新（应用名单配置 + 防丢失）：\n· 应用名单新增「⚡ 强制」：不做输入框检测，点这个应用就弹面板。给 SCP:SL 这类 Unity 游戏控制台用（它们的输入区 UIA 完全看不到）\n· 应用名单新增「＋ 添加应用」：手动填进程名（如 SCPSL.exe）即可加入，不用等它先被自动记录\n· 名单存储三重加固，不会再莫名消失：先写临时文件再原子替换、每次保存留一份 apps.bak.json、读取失败自动回退备份\n· 退出程序、关闭开关、切换模式、名单窗口关闭时都会立即写盘\n· 「清空未勾选」会保留开了「强制」的条目",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,

@@ -61,6 +61,8 @@ namespace RichTextGen
         private static extern IntPtr WindowFromPoint(POINT p);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
         [DllImport("user32.dll")]
         private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
         [DllImport("user32.dll")]
@@ -117,6 +119,7 @@ namespace RichTextGen
                 _proc = null;
                 if (_clickTimer != null) { _clickTimer.Stop(); }
                 HidePanelStatic();
+                AppRules.Flush();                        // 关掉开关时也把名单写盘
             }
         }
 
@@ -226,6 +229,7 @@ namespace RichTextGen
 
                 string sel = "";
                 string app = "";
+                bool forced = false;
                 if (target != null)
                 {
                     // 先记录名单（被排除的应用也要记，用户才能回到名单里改回来）
@@ -246,9 +250,25 @@ namespace RichTextGen
                     // 拖选了但 UIA 读不到 → 发复制快捷键兜底（终端用 Ctrl+Shift+C / Ctrl+Insert，避免 Ctrl+C 中断命令）
                     if (sel.Length == 0 && drag == 1) sel = ReadSelectionByCopy(term);
                 }
+                else if (root != IntPtr.Zero)
+                {
+                    // UIA 完全看不到输入控件（Unity 游戏控制台等）：名单里给这个应用开了「强制」就点击即弹
+                    string exe = ExeOfHwnd(root);
+                    if (!string.IsNullOrEmpty(exe))
+                    {
+                        app = TitleOfHwnd(root);
+                        AppRules.Touch(exe, app);
+                        if (AppRules.IsForced(exe) && AppRules.IsAllowed(exe))
+                        {
+                            forced = true;
+                            term = IsTerminalWindow(root);
+                        }
+                    }
+                }
 
                 AutomationElement t = target;
                 string s2 = sel, a2 = app;
+                bool f2 = forced;
                 IntPtr r2 = root;
                 try
                 {
@@ -260,7 +280,7 @@ namespace RichTextGen
                         {
                             if (!_enabled || _inst == null || _inst.IsDisposed) return;
                             if (_clickSeq != seq) return;
-                            if (t == null)
+                            if (t == null && !f2)
                             {
                                 if (_inst.Visible) _inst.HidePanel();
                                 return;
@@ -451,6 +471,34 @@ namespace RichTextGen
         {
             for (int i = 0; i < vks.Length; i++) keybd_event(vks[i], 0, 0, IntPtr.Zero);
             for (int i = vks.Length - 1; i >= 0; i--) keybd_event(vks[i], 0, 2, IntPtr.Zero);
+        }
+
+        /// <summary>窗口句柄 → 进程名（如 scpsl.exe）。不依赖 UIA，Unity 游戏也能拿到。</summary>
+        private static string ExeOfHwnd(IntPtr hwnd)
+        {
+            try
+            {
+                if (hwnd == IntPtr.Zero) return "";
+                uint pid;
+                GetWindowThreadProcessId(hwnd, out pid);
+                if (pid == 0) return "";
+                using (Process p = Process.GetProcessById((int)pid))
+                    return (p.ProcessName ?? "").ToLowerInvariant() + ".exe";
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>窗口句柄 → 窗口标题。</summary>
+        private static string TitleOfHwnd(IntPtr hwnd)
+        {
+            try
+            {
+                if (hwnd == IntPtr.Zero) return "";
+                StringBuilder sb = new StringBuilder(512);
+                if (GetWindowText(hwnd, sb, sb.Capacity) <= 0) return "";
+                return sb.ToString();
+            }
+            catch { return ""; }
         }
 
         /// <summary>目标元素所属进程的可执行文件名（如 SCPSL.exe），名单以此为准。</summary>

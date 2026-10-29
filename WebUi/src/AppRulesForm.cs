@@ -152,6 +152,23 @@ namespace RichTextGen
                             Push();
                         }
                         break;
+                    case "force":
+                        if (p.Length >= 3)
+                        {
+                            AppEntry en = AppRules.Find(p[2]);
+                            AppRules.SetForce(p[2], en == null || !en.Force);
+                            Push();
+                        }
+                        break;
+                    case "add":
+                        if (p.Length >= 3)
+                        {
+                            string exe = p[2].Trim();
+                            string title = p.Length >= 4 ? Uri.UnescapeDataString(p[3] ?? "") : "";
+                            bool force = p.Length >= 5 && p[4] == "1";
+                            if (AppRules.AddManual(exe, title, force)) Push();
+                        }
+                        break;
                     case "remove":
                         if (p.Length >= 3) { AppRules.Remove(p[2]); Push(); }
                         break;

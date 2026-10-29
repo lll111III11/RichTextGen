@@ -15,6 +15,7 @@ namespace RichTextGen
         public long Last { get; set; }         // 最近使用时间（Unix 秒）
         public int Count { get; set; }         // 命中次数
         public bool On { get; set; }           // 在白名单/黑名单里是否勾选
+        public bool Force { get; set; }        // 强制弹出：不做 UIA 检测（Unity 游戏等识别不到输入控件时用）
     }
 
     /// <summary>名单文件（%APPDATA%\RichTextGen\apps.json）的根对象。</summary>
@@ -29,7 +30,13 @@ namespace RichTextGen
     ///   all   —— 所有应用都生效
     ///   white —— 只对勾选的应用生效
     ///   black —— 对勾选的应用不生效
-    /// 名单自动记录（每点一次输入框就更新计数与时间），用户可在名单窗口里勾选。
+    /// 名单自动记录（每点一次输入框就更新计数与时间），用户可在名单窗口里勾选、手动添加、
+    /// 或对识别不到输入控件的应用（Unity 游戏控制台等）开启「强制」。
+    ///
+    /// 存盘做了三重加固，避免名单丢失：
+    ///   1) 先写 .tmp 再原子替换，进程中途被杀也不会留下半截 JSON；
+    ///   2) 每次成功写入前把旧文件留成 .bak，读取失败时自动回退；
+    ///   3) 退出、开关切换、名单窗口关闭时都会主动 Flush。
     /// </summary>
     internal static class AppRules
     {
@@ -45,15 +52,19 @@ namespace RichTextGen
         private static Timer _saveTimer;
         private static bool _dirty;
 
-        private static string FilePath
+        private static string Dir
         {
             get
             {
-                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen");
-                try { Directory.CreateDirectory(dir); } catch { }
-                return Path.Combine(dir, "apps.json");
+                string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RichTextGen");
+                try { Directory.CreateDirectory(d); } catch { }
+                return d;
             }
         }
+
+        private static string FilePath { get { return Path.Combine(Dir, "apps.json"); } }
+        private static string BakPath { get { return Path.Combine(Dir, "apps.bak.json"); } }
+        private static string TmpPath { get { return Path.Combine(Dir, "apps.tmp.json"); } }
 
         public static void Load()
         {
@@ -61,27 +72,37 @@ namespace RichTextGen
             {
                 if (_loaded) return;
                 _loaded = true;
-                try
-                {
-                    string p = FilePath;
-                    if (!File.Exists(p)) return;
-                    JavaScriptSerializer js = new JavaScriptSerializer();
-                    AppRulesData d = js.Deserialize<AppRulesData>(File.ReadAllText(p));
-                    if (d == null) return;
-                    if (d.Mode == ModeWhite || d.Mode == ModeBlack || d.Mode == ModeAll) Mode = d.Mode;
-                    if (d.Apps != null)
-                    {
-                        Apps.Clear();
-                        foreach (AppEntry e in d.Apps)
-                        {
-                            if (e == null || string.IsNullOrEmpty(e.Exe)) continue;
-                            e.Exe = e.Exe.Trim().ToLowerInvariant();
-                            Apps.Add(e);
-                        }
-                    }
-                }
-                catch { }
+
+                // 正常文件 → 失败则回退备份，任一成功即返回
+                if (TryLoad(FilePath)) return;
+                if (TryLoad(BakPath)) return;
             }
+        }
+
+        private static bool TryLoad(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return false;
+                string raw = File.ReadAllText(path);
+                if (string.IsNullOrEmpty(raw.Trim())) return false;
+
+                JavaScriptSerializer js = new JavaScriptSerializer();
+                AppRulesData d = js.Deserialize<AppRulesData>(raw);
+                if (d == null) return false;
+
+                if (d.Mode == ModeWhite || d.Mode == ModeBlack || d.Mode == ModeAll) Mode = d.Mode;
+                if (d.Apps == null) return true;
+                Apps.Clear();
+                foreach (AppEntry e in d.Apps)
+                {
+                    if (e == null || string.IsNullOrEmpty(e.Exe)) continue;
+                    e.Exe = e.Exe.Trim().ToLowerInvariant();
+                    Apps.Add(e);
+                }
+                return true;
+            }
+            catch { return false; }
         }
 
         private static void Ensure()
@@ -130,26 +151,67 @@ namespace RichTextGen
             return Mode == ModeWhite ? on : !on;
         }
 
+        /// <summary>该应用是否开启了「强制」——不做 UIA 检测，点击就弹面板。</summary>
+        public static bool IsForced(string exe)
+        {
+            Ensure();
+            AppEntry e = Find(exe);
+            return e != null && e.Force;
+        }
+
         public static void SetMode(string mode)
         {
             Ensure();
             if (mode != ModeWhite && mode != ModeBlack && mode != ModeAll) return;
             Mode = mode;
             ScheduleSave();
+            Flush();                     // 模式切换立刻落盘，防止意外退出丢失
         }
 
         public static void SetEnabled(string exe, bool on)
         {
             Ensure();
-            AppEntry e = Find(exe);
-            if (e == null)
-            {
-                if (string.IsNullOrEmpty(exe)) return;
-                e = new AppEntry { Exe = exe.Trim().ToLowerInvariant(), Title = "", Count = 0 };
-                Apps.Add(e);
-            }
+            AppEntry e = EnsureEntry(exe);
+            if (e == null) return;
             e.On = on;
             ScheduleSave();
+        }
+
+        public static void SetForce(string exe, bool force)
+        {
+            Ensure();
+            AppEntry e = EnsureEntry(exe);
+            if (e == null) return;
+            e.Force = force;
+            ScheduleSave();
+        }
+
+        /// <summary>手动添加一个应用（用户填 exe 名，如 SCPSL.exe）。</summary>
+        public static bool AddManual(string exe, string title, bool force)
+        {
+            Ensure();
+            AppEntry e = EnsureEntry(exe);
+            if (e == null) return false;
+            if (!string.IsNullOrEmpty(title)) e.Title = title;
+            e.On = true;
+            if (force) e.Force = true;
+            ScheduleSave();
+            Flush();
+            return true;
+        }
+
+        private static AppEntry EnsureEntry(string exe)
+        {
+            if (string.IsNullOrEmpty(exe)) return null;
+            string k = exe.Trim().ToLowerInvariant();
+            if (k.Length == 0) return null;
+            AppEntry e = Find(k);
+            if (e == null)
+            {
+                e = new AppEntry { Exe = k, Title = "", Count = 0, On = false };
+                Apps.Add(e);
+            }
+            return e;
         }
 
         public static void Remove(string exe)
@@ -166,7 +228,7 @@ namespace RichTextGen
             int n = 0;
             for (int i = Apps.Count - 1; i >= 0; i--)
             {
-                if (!Apps[i].On) { Apps.RemoveAt(i); n++; }
+                if (!Apps[i].On && !Apps[i].Force) { Apps.RemoveAt(i); n++; }
             }
             if (n > 0) ScheduleSave();
             return n;
@@ -178,12 +240,13 @@ namespace RichTextGen
             lock (_lock)
             {
                 if (_saveTimer == null)
-                    _saveTimer = new Timer(delegate { Flush(); }, null, 800, Timeout.Infinite);
+                    _saveTimer = new Timer(delegate { Flush(); }, null, 400, Timeout.Infinite);
                 else
-                    _saveTimer.Change(800, Timeout.Infinite);
+                    _saveTimer.Change(400, Timeout.Infinite);
             }
         }
 
+        /// <summary>把当前名单写盘（原子替换 + 留一份备份）。</summary>
         public static void Flush()
         {
             lock (_lock)
@@ -194,9 +257,37 @@ namespace RichTextGen
                 {
                     AppRulesData d = new AppRulesData { Mode = Mode, Apps = Apps };
                     JavaScriptSerializer js = new JavaScriptSerializer();
-                    File.WriteAllText(FilePath, js.Serialize(d), new UTF8Encoding(false));
+                    string body = js.Serialize(d);
+
+                    string path = FilePath, bak = BakPath, tmp = TmpPath;
+                    File.WriteAllText(tmp, body, new UTF8Encoding(false));
+
+                    if (File.Exists(path))
+                    {
+                        // 旧文件留成备份，再把新文件原子替换过去
+                        try
+                        {
+                            if (File.Exists(bak)) File.Delete(bak);
+                            File.Copy(path, bak, true);
+                        }
+                        catch { }
+                        try { File.Replace(tmp, path, null); }
+                        catch
+                        {
+                            // 某些文件系统不支持 Replace，退化为覆盖
+                            try { File.Copy(tmp, path, true); File.Delete(tmp); } catch { }
+                        }
+                    }
+                    else
+                    {
+                        try { File.Move(tmp, path); }
+                        catch { try { File.Copy(tmp, path, true); File.Delete(tmp); } catch { } }
+                    }
                 }
-                catch { }
+                catch
+                {
+                    _dirty = true;      // 写失败保留脏标记，下次再试
+                }
             }
         }
 
@@ -220,6 +311,7 @@ namespace RichTextGen
                       .Append(",\"last\":").Append(e.Last)
                       .Append(",\"count\":").Append(e.Count)
                       .Append(",\"on\":").Append(e.On ? "true" : "false")
+                      .Append(",\"force\":").Append(e.Force ? "true" : "false")
                       .Append('}');
                 }
                 sb.Append("]}");
