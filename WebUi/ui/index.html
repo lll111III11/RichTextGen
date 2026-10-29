@@ -199,6 +199,11 @@
   .upbtn{display:none;background:#0f7b3f;color:#fff;border:0;border-radius:99px;padding:4px 12px;
          font-size:12px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25)}
   .upbtn:hover{background:#12924b}
+  /* 顶栏更新按钮长度可调（设置 → 更新显示） */
+  #upBtn{max-width:var(--upBtnW,140px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 工作区更新公告：精简 / 展开 */
+  #updateBar.cond #upNotes{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+  #updateBar.full #upNotes{white-space:normal;line-height:1.5}
   #updatedMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;
                justify-content:center;z-index:20}
   #updatedMask.on{display:flex}
@@ -537,8 +542,8 @@ try{
 </script>
 <div id="bgLayer"><video id="bgVid" muted loop playsinline preload="auto" disablepictureinpicture></video></div>
 <!-- Live2D（窗口内悬浮层）：不接收鼠标，不会挡住任何操作 -->
-<div id="l2dWrap" aria-hidden="true"><div id="l2dInner"><img id="l2dImg" alt=""><img id="l2dBlink" alt=""></div><canvas id="l2d3d"></canvas><canvas id="l2dcv"></canvas></div>
-<div id="l2dSay" aria-hidden="true"></div>
+<div id="l2dWrap" aria-hidden="true" style="display:none"><div id="l2dInner"><img id="l2dImg" alt=""><img id="l2dBlink" alt=""></div><canvas id="l2d3d"></canvas><canvas id="l2dcv"></canvas></div>
+<div id="l2dSay" aria-hidden="true" style="display:none"></div>
 
 <div id="titlebar">
   <div class="logo"></div>
@@ -621,6 +626,7 @@ try{
       <div id="wsBody">
         <nav>
     <button class="on" data-p="work" title="工作台"><span class="g">◈</span>工作台</button>
+    <button data-p="more" title="其他：图片系统 / 在线翻译 / AI 对话"><span class="g">⋯</span>其他</button>
     <button data-p="set" title="设置"><span class="g">⚙</span>设置</button>
   </nav>
 
@@ -731,8 +737,13 @@ try{
         <button class="b" onclick="go('work')">去工作台</button></div>
     </section>
 
-    <!-- 图片系统 -->
-    <section class="page" id="p-img">
+    <!-- 其他：图片系统 / 在线翻译 / AI 对话 -->
+    <section class="page" id="p-more">
+      <div class="card"><h3>✦ AI 对话 <span class="badge" style="background:#8a5a00;color:#fff8e0">Beta</span></h3>
+        <p class="hint">AI 会直接改写主编辑区正文、标签标题、颜色与样式。厂商、模型、Endpoint 与 API Key 都在对话窗口右上角的「⚙ 设置」里。</p>
+        <div class="row"><button class="b p" onclick="openAiWindow()">打开 AI 对话窗口</button>
+          <span class="hint">独立窗口，可与主界面并排使用</span></div>
+      </div>
       <div class="card"><h3>图片系统 · 色块图（不用 URL）</h3>
         <p class="hint">把图片拖进窗口 → 自动转成「彩色全块字符 █ + &lt;color&gt;」的方块画，可直接发进游戏。</p>
         <div class="row"><span class="hint">也可以：</span><button class="b" onclick="host('status|把图片文件直接拖进窗口即可')">怎么用？</button></div>
@@ -740,10 +751,6 @@ try{
         <textarea id="art" readonly style="min-height:140px;font-family:Consolas,monospace"></textarea>
         <div class="row" style="margin-top:10px"><span class="hint" id="artInfo"></span></div>
       </div>
-    </section>
-
-    <!-- 在线翻译 -->
-    <section class="page" id="p-trans">
       <div class="card"><h3>在线翻译（标签自动保护）</h3>
         <div class="row"><label class="f">服务</label>
           <select id="tProvider" onchange="tProviderChange()">
@@ -913,6 +920,19 @@ try{
         </div>
         <div class="row"><span class="hint">布局是整体切换的预设，不会让面板错位；切换后自动记住，下次打开保持一致。<br>上下分隔时，分隔条改为上下拖动调整高度；「只显示编辑区」适合专注写作，随时切回。</span></div>
       </div>
+      <div class="card" id="updateCard"><h3>更新显示</h3>
+        <div class="row">
+          <label class="f">顶栏更新按钮宽度</label>
+          <input type="range" id="upBtnW" min="60" max="260" step="10" value="140" style="width:150px" oninput="upUiApply()">
+          <span class="hint" id="upBtnWVal">140px</span>
+          <label class="f">工作区公告</label>
+          <select id="upNoteMode" onchange="upUiApply()">
+            <option value="cond">精简（一行省略）</option>
+            <option value="full">全部展开</option>
+          </select>
+        </div>
+        <div class="row"><span class="hint">控制顶栏「⬆ 更新到 …」按钮的长度，以及工作区里更新公告显示一行还是完整展开；设置自动保存。</span></div>
+      </div>
       <div class="card" id="lookCard"><h3>外观 · 字体与缩放</h3>
         <div class="row">
           <label class="f">界面字体</label>
@@ -960,6 +980,9 @@ try{
         <div class="row">
           <label class="chk"><input type="checkbox" id="winTop" onchange="setWinTop(this.checked)"> 窗口始终置顶</label>
           <span class="hint">与标题栏 📌 相同：本窗口显示在所有窗口之前，像任务管理器一样不会被遮挡</span></div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="floatingInput" onchange="setFloatingInput(this.checked)"> 浮动输入面板（系统级）</label>
+          <span class="hint">开启后，点任意软件的输入框都会在光标旁弹出一个小面板：输入文字、选中后套颜色 / 上下标 / 循环渐变，点「回填」直接粘贴回原输入框</span></div>
         <div class="row"><span class="hint">同步输出分两步：先「复制代码 / 同步到窗口 / 给选区套颜色」把文字准备好，再点一次目标窗口让它聚焦，程序随后自动按 Ctrl+V 粘贴（不会自己抢焦点）。默认关闭。</span></div>
       </div>
       <div class="card"><h3>⚡ 快捷组件与全局热键</h3>
@@ -969,7 +992,7 @@ try{
         <div id="quickList"></div>
         <div class="row"><span class="hint">点右侧快捷键即可录制（需含 Ctrl / Alt / Shift 加功能键，Esc 取消），设置自动保存；热键在任何程序位于前台时都生效，例如把「退出应用」绑到 Ctrl+E，按下即退出。带「执行」的组件也能直接点按钮触发。</span></div>
       </div>
-      <div class="card"><h3>🧩 Live2D 角色 <span class="badge" style="background:var(--hover);color:var(--sub);border-color:var(--line)">Beta</span></h3>
+      <div class="card" style="display:none"><h3>🧩 Live2D 角色 <span class="badge" style="background:var(--hover);color:var(--sub);border-color:var(--line)">Beta</span></h3>
         <div class="row">
           <label class="chk"><input type="checkbox" id="l2dEnable" onchange="l2dApply()"> 启用 Live2D</label>
           <label class="f">模型</label>
@@ -6024,6 +6047,10 @@ function setCopyNl(on){
   try { localStorage.setItem('rtg.copyNl', on ? '1' : '0'); } catch(e){}
   host('setCopyNl|' + (on ? '1' : '0'));
 }
+/* 系统级浮动输入面板开关（状态由宿主 ui.json 保存，syncState 会回报） */
+function setFloatingInput(on){
+  host('floatingInput|' + (on ? '1' : '0'));
+}
 /* 复制用的文本：开了「换行转 \n」就压成一行 */
 function outForCopy(){
   const el = document.getElementById('out');
@@ -6166,6 +6193,7 @@ window.ui.syncState = function(o){
   const so = document.getElementById('syncOut'); if (so) so.checked = !!o.enabled;
   const cn = document.getElementById('copyNl'); if (cn) cn.checked = copyNlState;
   const wt = document.getElementById('winTop'); if (wt) wt.checked = !!o.topmost;
+  const fi = document.getElementById('floatingInput'); if (fi) fi.checked = !!o.floating;
   const tip = document.getElementById('syncTip');
   if (tip) tip.textContent = o.enabled
     ? '目标窗口：' + (o.target || '尚未记录，请先点一下要接收文字的窗口')
@@ -6905,6 +6933,33 @@ try { LayoutMode.applyAll(); } catch(e){}
       document.body.classList.remove('ws-pop');
       mi.style.background = '';
     });
+  })();
+
+  /* ---------- 更新 UI：顶栏按钮宽度 + 公告精简/展开 ---------- */
+  (function(){
+    const KEYW = 'rtg.upBtnW', KEYM = 'rtg.upNoteMode';
+    function apply(){
+      let w = 140, m = 'cond';
+      try {
+        w = parseInt(localStorage.getItem(KEYW) || '140', 10) || 140;
+        m = localStorage.getItem(KEYM) || 'cond';
+      } catch(e){}
+      document.documentElement.style.setProperty('--upBtnW', w + 'px');
+      const r = el('upBtnW'); if (r) r.value = w;
+      const lv = el('upBtnWVal'); if (lv) lv.textContent = w + 'px';
+      const sel = el('upNoteMode'); if (sel) sel.value = m;
+      const bar = el('updateBar');
+      if (bar){ bar.classList.toggle('cond', m === 'cond'); bar.classList.toggle('full', m === 'full'); }
+    }
+    window.upUiApply = function(){
+      let w = 140, m = 'cond';
+      const r = el('upBtnW'); if (r) w = parseInt(r.value, 10) || 140;
+      const sel = el('upNoteMode'); if (sel) m = sel.value || 'cond';
+      try { localStorage.setItem(KEYW, String(w)); localStorage.setItem(KEYM, m); } catch(e){}
+      apply();
+    };
+    apply();
+    document.addEventListener('DOMContentLoaded', apply);
   })();
 
   /* ---------- 语言文件（lang\*.txt） ---------- */

@@ -937,8 +937,9 @@ namespace RichTextGen
             public static bool Topmost { get { return ReadBool("topmost", false); } }
             public static bool SyncOut { get { return ReadBool("syncOut", false); } }
             public static bool CopyNl { get { return ReadBool("copyNl", false); } }
+            public static bool Floating { get { return ReadBool("floating", false); } }
 
-            private static readonly string[] Keys = { "gpu", "topmost", "syncOut", "copyNl" };
+            private static readonly string[] Keys = { "gpu", "topmost", "syncOut", "copyNl", "floating" };
 
             private static bool ReadBool(string key, bool def)
             {
@@ -1556,6 +1557,7 @@ namespace RichTextGen
                     }
                     CallStr("aiSettings", AiConfig.ToJson());
                     LoadBgImages();             // 把已保存的深/浅色背景水印图读回界面
+                    if (!_secondary) FloatingInputForm.SetEnabled(UIPrefs.Floating);   // 浮动输入面板（系统级，可能开着）
                     Call("syncState", SyncStateJson());   // 置顶 / 同步输出 / 换行开关的当前状态
                     PushMusicState();                   // 音乐播放列表（不自动播放）
                     Call("themeFile", ThemeJson());      // 程序目录 theme\theme.txt（没有就写一份模板）
@@ -1682,6 +1684,7 @@ namespace RichTextGen
                 case "uiPrefs": UIPrefs.Save(Un(arg)); break;   // 界面偏好（GPU 开关等）
                 case "setTopmost": SetTopmost(arg == "1"); break;
                 case "setSyncOut": SetSyncOut(arg == "1"); break;
+                case "floatingInput": SetFloatingInput(arg == "1"); break;   // 系统级浮动输入面板
                 case "syncTarget": RecordForeground(); Call("syncState", SyncStateJson()); break;
                 case "syncSend": SyncOutput(Un(arg)); break;
                 case "forceRefresh": DoReload(Un(arg)); break;   // 界面已把全部正文打包好
@@ -2517,11 +2520,23 @@ namespace RichTextGen
                 : "已关闭同步输出");
         }
 
+        /// <summary>系统级浮动输入面板：点任意软件的输入框都会在光标旁弹出小面板并回填。</summary>
+        private void SetFloatingInput(bool on)
+        {
+            FloatingInputForm.SetEnabled(on);
+            UIPrefs.Save("{\"floating\":" + (on ? "true" : "false") + "}");
+            Call("syncState", SyncStateJson());
+            CallStr("status", on
+                ? "已开启浮动输入面板：点任意软件的输入框即可弹出"
+                : "已关闭浮动输入面板");
+        }
+
         private string SyncStateJson()
         {
             return "{\"enabled\":" + (_syncOut ? "true" : "false") +
                    ",\"topmost\":" + (TopMost ? "true" : "false") +
                    ",\"copyNl\":" + (UIPrefs.CopyNl ? "true" : "false") +
+                   ",\"floating\":" + (FloatingInputForm.IsEnabled ? "true" : "false") +
                    ",\"target\":" + Quote(_lastExternalTitle) + "}";
         }
 
@@ -2535,6 +2550,7 @@ namespace RichTextGen
             FormClosed += delegate
             {
                 try { _fgTimer.Stop(); _fgTimer.Dispose(); } catch { }
+                if (!_secondary) FloatingInputForm.Shutdown();   // 主窗口退出时卸掉全局钩子
             };
         }
 

@@ -2,16 +2,16 @@
     "name":  "彩色文本生成器",
     "product":  "Rich text \u0026 multifunctional tool",
     "description":  "多功能性的一种工具",
-    "version":  "5.10.1.0",
+    "version":  "5.10.2.0",
     "minSupported":  "5.4.0.0",
     "channel":  "stable",
     "mandatory":  false,
     "type":  "feature",
     "downloads":  {
-                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.1.0/RichTextGen-Setup.exe",
-                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.1.0/RichTextGen-Portable.zip"
+                      "installer":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.0/RichTextGen-Setup.exe",
+                      "portable":  "https://github.com/lll111III11/RichTextGen/releases/download/v5.10.2.0/RichTextGen-Portable.zip"
                   },
-    "notes":  "v5.10.1.0 更新（语言文件补全）：\n· en / es / fr / ru 改为内置完整翻译，各 254 条，首次运行即带内容，切换语言立刻生效\n· 修复以 # 开头的键被当作注释而丢失的问题（改用 @ 前缀）\n· 修复文字里的字面 \\n 被误转成换行的问题\n· 旧版本留下的空语言文件会自动补上内置翻译；你改过的文件绝不覆盖\n· 想加语言只要在 lang 目录新建 ja.txt，重启后自动出现在列表；留空的条目回退简体中文",
+    "notes":  "v5.10.2.0 更新（其他页 · 显示调节 · 浮动输入）：\n· 新增「其他」页：AI 对话、图片色块图、在线翻译集中到一处\n· 设置新增「更新显示」：顶栏更新按钮长度可调，工作区更新公告可选精简 / 全部展开\n· 新增系统级「浮动输入面板」：开启后点任意软件的输入框，光标旁弹出极简小面板，输入文字、选中后套颜色 / 粗斜体 / 上下标 / 循环渐变，一键回填到原输入框\n· Live2D 入口从界面移除（相关代码与资源保留，方便以后恢复）",
     "android":  {
                     "version":  "1.1.0",
                     "versionCode":  2,
