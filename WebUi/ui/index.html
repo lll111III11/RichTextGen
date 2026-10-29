@@ -980,10 +980,6 @@ try{
         <div class="row">
           <label class="chk"><input type="checkbox" id="winTop" onchange="setWinTop(this.checked)"> 窗口始终置顶</label>
           <span class="hint">与标题栏 📌 相同：本窗口显示在所有窗口之前，像任务管理器一样不会被遮挡</span></div>
-        <div class="row">
-          <label class="chk"><input type="checkbox" id="floatingInput" onchange="setFloatingInput(this.checked)"> 浮动输入面板（系统级）</label>
-          <button class="b" onclick="host('appRules')" title="选择哪些应用启用浮动输入面板">应用名单…</button>
-          <span class="hint">三种触发方式：① 按 <b>Ctrl+Alt+P</b> 在鼠标处直接弹出；② 在应用名单里点「📍 取点」，之后只有点在那个位置附近才弹（范围最小，适合游戏控制台）；③ 应用名单里开「⚡ 强制」= 点该应用任意位置都弹。回填优先用键盘打字，游戏 / 控制台也能收到</span></div>
         <div class="row"><span class="hint">同步输出分两步：先「复制代码 / 同步到窗口 / 给选区套颜色」把文字准备好，再点一次目标窗口让它聚焦，程序随后自动按 Ctrl+V 粘贴（不会自己抢焦点）。默认关闭。</span></div>
       </div>
       <div class="card"><h3>⚡ 快捷组件与全局热键</h3>
@@ -6048,10 +6044,6 @@ function setCopyNl(on){
   try { localStorage.setItem('rtg.copyNl', on ? '1' : '0'); } catch(e){}
   host('setCopyNl|' + (on ? '1' : '0'));
 }
-/* 系统级浮动输入面板开关（状态由宿主 ui.json 保存，syncState 会回报） */
-function setFloatingInput(on){
-  host('floatingInput|' + (on ? '1' : '0'));
-}
 /* 复制用的文本：开了「换行转 \n」就压成一行 */
 function outForCopy(){
   const el = document.getElementById('out');
@@ -6194,7 +6186,6 @@ window.ui.syncState = function(o){
   const so = document.getElementById('syncOut'); if (so) so.checked = !!o.enabled;
   const cn = document.getElementById('copyNl'); if (cn) cn.checked = copyNlState;
   const wt = document.getElementById('winTop'); if (wt) wt.checked = !!o.topmost;
-  const fi = document.getElementById('floatingInput'); if (fi) fi.checked = !!o.floating;
   const tip = document.getElementById('syncTip');
   if (tip) tip.textContent = o.enabled
     ? '目标窗口：' + (o.target || '尚未记录，请先点一下要接收文字的窗口')

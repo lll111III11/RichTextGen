@@ -19,12 +19,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "3576220975@qq.com"
             VALUE "FileDescription",  "彩色文本生成器 安装程序"
-            VALUE "FileVersion",      "5.10.2.5"
+            VALUE "FileVersion",      "5.10.2.6"
             VALUE "InternalName",     "RichTextGen-Setup"
             VALUE "LegalCopyright",   "Copyright (c) 2026 3576220975@qq.com - MIT License"
             VALUE "OriginalFilename", "RichTextGen-Setup.exe"
             VALUE "ProductName",      "Rich text & multifunctional tool"
-            VALUE "ProductVersion",   "5.10.2.5"
+            VALUE "ProductVersion",   "5.10.2.6"
         END
     END
     BLOCK "VarFileInfo"

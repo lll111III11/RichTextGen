@@ -20,9 +20,9 @@
     <Prefer32Bit>true</Prefer32Bit>
 
     <!-- exe 属性 -->
-    <Version>5.10.2.5</Version>
-    <AssemblyVersion>5.10.2.5</AssemblyVersion>
-    <FileVersion>5.10.2.5</FileVersion>
+    <Version>5.10.2.6</Version>
+    <AssemblyVersion>5.10.2.6</AssemblyVersion>
+    <FileVersion>5.10.2.6</FileVersion>
     <Product>Rich text &amp; multifunctional tool</Product>
     <AssemblyTitle>多功能性的一种工具</AssemblyTitle>
     <Description>多功能性的一种工具</Description>
@@ -38,8 +38,6 @@
     <!-- 界面资源 -->
     <EmbeddedResource Include="ui\index.html" />
     <EmbeddedResource Include="ui\chat.html" />
-    <EmbeddedResource Include="ui\floating.html" />
-    <EmbeddedResource Include="ui\apps.html" />
     <!-- 内置语言文件（首次运行时释放到程序目录 lang\；用户改过的不覆盖） -->
     <EmbeddedResource Include="lang\*.txt" />
   </ItemGroup>
@@ -48,10 +46,6 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
     <!-- model.json / live2d.json 解析（.NET Framework 自带，不引入第三方库） -->
     <Reference Include="System.Web.Extensions" />
-    <!-- 浮动输入面板：UI Automation 判断点击位置是不是输入框 -->
-    <Reference Include="UIAutomationClient" />
-    <Reference Include="UIAutomationTypes" />
-    <Reference Include="WindowsBase" />
   </ItemGroup>
 
 </Project>
